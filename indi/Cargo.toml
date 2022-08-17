@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-quick-xml = { version = "~0.23.0" }
-
+quick-xml = "~0.23.0"
+chrono = "0.4"
+encoding = "0.2"
