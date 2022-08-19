@@ -5,5 +5,14 @@
 fn main() {
     let mut client = indi::Client::new("localhost:7624").unwrap();
     client.query_devices();
-    client.listen_for_updates();
+    for command in client.command_iter().unwrap() {
+        match command {
+            Ok(indi::Command::DefParameter(param)) => {
+                println!("entry: {:?}", param);
+            }
+            Err(e) => {
+                println!("erro: {:?}", e);
+            }
+        }
+    }
 }

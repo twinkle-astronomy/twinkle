@@ -28,6 +28,15 @@ pub struct Client {
 }
 
 #[derive(Debug)]
+pub enum Command {
+    DefParameter(Parameter),
+}
+
+pub struct CommandIter<T: std::io::BufRead> {
+    xml_reader: Reader<T>,
+}
+
+#[derive(Debug)]
 pub struct Device {
     pub name: String,
 
@@ -65,52 +74,69 @@ pub struct Number {
 }
 
 #[derive(Debug)]
-pub enum DeError<'a> {
+pub enum DeError {
     XmlError(quick_xml::Error),
     DecodeUtf8(str::Utf8Error),
     DecodeLatin(Cow<'static, str>),
     ParseIntError(num::ParseIntError),
     ParseFloatError(num::ParseFloatError),
     ParseDateTimeError(ParseError),
-    MissingAttr(&'a str),
+    MissingAttr(&'static str),
     BadAttr(AttrError),
     UnexpectedAttr(String),
     UnexpectedEvent(),
     UnexpectedTag(String),
 }
-impl From<quick_xml::Error> for DeError<'_> {
+impl From<quick_xml::Error> for DeError {
     fn from(err: quick_xml::Error) -> Self {
         DeError::XmlError(err)
     }
 }
-impl From<str::Utf8Error> for DeError<'_> {
+impl From<str::Utf8Error> for DeError {
     fn from(err: str::Utf8Error) -> Self {
         DeError::DecodeUtf8(err)
     }
 }
-impl From<Cow<'static, str>> for DeError<'_> {
+impl From<Cow<'static, str>> for DeError {
     fn from(err: Cow<'static, str>) -> Self {
         DeError::DecodeLatin(err)
     }
 }
-impl From<num::ParseIntError> for DeError<'_> {
+impl From<num::ParseIntError> for DeError {
     fn from(err: num::ParseIntError) -> Self {
         DeError::ParseIntError(err)
     }
 }
-impl From<num::ParseFloatError> for DeError<'_> {
+impl From<num::ParseFloatError> for DeError {
     fn from(err: num::ParseFloatError) -> Self {
         DeError::ParseFloatError(err)
     }
 }
-impl From<ParseError> for DeError<'_> {
+impl From<ParseError> for DeError {
     fn from(err: ParseError) -> Self {
         DeError::ParseDateTimeError(err)
     }
 }
-impl From<AttrError> for DeError<'_> {
+impl From<AttrError> for DeError {
     fn from(err: AttrError) -> Self {
         DeError::BadAttr(err)
+    }
+}
+
+impl<T: std::io::BufRead> Iterator for CommandIter<T> {
+    type Item = Result<Command, DeError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match listen_for_updates(&mut self.xml_reader) {
+                Ok(Some(param)) => {
+                    return Some(Ok(Command::DefParameter(param)));
+                }
+                Ok(None) => return None,
+                Err(e) => {
+                    return Some(Err(e));
+                }
+            }
+        }
     }
 }
 
@@ -127,15 +153,18 @@ impl Client {
         })
     }
 
-    pub fn listen_for_updates(&mut self) {
-        let mut xml_reader =
-            Reader::from_reader(BufReader::new(self.connection.try_clone().unwrap()));
+    pub fn command_iter(&self) -> Result<CommandIter<BufReader<TcpStream>>, std::io::Error> {
+        let mut xml_reader = Reader::from_reader(BufReader::new(self.connection.try_clone()?));
         xml_reader.trim_text(true);
         xml_reader.expand_empty_elements(true);
 
-        loop {
-            match listen_for_updates(&mut xml_reader) {
-                Ok(Some(param)) => {
+        Ok(CommandIter { xml_reader })
+    }
+
+    pub fn listen_for_updates(&mut self) {
+        for command in self.command_iter().unwrap() {
+            match command {
+                Ok(Command::DefParameter(param)) => {
                     println!("Got entry: {:?}", param);
                     let (device_name, param_name) = match param {
                         Parameter::Number(ref param) => (param.device.clone(), param.name.clone()),
@@ -152,7 +181,6 @@ impl Client {
                         );
                     }
                 }
-                Ok(None) => return,
                 Err(e) => {
                     println!("Error: {:?}", e);
                 }
@@ -189,7 +217,7 @@ impl NumberVector {
     fn parse<'a, T: BufRead>(
         mut xml_reader: &mut Reader<T>,
         start_event: events::BytesStart,
-    ) -> Result<NumberVector, DeError<'a>> {
+    ) -> Result<NumberVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -255,7 +283,7 @@ impl Number {
     fn parse<'a, T: BufRead>(
         xml_reader: &mut Reader<T>,
         start_event: events::BytesStart,
-    ) -> Result<Number, DeError<'a>> {
+    ) -> Result<Number, DeError> {
         let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
         let mut label: Option<String> = None;
         let mut format: Result<String, DeError> = Err(DeError::MissingAttr(&"format"));
