@@ -10,9 +10,11 @@ fn main() {
             Ok(indi::Command::DefParameter(param)) => {
                 println!("entry: {:?}", param);
             }
-            Err(e) => {
-                println!("erro: {:?}", e);
-            }
+            Err(e) => match e {
+                indi::DeError::UnexpectedTag(_) => continue,
+                indi::DeError::UnexpectedEvent() => continue,
+                e => println!("error: {:?}", e),
+            },
         }
     }
 }
