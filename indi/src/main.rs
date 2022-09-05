@@ -11,8 +11,6 @@ fn main() {
                 println!("entry: {:?}", param);
             }
             Err(e) => match e {
-                indi::DeError::UnexpectedTag(_) => continue,
-                indi::DeError::UnexpectedEvent() => continue,
                 e => println!("error: {:?}", e),
             },
         }

@@ -119,21 +119,103 @@ impl From<AttrError> for DeError {
     }
 }
 
+struct NumberIter<'a, T: std::io::BufRead> {
+    xml_reader: &'a mut Reader<T>,
+    buf: &'a mut Vec<u8>,
+}
+
+impl<'a, T: std::io::BufRead> Iterator for NumberIter<'a, T> {
+    type Item = Result<Number, DeError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.next_number() {
+            Ok(Some(number)) => {
+                return Some(Ok(number));
+            }
+            Ok(None) => return None,
+            Err(e) => {
+                return Some(Err(e));
+            }
+        }
+    }
+}
+impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
+    fn next_number(&mut self) -> Result<Option<Number>, DeError> {
+        let event = self.xml_reader.read_event(&mut self.buf)?;
+        match event {
+            Event::Start(e) => match e.name() {
+                b"defNumber" => {
+                    let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
+                    let mut label: Option<String> = None;
+                    let mut format: Result<String, DeError> = Err(DeError::MissingAttr(&"format"));
+                    let mut min: Result<f64, DeError> = Err(DeError::MissingAttr(&"min"));
+                    let mut max: Result<f64, DeError> = Err(DeError::MissingAttr(&"max"));
+                    let mut step: Result<f64, DeError> = Err(DeError::MissingAttr(&"step"));
+
+                    for attr in e.attributes() {
+                        let attr = attr?;
+                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+
+                        match attr.key {
+                            b"name" => name = Ok(attr_value),
+                            b"label" => label = Some(attr_value),
+                            b"format" => format = Ok(attr_value),
+                            b"min" => min = Ok(attr_value.parse::<f64>()?),
+                            b"max" => max = Ok(attr_value.parse::<f64>()?),
+                            b"step" => step = Ok(attr_value.parse::<f64>()?),
+                            key => {
+                                return Err(DeError::UnexpectedAttr(format!(
+                                    "Unexpected attribute {}",
+                                    str::from_utf8(key)?
+                                )))
+                            }
+                        }
+                    }
+
+                    let value: Result<f64, DeError> = match self.xml_reader.read_event(self.buf) {
+                        Ok(Event::Text(e)) => Ok(ISO_8859_1
+                            .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
+                            .parse::<f64>()?),
+                        _ => return Err(DeError::UnexpectedEvent()),
+                    };
+
+                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    match trailing_event {
+                        Event::End(_) => (),
+                        _ => {
+                            return Err(DeError::UnexpectedEvent());
+                        }
+                    }
+
+                    Ok(Some(Number {
+                        name: name?,
+                        label: label,
+                        format: format?,
+                        min: min?,
+                        max: max?,
+                        step: step?,
+                        value: value?,
+                    }))
+                }
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+            },
+            Event::End(_) => Ok(None),
+            Event::Eof => Ok(None),
+            _ => Err(DeError::UnexpectedEvent()),
+        }
+    }
+}
+
 pub struct CommandIter<T: std::io::BufRead> {
     xml_reader: Reader<T>,
     buf: Vec<u8>,
-}
-
-struct NumberIter<T: std::io::BufRead> {
-    command: CommandIter<T>,
 }
 
 impl<T: std::io::BufRead> Iterator for CommandIter<T> {
     type Item = Result<Command, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_command() {
-            Ok(Some(param)) => {
-                return Some(Ok(param));
+            Ok(Some(command)) => {
+                return Some(Ok(command));
             }
             Ok(None) => return None,
             Err(e) => {
@@ -143,90 +225,84 @@ impl<T: std::io::BufRead> Iterator for CommandIter<T> {
     }
 }
 
-impl<T: std::io::BufRead> Iterator for NumberIter<T> {
-    type Item = Result<Number, DeError>;
-    fn next(&mut self) -> Option<Self::Item> {
-        return None;
-    }
-}
-
-fn parse_attributes<T: std::io::BufRead>(
-    xml_reader: &Reader<T>,
-    start_event: &events::BytesStart,
-) -> Result<NumberVector, DeError> {
-    let mut device: Option<String> = None;
-    let mut name: Option<String> = None;
-    let mut label: Option<String> = None;
-    let mut group: Option<String> = None;
-    let mut state: Option<String> = None;
-    let mut perm: Option<String> = None;
-    let mut timeout: Option<u32> = None;
-    let mut timestamp: Option<DateTime<Utc>> = None;
-
-    for attr in start_event.attributes() {
-        let attr = attr?;
-        let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
-        match attr.key {
-            b"device" => device = Some(attr_value),
-            b"name" => name = Some(attr_value),
-            b"label" => label = Some(attr_value),
-            b"group" => group = Some(attr_value),
-            b"state" => state = Some(attr_value),
-            b"perm" => perm = Some(attr_value),
-            b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
-            b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-            key => {
-                return Err(DeError::UnexpectedAttr(format!(
-                    "Unexpected attribute {}",
-                    str::from_utf8(key)?
-                )))
-            }
-        }
-    }
-    Ok(NumberVector {
-        device: device.ok_or(DeError::MissingAttr(&"device"))?,
-        name: name.ok_or(DeError::MissingAttr(&"name"))?,
-        label: label.ok_or(DeError::MissingAttr(&"label"))?,
-        group: group.ok_or(DeError::MissingAttr(&"group"))?,
-        state: state.ok_or(DeError::MissingAttr(&"state"))?,
-        perm: perm.ok_or(DeError::MissingAttr(&"perm"))?,
-        timeout: timeout.ok_or(DeError::MissingAttr(&"timeout"))?,
-        timestamp: timestamp.ok_or(DeError::MissingAttr(&"timeout"))?,
-        numbers: HashMap::new(),
-    })
-}
 impl<T: std::io::BufRead> CommandIter<T> {
     fn next_command(&mut self) -> Result<Option<Command>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
-            Event::Start(e) => match e.name() {
-                b"defNumberVector" => {
-                    let mut number_vector = parse_attributes(&self.xml_reader, &e)?;
-                    self.def_number_vector(&mut number_vector)?;
-                    Ok(Some(Command::DefParameter(Parameter::Number(number_vector))))
-                }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
-            },
+            Event::Start(e) => {
+                let result = match e.name() {
+                    b"defNumberVector" => {
+                        let mut number_vector = CommandIter::def_number_vector(&self.xml_reader, &e)?;
+                        let number_iter = NumberIter {
+                            xml_reader: &mut self.xml_reader,
+                            buf: &mut self.buf,
+                        };
+                        for number in number_iter {
+                            let number = number?;
+                            number_vector.numbers.insert(number.name.clone(), number);
+                        }
+
+                        Ok(Some(Command::DefParameter(Parameter::Number(
+                            number_vector,
+                        ))))
+                    }
+                    tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                };
+                result
+            }
+            Event::End(tag) => {
+                println!("Unexpected end: {}", tag.escape_ascii().to_string());
+                Err(DeError::UnexpectedEvent())
+            }
             Event::Eof => Ok(None),
             _ => Err(DeError::UnexpectedEvent()),
         }
     }
 
-    fn def_number_vector(&mut self, number_vector: &mut NumberVector) -> Result<(), DeError> {
-        loop {
-            match self.xml_reader.read_event(&mut self.buf) {
-                Ok(Event::Start(start_event)) => match start_event.name() {
-                    b"defNumber" => {
-                        let number = Number::parse(&mut self.xml_reader, start_event)?;
-                        number_vector.numbers.insert(number.name.clone(), number);
-                    }
-                    tag => return Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
-                },
-                Ok(Event::End(_)) => break,
-                _ => return Err(DeError::UnexpectedEvent()),
+    fn def_number_vector(
+        xml_reader: &Reader<T>,
+        start_event: &events::BytesStart,
+    ) -> Result<NumberVector, DeError> {
+        let mut device: Option<String> = None;
+        let mut name: Option<String> = None;
+        let mut label: Option<String> = None;
+        let mut group: Option<String> = None;
+        let mut state: Option<String> = None;
+        let mut perm: Option<String> = None;
+        let mut timeout: Option<u32> = None;
+        let mut timestamp: Option<DateTime<Utc>> = None;
+
+        for attr in start_event.attributes() {
+            let attr = attr?;
+            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            match attr.key {
+                b"device" => device = Some(attr_value),
+                b"name" => name = Some(attr_value),
+                b"label" => label = Some(attr_value),
+                b"group" => group = Some(attr_value),
+                b"state" => state = Some(attr_value),
+                b"perm" => perm = Some(attr_value),
+                b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
+                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                key => {
+                    return Err(DeError::UnexpectedAttr(format!(
+                        "Unexpected attribute {}",
+                        str::from_utf8(key)?
+                    )))
+                }
             }
         }
-        return Ok(());
+        Ok(NumberVector {
+            device: device.ok_or(DeError::MissingAttr(&"device"))?,
+            name: name.ok_or(DeError::MissingAttr(&"name"))?,
+            label: label.ok_or(DeError::MissingAttr(&"label"))?,
+            group: group.ok_or(DeError::MissingAttr(&"group"))?,
+            state: state.ok_or(DeError::MissingAttr(&"state"))?,
+            perm: perm.ok_or(DeError::MissingAttr(&"perm"))?,
+            timeout: timeout.ok_or(DeError::MissingAttr(&"timeout"))?,
+            timestamp: timestamp.ok_or(DeError::MissingAttr(&"timeout"))?,
+            numbers: HashMap::new(),
+        })
     }
 }
 
@@ -251,33 +327,6 @@ impl Client {
         Ok(CommandIter { xml_reader, buf })
     }
 
-    // pub fn listen_for_updates(&mut self) {
-    //     for command in self.command_iter().unwrap() {
-    //         match command {
-    //             Ok(Command::DefParameter(param)) => {
-    //                 println!("Got entry: {:?}", param);
-    //                 let (device_name, param_name) = match param {
-    //                     Parameter::Number(ref param) => (param.device.clone(), param.name.clone()),
-    //                 };
-    //                 if let Some(device) = self.devices.get_mut(&device_name) {
-    //                     device.parameters.insert(param_name, param);
-    //                 } else {
-    //                     self.devices.insert(
-    //                         device_name.clone(),
-    //                         Device {
-    //                             name: device_name,
-    //                             parameters: HashMap::from([(param_name, param)]),
-    //                         },
-    //                     );
-    //                 }
-    //             }
-    //             Err(e) => {
-    //                 println!("Error: {:?}", e);
-    //             }
-    //         }
-    //     }
-    // }
-
     pub fn query_devices(&mut self) {
         self.xml_writer
             .create_element("getProperties")
@@ -289,65 +338,6 @@ impl Client {
     }
 }
 
-impl Number {
-    fn parse<'a, T: BufRead>(
-        xml_reader: &mut Reader<T>,
-        start_event: events::BytesStart,
-    ) -> Result<Number, DeError> {
-        let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
-        let mut label: Option<String> = None;
-        let mut format: Result<String, DeError> = Err(DeError::MissingAttr(&"format"));
-        let mut min: Result<f64, DeError> = Err(DeError::MissingAttr(&"min"));
-        let mut max: Result<f64, DeError> = Err(DeError::MissingAttr(&"max"));
-        let mut step: Result<f64, DeError> = Err(DeError::MissingAttr(&"step"));
-        let mut value: Result<f64, DeError> = Err(DeError::MissingAttr(&"value"));
-
-        let mut buf = Vec::new();
-
-        for attr in start_event.attributes() {
-            let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
-            // println!("attr: {} = {}", str::from_utf8(&attr.key)?, attr_value);
-
-            match attr.key {
-                b"name" => name = Ok(attr_value),
-                b"label" => label = Some(attr_value),
-                b"format" => format = Ok(attr_value),
-                b"min" => min = Ok(attr_value.parse::<f64>()?),
-                b"max" => max = Ok(attr_value.parse::<f64>()?),
-                b"step" => step = Ok(attr_value.parse::<f64>()?),
-                key => {
-                    return Err(DeError::UnexpectedAttr(format!(
-                        "Unexpected attribute {}",
-                        str::from_utf8(key)?
-                    )))
-                }
-            }
-        }
-        // println!("got attrs");
-        loop {
-            match xml_reader.read_event(&mut buf) {
-                Ok(Event::Text(e)) => {
-                    // println!("number: {}", str::from_utf8(&e)?);
-                    value = Ok(ISO_8859_1
-                        .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
-                        .parse::<f64>()?)
-                }
-                Ok(Event::End(_)) => break,
-                _ => return Err(DeError::UnexpectedEvent()),
-            }
-        }
-        return Ok(Number {
-            name: name?,
-            label: label,
-            format: format?,
-            min: min?,
-            max: max?,
-            step: step?,
-            value: value?,
-        });
-    }
-}
 
 #[cfg(test)]
 mod tests {
