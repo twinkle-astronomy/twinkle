@@ -9,15 +9,15 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
-pub struct NumberIter<'a, T: std::io::BufRead> {
+pub struct TextIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,
 }
 
-impl<'a, T: std::io::BufRead> Iterator for NumberIter<'a, T> {
-    type Item = Result<Number, DeError>;
+impl<'a, T: std::io::BufRead> Iterator for TextIter<'a, T> {
+    type Item = Result<Text, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.next_number() {
+        match self.next_text() {
             Ok(Some(number)) => {
                 return Some(Ok(number));
             }
@@ -28,18 +28,18 @@ impl<'a, T: std::io::BufRead> Iterator for NumberIter<'a, T> {
         }
     }
 }
-impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
-    pub fn new(command_iter: &mut CommandIter<T>) -> NumberIter<T> {
-        NumberIter {
+impl<'a, T: std::io::BufRead> TextIter<'a, T> {
+    pub fn new(command_iter: &mut CommandIter<T>) -> TextIter<T> {
+        TextIter {
             xml_reader: &mut command_iter.xml_reader,
             buf: &mut command_iter.buf,
         }
     }
 
-    pub fn def_number_vector(
+    pub fn def_text_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
-    ) -> Result<NumberVector, DeError> {
+    ) -> Result<TextVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -71,7 +71,7 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
                 }
             }
         }
-        Ok(NumberVector {
+        Ok(TextVector {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             label: label,
@@ -81,21 +81,17 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            numbers: HashMap::new(),
+            texts: HashMap::new(),
         })
     }
 
-    fn next_number(&mut self) -> Result<Option<Number>, DeError> {
+    fn next_text(&mut self) -> Result<Option<Text>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
-                b"defNumber" => {
+                b"defText" => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
                     let mut label: Option<String> = None;
-                    let mut format: Result<String, DeError> = Err(DeError::MissingAttr(&"format"));
-                    let mut min: Result<f64, DeError> = Err(DeError::MissingAttr(&"min"));
-                    let mut max: Result<f64, DeError> = Err(DeError::MissingAttr(&"max"));
-                    let mut step: Result<f64, DeError> = Err(DeError::MissingAttr(&"step"));
 
                     for attr in e.attributes() {
                         let attr = attr?;
@@ -104,10 +100,6 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
                         match attr.key {
                             b"name" => name = Ok(attr_value),
                             b"label" => label = Some(attr_value),
-                            b"format" => format = Ok(attr_value),
-                            b"min" => min = Ok(attr_value.parse::<f64>()?),
-                            b"max" => max = Ok(attr_value.parse::<f64>()?),
-                            b"step" => step = Ok(attr_value.parse::<f64>()?),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
@@ -117,12 +109,12 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
                         }
                     }
 
-                    let value: Result<f64, DeError> = match self.xml_reader.read_event(self.buf) {
-                        Ok(Event::Text(e)) => Ok(ISO_8859_1
-                            .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
-                            .parse::<f64>()?),
-                        _ => return Err(DeError::UnexpectedEvent()),
-                    };
+                    let value: Result<String, DeError> =
+                        match self.xml_reader.read_event(self.buf) {
+                            Ok(Event::Text(e)) => Ok(ISO_8859_1
+                                .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?),
+                            _ => return Err(DeError::UnexpectedEvent()),
+                        };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
@@ -132,13 +124,9 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
                         }
                     }
 
-                    Ok(Some(Number {
+                    Ok(Some(Text {
                         name: name?,
                         label: label,
-                        format: format?,
-                        min: min?,
-                        max: max?,
-                        step: step?,
                         value: value?,
                     }))
                 }
@@ -158,53 +146,24 @@ mod tests {
     #[test]
     fn test_parse_number() {
         let xml = r#"
-    <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-1280
-    </defNumber>
+    <defText name="ACTIVE_TELESCOPE" label="Telescope">
+Telescope Simulator
+    </defText>
 "#;
 
         let mut reader = Reader::from_str(xml);
         reader.trim_text(true);
         let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = NumberIter::new(&mut command_iter);
+        let mut number_iter = TextIter::new(&mut command_iter);
 
         let result = number_iter.next().unwrap().unwrap();
 
         assert_eq!(
             result,
-            Number {
-                name: "SIM_XRES".to_string(),
-                label: Some("CCD X resolution".to_string()),
-                format: "%4.0f".to_string(),
-                min: 512.0,
-                max: 8192.0,
-                step: 512.0,
-                value: 1280.0
-            }
-        );
-
-        let xml = r#"
-    <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-5.2000000000000001776
-    </defNumber>
-"#;
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = NumberIter::new(&mut command_iter);
-
-        let result = number_iter.next().unwrap().unwrap();
-        assert_eq!(
-            result,
-            Number {
-                name: "SIM_XSIZE".to_string(),
-                label: Some("CCD X Pixel Size".to_string()),
-                format: "%4.2f".to_string(),
-                min: 1.0,
-                max: 30.0,
-                step: 5.0,
-                value: 5.2000000000000001776
+            Text {
+                name: "ACTIVE_TELESCOPE".to_string(),
+                label: Some("Telescope".to_string()),
+                value: "Telescope Simulator".to_string()
             }
         );
     }

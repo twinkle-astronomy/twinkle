@@ -39,6 +39,7 @@ pub struct Device {
 
 #[derive(Debug)]
 pub enum Parameter {
+    Text(TextVector),
     Number(NumberVector),
 }
 
@@ -46,26 +47,22 @@ pub enum Parameter {
 pub struct TextVector {
     pub device: String,
     pub name: String,
-    pub label: String,
-    pub group: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
     pub state: String,
     pub perm: String,
-    pub timeout: u32,
-    pub timestamp: DateTime<Utc>,
-    pub message: String,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
 
-    pub numbers: HashMap<String, Number>,
+    pub texts: HashMap<String, Text>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Text {
     name: String,
     label: Option<String>,
-    format: String,
-    min: f64,
-    max: f64,
-    step: f64,
-    value: f64,
+    value: String,
 }
 
 #[derive(Debug)]

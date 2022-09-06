@@ -1,6 +1,8 @@
 pub mod number_vector;
-
 pub use number_vector::NumberIter;
+
+pub mod text_vector;
+pub use text_vector::TextIter;
 
 use super::*;
 
@@ -48,6 +50,16 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             number_vector,
                         ))))
                     }
+                    b"defTextVector" => {
+                        let mut text_vector = TextIter::def_text_vector(&self.xml_reader, &e)?;
+
+                        for text in deserialize::TextIter::new(self) {
+                            let text = text?;
+                            text_vector.texts.insert(text.name.clone(), text);
+                        }
+
+                        Ok(Some(Command::DefParameter(Parameter::Text(text_vector))))
+                    }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
                 result
@@ -66,7 +78,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 mod tests {
     use super::*;
     #[test]
-    fn test_listen_for_updates() {
+    fn test_number_vector() {
         let xml = r#"
     <defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
         <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
@@ -84,51 +96,52 @@ mod tests {
         reader.trim_text(true);
         let mut command_iter = CommandIter::new(reader);
 
-        match command_iter.next().unwrap() {
-            Ok(Command::DefParameter(Parameter::Number(nv))) => {
-                assert_eq!(nv.device, "CCD Simulator");
-                assert_eq!(nv.numbers.len(), 3)
+        match command_iter.next().unwrap().unwrap() {
+            Command::DefParameter(Parameter::Number(param)) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIMULATOR_SETTINGS");
+                assert_eq!(param.numbers.len(), 3)
             }
-            _ => {panic!("Unexpected next")}
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
         }
-
     }
 
+    #[test]
+    fn test_text_vector() {
+        let xml = r#"
+<defTextVector device="CCD Simulator" name="ACTIVE_DEVICES" label="Snoop devices" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-09-05T21:07:22">
+    <defText name="ACTIVE_TELESCOPE" label="Telescope">
+Telescope Simulator
+    </defText>
+    <defText name="ACTIVE_ROTATOR" label="Rotator">
+Rotator Simulator
+    </defText>
+    <defText name="ACTIVE_FOCUSER" label="Focuser">
+Focuser Simulator
+    </defText>
+    <defText name="ACTIVE_FILTER" label="Filter">
+CCD Simulator
+    </defText>
+    <defText name="ACTIVE_SKYQUALITY" label="Sky Quality">
+SQM
+    </defText>
+</defTextVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
 
-//     #[test]
-//     fn test_parse_numbervector() {
-//         let mut buf = Vec::new();
-//         let xml = r#"
-// <defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
-//     <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-// 1280
-//     </defNumber>
-//     <defNumber name="SIM_YRES" label="CCD Y resolution" format="%4.0f" min="512" max="8192" step="512">
-// 1024
-//     </defNumber>
-//     <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-// 5.2000000000000001776
-//     </defNumber>
-// </defNumberVector>
-// "#;
-
-//         let mut reader = Reader::from_str(xml);
-//         reader.trim_text(true);
-//         let result = match reader.read_event(&mut buf).unwrap() {
-//             Event::Start(start_event) => NumberVector::parse(&mut reader, start_event).unwrap(),
-//             _ => panic!("wrong element type"),
-//         };
-//         // let result = Number::parse(reader).unwrap();
-//         assert_eq!(result.name, "SIMULATOR_SETTINGS".to_string());
-//         assert_eq!(result.device, "CCD Simulator".to_string());
-//         assert_eq!(result.label, "Settings".to_string());
-//         assert_eq!(result.group, "Simulator Config".to_string());
-//         assert_eq!(result.state, "Idle".to_string());
-//         assert_eq!(result.perm, "rw".to_string());
-//         assert_eq!(result.timeout, 60);
-//         assert_eq!(
-//             result.timestamp,
-//             DateTime::<Utc>::from_str("2022-08-12T05:52:27Z").unwrap()
-//         );
-//     }
+        match command_iter.next().unwrap().unwrap() {
+            Command::DefParameter(Parameter::Text(param)) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "ACTIVE_DEVICES");
+                assert_eq!(param.texts.len(), 5)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
 }
