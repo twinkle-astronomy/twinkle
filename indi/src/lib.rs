@@ -43,7 +43,7 @@ pub enum Parameter {
 }
 
 #[derive(Debug)]
-pub struct NumberVector {
+pub struct TextVector {
     pub device: String,
     pub name: String,
     pub label: String,
@@ -52,6 +52,33 @@ pub struct NumberVector {
     pub perm: String,
     pub timeout: u32,
     pub timestamp: DateTime<Utc>,
+    pub message: String,
+
+    pub numbers: HashMap<String, Number>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Text {
+    name: String,
+    label: Option<String>,
+    format: String,
+    min: f64,
+    max: f64,
+    step: f64,
+    value: f64,
+}
+
+#[derive(Debug)]
+pub struct NumberVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: String,
+    pub perm: String,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
 
     pub numbers: HashMap<String, Number>,
 }
@@ -148,127 +175,5 @@ impl Client {
             .unwrap();
         self.xml_writer.write_indent().unwrap();
         self.xml_writer.inner().flush().unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_listen_for_updates() {
-        let xml = r#"
-    <defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
-        <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-    1280
-        </defNumber>
-        <defNumber name="SIM_YRES" label="CCD Y resolution" format="%4.0f" min="512" max="8192" step="512">
-    1024
-        </defNumber>
-        <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-    5.2000000000000001776
-        </defNumber>
-    </defNumberVector>
-                    "#;
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-
-        match listen_for_updates(&mut reader).unwrap().unwrap() {
-            Parameter::Number(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-            }
-        }
-    }
-
-    #[test]
-    fn test_parse_number() {
-        let mut buf = Vec::new();
-        let xml = r#"
-    <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-1280
-    </defNumber>
-"#;
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let result = match reader.read_event(&mut buf).unwrap() {
-            Event::Start(start_event) => Number::parse(&mut reader, start_event).unwrap(),
-            other => panic!("wrong element type to begin: {:?}", other),
-        };
-        // let result = Number::parse(reader).unwrap();
-        assert_eq!(
-            result,
-            Number {
-                name: "SIM_XRES".to_string(),
-                label: Some("CCD X resolution".to_string()),
-                format: "%4.0f".to_string(),
-                min: 512,
-                max: 8192,
-                step: 512,
-                value: 1280.0
-            }
-        );
-
-        let xml = r#"
-    <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-5.2000000000000001776
-    </defNumber>
-"#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let result = match reader.read_event(&mut buf).unwrap() {
-            Event::Start(start_event) => Number::parse(&mut reader, start_event).unwrap(),
-            other => panic!("wrong element type to begin: {:?}", other),
-        };
-
-        assert_eq!(
-            result,
-            Number {
-                name: "SIM_XSIZE".to_string(),
-                label: Some("CCD X Pixel Size".to_string()),
-                format: "%4.2f".to_string(),
-                min: 1,
-                max: 30,
-                step: 5,
-                value: 5.2000000000000001776
-            }
-        );
-    }
-
-    #[test]
-    fn test_parse_numbervector() {
-        let mut buf = Vec::new();
-        let xml = r#"
-<defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
-    <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-1280
-    </defNumber>
-    <defNumber name="SIM_YRES" label="CCD Y resolution" format="%4.0f" min="512" max="8192" step="512">
-1024
-    </defNumber>
-    <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-5.2000000000000001776
-    </defNumber>
-</defNumberVector>
-"#;
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let result = match reader.read_event(&mut buf).unwrap() {
-            Event::Start(start_event) => NumberVector::parse(&mut reader, start_event).unwrap(),
-            _ => panic!("wrong element type"),
-        };
-        // let result = Number::parse(reader).unwrap();
-        assert_eq!(result.name, "SIMULATOR_SETTINGS".to_string());
-        assert_eq!(result.device, "CCD Simulator".to_string());
-        assert_eq!(result.label, "Settings".to_string());
-        assert_eq!(result.group, "Simulator Config".to_string());
-        assert_eq!(result.state, "Idle".to_string());
-        assert_eq!(result.perm, "rw".to_string());
-        assert_eq!(result.timeout, 60);
-        assert_eq!(
-            result.timestamp,
-            DateTime::<Utc>::from_str("2022-08-12T05:52:27Z").unwrap()
-        );
     }
 }
