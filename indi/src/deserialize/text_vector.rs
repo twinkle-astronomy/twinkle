@@ -44,8 +44,8 @@ impl<'a, T: std::io::BufRead> TextIter<'a, T> {
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
         let mut group: Option<String> = None;
-        let mut state: Option<String> = None;
-        let mut perm: Option<String> = None;
+        let mut state: Option<PropertyState> = None;
+        let mut perm: Option<PropertyPerm> = None;
         let mut timeout: Option<u32> = None;
         let mut timestamp: Option<DateTime<Utc>> = None;
         let mut message: Option<String> = None;
@@ -58,8 +58,8 @@ impl<'a, T: std::io::BufRead> TextIter<'a, T> {
                 b"name" => name = Some(attr_value),
                 b"label" => label = Some(attr_value),
                 b"group" => group = Some(attr_value),
-                b"state" => state = Some(attr_value),
-                b"perm" => perm = Some(attr_value),
+                b"state" => state = Some(PropertyState::try_from(attr)?),
+                b"perm" => perm = Some(PropertyPerm::try_from(attr)?),
                 b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
                 b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 b"message" => message = Some(attr_value),

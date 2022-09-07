@@ -2,6 +2,8 @@ use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::events::Event;
 use quick_xml::{Reader, Writer};
+use quick_xml::events::attributes::Attribute;
+use quick_xml::events::BytesText;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -22,7 +24,7 @@ pub mod deserialize;
 pub struct Client {
     connection: TcpStream,
     xml_writer: Writer<BufWriter<TcpStream>>,
-    devices: HashMap<String, Device>,
+    pub devices: HashMap<String, Device>,
 }
 
 #[derive(Debug)]
@@ -41,7 +43,101 @@ pub struct Device {
 pub enum Parameter {
     Text(TextVector),
     Number(NumberVector),
+    Switch(SwitchVector),
 }
+
+#[derive(Debug, PartialEq)]
+pub enum PropertyState {
+    Idle,
+    Ok,
+    Busy,
+    Alert
+}
+
+impl<'a> TryFrom<Attribute<'a>> for PropertyState {
+    type Error = DeError;
+
+    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
+        match value.unescaped_value()? {
+            Cow::Borrowed(b"Idle") => Ok(PropertyState::Idle),
+            Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
+            Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
+            Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
+            _ => return Err(DeError::UnexpectedEvent())
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SwitchState {
+    On,
+    Off
+}
+
+impl<'a> TryFrom<BytesText<'a>> for SwitchState {
+    type Error = DeError;
+
+    fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
+        match value.unescaped()? {
+            Cow::Borrowed(b"On") => Ok(SwitchState::On),
+            Cow::Borrowed(b"Off") => Ok(SwitchState::Off),
+            _ => return Err(DeError::UnexpectedEvent())
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SwitchRule {
+    OneOfMany,
+    AtMostOne,
+    AnyOfMany
+}
+
+impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
+    type Error = DeError;
+
+    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
+        match value.unescaped_value()? {
+            Cow::Borrowed(b"OneOfMany") => Ok(SwitchRule::OneOfMany),
+            Cow::Borrowed(b"AtMostOne") => Ok(SwitchRule::AtMostOne),
+            Cow::Borrowed(b"AnyOfMany") => Ok(SwitchRule::AnyOfMany),
+            _ => return Err(DeError::UnexpectedEvent())
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PropertyPerm {
+    RO,
+    WO,
+    RW
+}
+
+impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
+    type Error = DeError;
+
+    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
+        match value.unescaped_value()? {
+            Cow::Borrowed(b"ro") => Ok(PropertyPerm::RO),
+            Cow::Borrowed(b"wo") => Ok(PropertyPerm::WO),
+            Cow::Borrowed(b"rw") => Ok(PropertyPerm::RW),
+            _ => return Err(DeError::UnexpectedEvent())
+        }
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
+pub enum BlobEnable {
+    Never,
+    Also,
+    Only
+}
+
+
+
+
+
 
 #[derive(Debug)]
 pub struct TextVector {
@@ -49,8 +145,8 @@ pub struct TextVector {
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
-    pub state: String,
-    pub perm: String,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
@@ -71,8 +167,8 @@ pub struct NumberVector {
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
-    pub state: String,
-    pub perm: String,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
@@ -89,6 +185,30 @@ pub struct Number {
     max: f64,
     step: f64,
     value: f64,
+}
+
+
+#[derive(Debug)]
+pub struct SwitchVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub rule: SwitchRule,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub switches: HashMap<String, Switch>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Switch {
+    name: String,
+    label: Option<String>,
+    value: SwitchState,
 }
 
 #[derive(Debug)]
