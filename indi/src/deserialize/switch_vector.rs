@@ -109,10 +109,11 @@ impl<'a, T: std::io::BufRead> SwitchIter<'a, T> {
                         }
                     }
 
-                    let value: Result<SwitchState, DeError> = match self.xml_reader.read_event(self.buf) {
-                        Ok(Event::Text(e)) => SwitchState::try_from(e),
-                        _ => return Err(DeError::UnexpectedEvent()),
-                    };
+                    let value: Result<SwitchState, DeError> =
+                        match self.xml_reader.read_event(self.buf) {
+                            Ok(Event::Text(e)) => SwitchState::try_from(e),
+                            _ => return Err(DeError::UnexpectedEvent()),
+                        };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {

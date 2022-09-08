@@ -14,7 +14,6 @@ pub struct CommandIter<T: std::io::BufRead> {
     buf: Vec<u8>,
 }
 
-
 impl<T: std::io::BufRead> Iterator for CommandIter<T> {
     type Item = Result<Command, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -50,7 +49,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         }
 
                         Ok(Some(Command::DefParameter(Parameter::Text(text_vector))))
-                    },
+                    }
                     b"defNumberVector" => {
                         let mut number_vector =
                             NumberIter::def_number_vector(&self.xml_reader, &e)?;
@@ -63,16 +62,19 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         Ok(Some(Command::DefParameter(Parameter::Number(
                             number_vector,
                         ))))
-                    },
+                    }
                     b"defSwitchVector" => {
-                        let mut switch_vector = SwitchIter::def_switch_vector(&self.xml_reader, &e)?;
+                        let mut switch_vector =
+                            SwitchIter::def_switch_vector(&self.xml_reader, &e)?;
 
                         for switch in deserialize::SwitchIter::new(self) {
                             let switch = switch?;
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Switch(switch_vector))))
+                        Ok(Some(Command::DefParameter(Parameter::Switch(
+                            switch_vector,
+                        ))))
                     }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };

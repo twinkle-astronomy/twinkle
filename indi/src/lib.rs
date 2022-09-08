@@ -1,9 +1,9 @@
 use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
-use quick_xml::events::Event;
-use quick_xml::{Reader, Writer};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::BytesText;
+use quick_xml::events::Event;
+use quick_xml::{Reader, Writer};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -51,7 +51,7 @@ pub enum PropertyState {
     Idle,
     Ok,
     Busy,
-    Alert
+    Alert,
 }
 
 impl<'a> TryFrom<Attribute<'a>> for PropertyState {
@@ -63,7 +63,7 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyState {
             Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
             Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
             Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
-            _ => return Err(DeError::UnexpectedEvent())
+            _ => return Err(DeError::UnexpectedEvent()),
         }
     }
 }
@@ -71,7 +71,7 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyState {
 #[derive(Debug, PartialEq)]
 pub enum SwitchState {
     On,
-    Off
+    Off,
 }
 
 impl<'a> TryFrom<BytesText<'a>> for SwitchState {
@@ -81,7 +81,7 @@ impl<'a> TryFrom<BytesText<'a>> for SwitchState {
         match value.unescaped()? {
             Cow::Borrowed(b"On") => Ok(SwitchState::On),
             Cow::Borrowed(b"Off") => Ok(SwitchState::Off),
-            _ => return Err(DeError::UnexpectedEvent())
+            _ => return Err(DeError::UnexpectedEvent()),
         }
     }
 }
@@ -90,7 +90,7 @@ impl<'a> TryFrom<BytesText<'a>> for SwitchState {
 pub enum SwitchRule {
     OneOfMany,
     AtMostOne,
-    AnyOfMany
+    AnyOfMany,
 }
 
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
@@ -101,7 +101,7 @@ impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
             Cow::Borrowed(b"OneOfMany") => Ok(SwitchRule::OneOfMany),
             Cow::Borrowed(b"AtMostOne") => Ok(SwitchRule::AtMostOne),
             Cow::Borrowed(b"AnyOfMany") => Ok(SwitchRule::AnyOfMany),
-            _ => return Err(DeError::UnexpectedEvent())
+            _ => return Err(DeError::UnexpectedEvent()),
         }
     }
 }
@@ -110,7 +110,7 @@ impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
 pub enum PropertyPerm {
     RO,
     WO,
-    RW
+    RW,
 }
 
 impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
@@ -121,23 +121,17 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
             Cow::Borrowed(b"ro") => Ok(PropertyPerm::RO),
             Cow::Borrowed(b"wo") => Ok(PropertyPerm::WO),
             Cow::Borrowed(b"rw") => Ok(PropertyPerm::RW),
-            _ => return Err(DeError::UnexpectedEvent())
+            _ => return Err(DeError::UnexpectedEvent()),
         }
     }
 }
-
 
 #[derive(Debug, PartialEq)]
 pub enum BlobEnable {
     Never,
     Also,
-    Only
+    Only,
 }
-
-
-
-
-
 
 #[derive(Debug)]
 pub struct TextVector {
@@ -186,7 +180,6 @@ pub struct Number {
     step: f64,
     value: f64,
 }
-
 
 #[derive(Debug)]
 pub struct SwitchVector {
