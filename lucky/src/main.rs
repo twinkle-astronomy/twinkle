@@ -3,10 +3,9 @@ use regex::Regex;
 use std::collections::HashSet;
 use std::fs;
 use std::num::ParseFloatError;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 use dialoguer::{theme::ColorfulTheme, Input};
-use std::io::Write;
 use std::{thread, time};
 
 #[derive(Debug)]
@@ -124,7 +123,7 @@ fn main() {
                 Ok(path) => {
                     if !files_to_ignore.contains(&path) {
                         match filter.handle_file(&path) {
-                            Err(MisingFwhm) => {
+                            Err(FilterError::MisingFwhm()) => {
                                 println!("{}: missing fwhm in filename", path.display());
                                 files_to_ignore.insert(path);
                             }
