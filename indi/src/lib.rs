@@ -41,10 +41,10 @@ pub struct Device {
 
 #[derive(Debug)]
 pub enum Parameter {
-    Text(TextVector),
-    Number(NumberVector),
-    Switch(SwitchVector),
-    Light(LightVector),
+    Texts(TextVector),
+    Numbers(NumberVector),
+    Switches(SwitchVector),
+    Lights(LightVector),
 }
 
 #[derive(Debug, PartialEq)]
@@ -163,7 +163,7 @@ pub struct LightVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub lights: HashMap<String, Switch>,
+    pub lights: HashMap<String, Light>,
 }
 
 #[derive(Debug, PartialEq)]

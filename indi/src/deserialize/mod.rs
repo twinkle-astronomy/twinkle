@@ -116,7 +116,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             text_vector.texts.insert(text.name.clone(), text);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Text(text_vector))))
+                        Ok(Some(Command::DefParameter(Parameter::Texts(text_vector))))
                     }
                     b"defNumberVector" => {
                         let mut number_vector =
@@ -127,7 +127,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             number_vector.numbers.insert(number.name.clone(), number);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Number(
+                        Ok(Some(Command::DefParameter(Parameter::Numbers(
                             number_vector,
                         ))))
                     }
@@ -140,9 +140,19 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Switch(
+                        Ok(Some(Command::DefParameter(Parameter::Switches(
                             switch_vector,
                         ))))
+                    }
+                    b"defLightVector" => {
+                        let mut light_vector = LightIter::def_light_vector(&self.xml_reader, &e)?;
+
+                        for light in deserialize::LightIter::new(self) {
+                            let light = light?;
+                            light_vector.lights.insert(light.name.clone(), light);
+                        }
+
+                        Ok(Some(Command::DefParameter(Parameter::Lights(light_vector))))
                     }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
@@ -181,7 +191,7 @@ mod tests {
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Number(param)) => {
+            Command::DefParameter(Parameter::Numbers(param)) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATOR_SETTINGS");
                 assert_eq!(param.numbers.len(), 3)
@@ -218,7 +228,7 @@ SQM
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Text(param)) => {
+            Command::DefParameter(Parameter::Texts(param)) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "ACTIVE_DEVICES");
                 assert_eq!(param.texts.len(), 5)
@@ -246,10 +256,38 @@ On
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Switch(param)) => {
+            Command::DefParameter(Parameter::Switches(param)) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
                 assert_eq!(param.switches.len(), 2)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_light_vector() {
+        let xml = r#"
+<defLightVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" timestamp="2022-09-06T01:41:22">
+    <defLight name="INDI_ENABLED" label="Enabled">
+Busy
+    </defLight>
+    <defLight name="INDI_DISABLED" label="Disabled">
+Ok
+    </defLight>
+</defLightVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::DefParameter(Parameter::Lights(param)) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIMULATE_BAYER");
+                assert_eq!(param.lights.len(), 2)
             }
             e => {
                 panic!("Unexpected: {:?}", e)

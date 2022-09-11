@@ -144,7 +144,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_number() {
+    fn test_parse_text() {
         let xml = r#"
     <defText name="ACTIVE_TELESCOPE" label="Telescope">
 Telescope Simulator
