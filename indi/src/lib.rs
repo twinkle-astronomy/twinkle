@@ -45,6 +45,7 @@ pub enum Parameter {
     Numbers(NumberVector),
     Switches(SwitchVector),
     Lights(LightVector),
+    Blobs(BlobVector)
 }
 
 #[derive(Debug, PartialEq)]
@@ -172,6 +173,29 @@ pub struct Light {
     label: Option<String>,
     value: PropertyState,
 }
+
+#[derive(Debug)]
+pub struct BlobVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub blobs: HashMap<String, Blob>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Blob {
+    name: String,
+    label: Option<String>,
+    value: Vec<u8>,
+}
+
 #[derive(Debug)]
 pub enum DeError {
     XmlError(quick_xml::Error),

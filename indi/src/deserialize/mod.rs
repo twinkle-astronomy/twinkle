@@ -10,6 +10,9 @@ pub use switch_vector::SwitchIter;
 pub mod light_vector;
 pub use light_vector::LightIter;
 
+pub mod blob_vector;
+pub use blob_vector::BlobIter;
+
 use super::*;
 
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
@@ -154,6 +157,16 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::DefParameter(Parameter::Lights(light_vector))))
                     }
+                    b"defBlobVector" => {
+                        let mut blob_vector = BlobIter::def_blob_vector(&self.xml_reader, &e)?;
+
+                        for blob in deserialize::BlobIter::new(self) {
+                            let blob = blob?;
+                            blob_vector.blobs.insert(blob.name.clone(), blob);
+                        }
+
+                        Ok(Some(Command::DefParameter(Parameter::Blobs(blob_vector))))
+                    }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
                 result
@@ -288,6 +301,31 @@ Ok
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
                 assert_eq!(param.lights.len(), 2)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_blob_vector() {
+        let xml = r#"
+<defBlobVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" perm="rw"  state="Idle" timestamp="2022-09-06T01:41:22">
+    <defBlob name="INDI_ENABLED" label="Enabled"/>
+    <defBlob name="INDI_DISABLED" label="Disabled"/>
+</defBlobVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::DefParameter(Parameter::Blobs(param)) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIMULATE_BAYER");
+                assert_eq!(param.blobs.len(), 2)
             }
             e => {
                 panic!("Unexpected: {:?}", e)
