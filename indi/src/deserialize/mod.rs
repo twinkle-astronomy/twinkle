@@ -7,6 +7,9 @@ pub use text_vector::TextIter;
 pub mod switch_vector;
 pub use switch_vector::SwitchIter;
 
+pub mod light_vector;
+pub use light_vector::LightIter;
+
 use super::*;
 
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
@@ -21,11 +24,26 @@ impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
         }
     }
 }
+
 impl<'a> TryFrom<Attribute<'a>> for PropertyState {
     type Error = DeError;
 
     fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
         match value.unescaped_value()? {
+            Cow::Borrowed(b"Idle") => Ok(PropertyState::Idle),
+            Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
+            Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
+            Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
+            _ => return Err(DeError::UnexpectedEvent()),
+        }
+    }
+}
+
+impl<'a> TryFrom<BytesText<'a>> for PropertyState {
+    type Error = DeError;
+
+    fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
+        match value.unescaped()? {
             Cow::Borrowed(b"Idle") => Ok(PropertyState::Idle),
             Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
             Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),

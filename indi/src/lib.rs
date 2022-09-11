@@ -44,6 +44,7 @@ pub enum Parameter {
     Text(TextVector),
     Number(NumberVector),
     Switch(SwitchVector),
+    Light(LightVector),
 }
 
 #[derive(Debug, PartialEq)]
@@ -54,13 +55,11 @@ pub enum PropertyState {
     Alert,
 }
 
-
 #[derive(Debug, PartialEq)]
 pub enum SwitchState {
     On,
     Off,
 }
-
 
 #[derive(Debug, PartialEq)]
 pub enum SwitchRule {
@@ -154,6 +153,25 @@ pub struct Switch {
     value: SwitchState,
 }
 
+#[derive(Debug)]
+pub struct LightVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub lights: HashMap<String, Switch>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Light {
+    name: String,
+    label: Option<String>,
+    value: PropertyState,
+}
 #[derive(Debug)]
 pub enum DeError {
     XmlError(quick_xml::Error),
