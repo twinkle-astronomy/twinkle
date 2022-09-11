@@ -54,19 +54,6 @@ pub enum PropertyState {
     Alert,
 }
 
-impl<'a> TryFrom<Attribute<'a>> for PropertyState {
-    type Error = DeError;
-
-    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped_value()? {
-            Cow::Borrowed(b"Idle") => Ok(PropertyState::Idle),
-            Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
-            Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
-            Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
-            _ => return Err(DeError::UnexpectedEvent()),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum SwitchState {
@@ -74,17 +61,6 @@ pub enum SwitchState {
     Off,
 }
 
-impl<'a> TryFrom<BytesText<'a>> for SwitchState {
-    type Error = DeError;
-
-    fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped()? {
-            Cow::Borrowed(b"On") => Ok(SwitchState::On),
-            Cow::Borrowed(b"Off") => Ok(SwitchState::Off),
-            _ => return Err(DeError::UnexpectedEvent()),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum SwitchRule {
@@ -93,37 +69,11 @@ pub enum SwitchRule {
     AnyOfMany,
 }
 
-impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
-    type Error = DeError;
-
-    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped_value()? {
-            Cow::Borrowed(b"OneOfMany") => Ok(SwitchRule::OneOfMany),
-            Cow::Borrowed(b"AtMostOne") => Ok(SwitchRule::AtMostOne),
-            Cow::Borrowed(b"AnyOfMany") => Ok(SwitchRule::AnyOfMany),
-            _ => return Err(DeError::UnexpectedEvent()),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum PropertyPerm {
     RO,
     WO,
     RW,
-}
-
-impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
-    type Error = DeError;
-
-    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped_value()? {
-            Cow::Borrowed(b"ro") => Ok(PropertyPerm::RO),
-            Cow::Borrowed(b"wo") => Ok(PropertyPerm::WO),
-            Cow::Borrowed(b"rw") => Ok(PropertyPerm::RW),
-            _ => return Err(DeError::UnexpectedEvent()),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
