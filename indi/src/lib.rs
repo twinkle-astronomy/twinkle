@@ -24,28 +24,15 @@ pub mod deserialize;
 pub struct Client {
     connection: TcpStream,
     xml_writer: Writer<BufWriter<TcpStream>>,
-    pub devices: HashMap<String, Device>,
 }
 
 #[derive(Debug)]
 pub enum Command {
-    DefParameter(Parameter),
-}
-
-#[derive(Debug)]
-pub struct Device {
-    pub name: String,
-
-    pub parameters: HashMap<String, Parameter>,
-}
-
-#[derive(Debug)]
-pub enum Parameter {
-    Texts(TextVector),
-    Numbers(NumberVector),
-    Switches(SwitchVector),
-    Lights(LightVector),
-    Blobs(BlobVector)
+    DefTextVector(DefTextVector),
+    DefNumberVector(DefNumberVector),
+    DefSwitchVector(DefSwitchVector),
+    DefLightVector(DefLightVector),
+    DefBlobVector(DefBlobVector)
 }
 
 #[derive(Debug, PartialEq)]
@@ -84,7 +71,7 @@ pub enum BlobEnable {
 }
 
 #[derive(Debug)]
-pub struct TextVector {
+pub struct DefTextVector {
     pub device: String,
     pub name: String,
     pub label: Option<String>,
@@ -95,18 +82,18 @@ pub struct TextVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub texts: HashMap<String, Text>,
+    pub texts: HashMap<String, DefText>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Text {
+pub struct DefText {
     name: String,
     label: Option<String>,
     value: String,
 }
 
 #[derive(Debug)]
-pub struct NumberVector {
+pub struct DefNumberVector {
     pub device: String,
     pub name: String,
     pub label: Option<String>,
@@ -117,11 +104,11 @@ pub struct NumberVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub numbers: HashMap<String, Number>,
+    pub numbers: HashMap<String, DefNumber>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Number {
+pub struct DefNumber {
     name: String,
     label: Option<String>,
     format: String,
@@ -132,7 +119,7 @@ pub struct Number {
 }
 
 #[derive(Debug)]
-pub struct SwitchVector {
+pub struct DefSwitchVector {
     pub device: String,
     pub name: String,
     pub label: Option<String>,
@@ -144,18 +131,18 @@ pub struct SwitchVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub switches: HashMap<String, Switch>,
+    pub switches: HashMap<String, DefSwitch>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Switch {
+pub struct DefSwitch {
     name: String,
     label: Option<String>,
     value: SwitchState,
 }
 
 #[derive(Debug)]
-pub struct LightVector {
+pub struct DefLightVector {
     pub device: String,
     pub name: String,
     pub label: Option<String>,
@@ -164,18 +151,18 @@ pub struct LightVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub lights: HashMap<String, Light>,
+    pub lights: HashMap<String, DefLight>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Light {
+pub struct DefLight {
     name: String,
     label: Option<String>,
     value: PropertyState,
 }
 
 #[derive(Debug)]
-pub struct BlobVector {
+pub struct DefBlobVector {
     pub device: String,
     pub name: String,
     pub label: Option<String>,
@@ -186,11 +173,11 @@ pub struct BlobVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub blobs: HashMap<String, Blob>,
+    pub blobs: HashMap<String, DefBlob>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Blob {
+pub struct DefBlob {
     name: String,
     label: Option<String>,
     value: Vec<u8>,
@@ -252,11 +239,9 @@ impl Client {
         let connection = TcpStream::connect(addr)?;
         let xml_writer = Writer::new_with_indent(BufWriter::new(connection.try_clone()?), b' ', 2);
 
-        let devices = HashMap::new();
         Ok(Client {
             connection,
             xml_writer,
-            devices,
         })
     }
 

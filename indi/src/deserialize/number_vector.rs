@@ -15,7 +15,7 @@ pub struct NumberIter<'a, T: std::io::BufRead> {
 }
 
 impl<'a, T: std::io::BufRead> Iterator for NumberIter<'a, T> {
-    type Item = Result<Number, DeError>;
+    type Item = Result<DefNumber, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_number() {
             Ok(Some(number)) => {
@@ -39,7 +39,7 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
     pub fn def_number_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
-    ) -> Result<NumberVector, DeError> {
+    ) -> Result<DefNumberVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -71,7 +71,7 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
                 }
             }
         }
-        Ok(NumberVector {
+        Ok(DefNumberVector {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             label: label,
@@ -85,7 +85,7 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
         })
     }
 
-    fn next_number(&mut self) -> Result<Option<Number>, DeError> {
+    fn next_number(&mut self) -> Result<Option<DefNumber>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
@@ -132,7 +132,7 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
                         }
                     }
 
-                    Ok(Some(Number {
+                    Ok(Some(DefNumber {
                         name: name?,
                         label: label,
                         format: format?,
@@ -172,7 +172,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Number {
+            DefNumber {
                 name: "SIM_XRES".to_string(),
                 label: Some("CCD X resolution".to_string()),
                 format: "%4.0f".to_string(),
@@ -197,7 +197,7 @@ mod tests {
         let result = number_iter.next().unwrap().unwrap();
         assert_eq!(
             result,
-            Number {
+            DefNumber {
                 name: "SIM_XSIZE".to_string(),
                 label: Some("CCD X Pixel Size".to_string()),
                 format: "%4.2f".to_string(),

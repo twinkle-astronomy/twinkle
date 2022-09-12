@@ -12,7 +12,7 @@ pub struct BlobIter<'a, T: std::io::BufRead> {
 }
 
 impl<'a, T: std::io::BufRead> Iterator for BlobIter<'a, T> {
-    type Item = Result<Blob, DeError>;
+    type Item = Result<DefBlob, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_switch() {
             Ok(Some(switch)) => {
@@ -36,7 +36,7 @@ impl<'a, T: std::io::BufRead> BlobIter<'a, T> {
     pub fn def_blob_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
-    ) -> Result<BlobVector, DeError> {
+    ) -> Result<DefBlobVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -68,7 +68,7 @@ impl<'a, T: std::io::BufRead> BlobIter<'a, T> {
                 }
             }
         }
-        Ok(BlobVector {
+        Ok(DefBlobVector {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             label: label,
@@ -82,7 +82,7 @@ impl<'a, T: std::io::BufRead> BlobIter<'a, T> {
         })
     }
 
-    fn next_switch(&mut self) -> Result<Option<Blob>, DeError> {
+    fn next_switch(&mut self) -> Result<Option<DefBlob>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
@@ -114,7 +114,7 @@ impl<'a, T: std::io::BufRead> BlobIter<'a, T> {
                         }
                     }
 
-                    Ok(Some(Blob {
+                    Ok(Some(DefBlob {
                         name: name?,
                         label: label,
                         value: Vec::new(),
@@ -149,7 +149,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Blob {
+            DefBlob {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
                 value: Vec::new()
@@ -169,7 +169,7 @@ mod tests {
         let result = switch_iter.next().unwrap().unwrap();
         assert_eq!(
             result,
-            Blob {
+            DefBlob {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
                 value: Vec::new()

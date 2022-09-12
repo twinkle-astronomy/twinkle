@@ -15,7 +15,7 @@ pub struct TextIter<'a, T: std::io::BufRead> {
 }
 
 impl<'a, T: std::io::BufRead> Iterator for TextIter<'a, T> {
-    type Item = Result<Text, DeError>;
+    type Item = Result<DefText, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_text() {
             Ok(Some(number)) => {
@@ -39,7 +39,7 @@ impl<'a, T: std::io::BufRead> TextIter<'a, T> {
     pub fn def_text_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
-    ) -> Result<TextVector, DeError> {
+    ) -> Result<DefTextVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -71,7 +71,7 @@ impl<'a, T: std::io::BufRead> TextIter<'a, T> {
                 }
             }
         }
-        Ok(TextVector {
+        Ok(DefTextVector {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             label: label,
@@ -85,7 +85,7 @@ impl<'a, T: std::io::BufRead> TextIter<'a, T> {
         })
     }
 
-    fn next_text(&mut self) -> Result<Option<Text>, DeError> {
+    fn next_text(&mut self) -> Result<Option<DefText>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
@@ -124,7 +124,7 @@ impl<'a, T: std::io::BufRead> TextIter<'a, T> {
                         }
                     }
 
-                    Ok(Some(Text {
+                    Ok(Some(DefText {
                         name: name?,
                         label: label,
                         value: value?,
@@ -160,7 +160,7 @@ Telescope Simulator
 
         assert_eq!(
             result,
-            Text {
+            DefText {
                 name: "ACTIVE_TELESCOPE".to_string(),
                 label: Some("Telescope".to_string()),
                 value: "Telescope Simulator".to_string()

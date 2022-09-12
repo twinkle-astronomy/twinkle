@@ -12,7 +12,7 @@ pub struct SwitchIter<'a, T: std::io::BufRead> {
 }
 
 impl<'a, T: std::io::BufRead> Iterator for SwitchIter<'a, T> {
-    type Item = Result<Switch, DeError>;
+    type Item = Result<DefSwitch, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_switch() {
             Ok(Some(switch)) => {
@@ -36,7 +36,7 @@ impl<'a, T: std::io::BufRead> SwitchIter<'a, T> {
     pub fn def_switch_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
-    ) -> Result<SwitchVector, DeError> {
+    ) -> Result<DefSwitchVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -70,7 +70,7 @@ impl<'a, T: std::io::BufRead> SwitchIter<'a, T> {
                 }
             }
         }
-        Ok(SwitchVector {
+        Ok(DefSwitchVector {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             label: label,
@@ -85,7 +85,7 @@ impl<'a, T: std::io::BufRead> SwitchIter<'a, T> {
         })
     }
 
-    fn next_switch(&mut self) -> Result<Option<Switch>, DeError> {
+    fn next_switch(&mut self) -> Result<Option<DefSwitch>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
@@ -123,7 +123,7 @@ impl<'a, T: std::io::BufRead> SwitchIter<'a, T> {
                         }
                     }
 
-                    Ok(Some(Switch {
+                    Ok(Some(DefSwitch {
                         name: name?,
                         label: label,
                         value: value?,
@@ -159,7 +159,7 @@ On
 
         assert_eq!(
             result,
-            Switch {
+            DefSwitch {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
                 value: SwitchState::On
@@ -180,7 +180,7 @@ Off
         let result = switch_iter.next().unwrap().unwrap();
         assert_eq!(
             result,
-            Switch {
+            DefSwitch {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
                 value: SwitchState::Off

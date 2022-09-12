@@ -119,7 +119,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             text_vector.texts.insert(text.name.clone(), text);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Texts(text_vector))))
+                        Ok(Some(Command::DefTextVector(text_vector)))
                     }
                     b"defNumberVector" => {
                         let mut number_vector =
@@ -130,9 +130,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             number_vector.numbers.insert(number.name.clone(), number);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Numbers(
-                            number_vector,
-                        ))))
+                        Ok(Some(Command::DefNumberVector(number_vector)))
                     }
                     b"defSwitchVector" => {
                         let mut switch_vector =
@@ -143,9 +141,9 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Switches(
+                        Ok(Some(Command::DefSwitchVector(
                             switch_vector,
-                        ))))
+                        )))
                     }
                     b"defLightVector" => {
                         let mut light_vector = LightIter::def_light_vector(&self.xml_reader, &e)?;
@@ -155,7 +153,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             light_vector.lights.insert(light.name.clone(), light);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Lights(light_vector))))
+                        Ok(Some(Command::DefLightVector(light_vector)))
                     }
                     b"defBlobVector" => {
                         let mut blob_vector = BlobIter::def_blob_vector(&self.xml_reader, &e)?;
@@ -165,7 +163,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                             blob_vector.blobs.insert(blob.name.clone(), blob);
                         }
 
-                        Ok(Some(Command::DefParameter(Parameter::Blobs(blob_vector))))
+                        Ok(Some(Command::DefBlobVector(blob_vector)))
                     }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
@@ -204,7 +202,7 @@ mod tests {
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Numbers(param)) => {
+            Command::DefNumberVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATOR_SETTINGS");
                 assert_eq!(param.numbers.len(), 3)
@@ -241,7 +239,7 @@ SQM
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Texts(param)) => {
+            Command::DefTextVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "ACTIVE_DEVICES");
                 assert_eq!(param.texts.len(), 5)
@@ -269,7 +267,7 @@ On
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Switches(param)) => {
+            Command::DefSwitchVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
                 assert_eq!(param.switches.len(), 2)
@@ -297,7 +295,7 @@ Ok
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Lights(param)) => {
+            Command::DefLightVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
                 assert_eq!(param.lights.len(), 2)
@@ -322,7 +320,7 @@ Ok
         let mut command_iter = CommandIter::new(reader);
 
         match command_iter.next().unwrap().unwrap() {
-            Command::DefParameter(Parameter::Blobs(param)) => {
+            Command::DefBlobVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
                 assert_eq!(param.blobs.len(), 2)

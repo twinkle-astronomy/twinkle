@@ -7,8 +7,8 @@ fn main() {
     client.query_devices();
     for command in client.command_iter().unwrap() {
         match command {
-            Ok(indi::Command::DefParameter(param)) => {
-                println!("entry: {:?}", param);
+            Ok(command) => {
+                println!("entry: {:?}", command);
             }
             Err(e) => match e {
                 e => println!("error: {:?}", e),

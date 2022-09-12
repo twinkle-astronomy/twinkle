@@ -12,7 +12,7 @@ pub struct LightIter<'a, T: std::io::BufRead> {
 }
 
 impl<'a, T: std::io::BufRead> Iterator for LightIter<'a, T> {
-    type Item = Result<Light, DeError>;
+    type Item = Result<DefLight, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_light() {
             Ok(Some(light)) => {
@@ -36,7 +36,7 @@ impl<'a, T: std::io::BufRead> LightIter<'a, T> {
     pub fn def_light_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
-    ) -> Result<LightVector, DeError> {
+    ) -> Result<DefLightVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut label: Option<String> = None;
@@ -64,7 +64,7 @@ impl<'a, T: std::io::BufRead> LightIter<'a, T> {
                 }
             }
         }
-        Ok(LightVector {
+        Ok(DefLightVector {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             label: label,
@@ -76,7 +76,7 @@ impl<'a, T: std::io::BufRead> LightIter<'a, T> {
         })
     }
 
-    fn next_light(&mut self) -> Result<Option<Light>, DeError> {
+    fn next_light(&mut self) -> Result<Option<DefLight>, DeError> {
         let event = self.xml_reader.read_event(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
@@ -114,7 +114,7 @@ impl<'a, T: std::io::BufRead> LightIter<'a, T> {
                         }
                     }
 
-                    Ok(Some(Light {
+                    Ok(Some(DefLight {
                         name: name?,
                         label: label,
                         value: value?,
@@ -150,7 +150,7 @@ Ok
 
         assert_eq!(
             result,
-            Light {
+            DefLight {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
                 value: PropertyState::Ok
@@ -171,7 +171,7 @@ Busy
         let result = light_iter.next().unwrap().unwrap();
         assert_eq!(
             result,
-            Light {
+            DefLight {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
                 value: PropertyState::Busy
