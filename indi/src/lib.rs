@@ -35,6 +35,7 @@ pub enum Command {
     DefSwitchVector(DefSwitchVector),
     SetSwitchVector(SetSwitchVector),
     DefLightVector(DefLightVector),
+    SetLightVector(SetLightVector),
     DefBlobVector(DefBlobVector),
 }
 
@@ -214,6 +215,23 @@ pub struct DefLightVector {
 pub struct DefLight {
     name: String,
     label: Option<String>,
+    value: PropertyState,
+}
+
+#[derive(Debug)]
+pub struct SetLightVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub lights: HashMap<String, OneLight>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneLight {
+    name: String,
     value: PropertyState,
 }
 

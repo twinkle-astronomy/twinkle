@@ -11,7 +11,8 @@ pub use switch_vector::DefSwitchIter;
 pub use switch_vector::SetSwitchIter;
 
 pub mod light_vector;
-pub use light_vector::LightIter;
+pub use light_vector::DefLightIter;
+pub use light_vector::SetLightIter;
 
 pub mod blob_vector;
 pub use blob_vector::BlobIter;
@@ -175,14 +176,24 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         Ok(Some(Command::SetSwitchVector(switch_vector)))
                     }
                     b"defLightVector" => {
-                        let mut light_vector = LightIter::def_light_vector(&self.xml_reader, &e)?;
+                        let mut light_vector = DefLightIter::light_vector(&self.xml_reader, &e)?;
 
-                        for light in deserialize::LightIter::new(self) {
+                        for light in deserialize::DefLightIter::new(self) {
                             let light = light?;
                             light_vector.lights.insert(light.name.clone(), light);
                         }
 
                         Ok(Some(Command::DefLightVector(light_vector)))
+                    }
+                    b"setLightVector" => {
+                        let mut light_vector = SetLightIter::light_vector(&self.xml_reader, &e)?;
+
+                        for light in deserialize::SetLightIter::new(self) {
+                            let light = light?;
+                            light_vector.lights.insert(light.name.clone(), light);
+                        }
+
+                        Ok(Some(Command::SetLightVector(light_vector)))
                     }
                     b"defBlobVector" => {
                         let mut blob_vector = BlobIter::def_blob_vector(&self.xml_reader, &e)?;
@@ -404,7 +415,7 @@ Off
     }
 
     #[test]
-    fn test_light_vector() {
+    fn test_def_light_vector() {
         let xml = r#"
 <defLightVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" timestamp="2022-09-06T01:41:22">
     <defLight name="INDI_ENABLED" label="Enabled">
@@ -421,6 +432,34 @@ Ok
 
         match command_iter.next().unwrap().unwrap() {
             Command::DefLightVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIMULATE_BAYER");
+                assert_eq!(param.lights.len(), 2)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_light_vector() {
+        let xml = r#"
+<setLightVector device="CCD Simulator" name="SIMULATE_BAYER" state="Idle" timestamp="2022-09-06T01:41:22">
+    <oneLight name="INDI_ENABLED">
+Busy
+    </oneLight>
+    <oneLight name="INDI_DISABLED">
+Ok
+    </oneLight>
+</setLightVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::SetLightVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
                 assert_eq!(param.lights.len(), 2)
