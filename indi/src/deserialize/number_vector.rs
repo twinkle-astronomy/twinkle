@@ -9,12 +9,12 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
-pub struct NumberIter<'a, T: std::io::BufRead> {
+pub struct DefNumberIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,
 }
 
-impl<'a, T: std::io::BufRead> Iterator for NumberIter<'a, T> {
+impl<'a, T: std::io::BufRead> Iterator for DefNumberIter<'a, T> {
     type Item = Result<DefNumber, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_number() {
@@ -28,15 +28,15 @@ impl<'a, T: std::io::BufRead> Iterator for NumberIter<'a, T> {
         }
     }
 }
-impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
-    pub fn new(command_iter: &mut CommandIter<T>) -> NumberIter<T> {
-        NumberIter {
+impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
+    pub fn new(command_iter: &mut CommandIter<T>) -> DefNumberIter<T> {
+        DefNumberIter {
             xml_reader: &mut command_iter.xml_reader,
             buf: &mut command_iter.buf,
         }
     }
 
-    pub fn def_number_vector(
+    pub fn number_vector(
         xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefNumberVector, DeError> {
@@ -151,12 +151,155 @@ impl<'a, T: std::io::BufRead> NumberIter<'a, T> {
     }
 }
 
+
+pub struct SetNumberIter<'a, T: std::io::BufRead> {
+    xml_reader: &'a mut Reader<T>,
+    buf: &'a mut Vec<u8>,
+}
+
+impl<'a, T: std::io::BufRead> Iterator for SetNumberIter<'a, T> {
+    type Item = Result<OneNumber, DeError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.next_number() {
+            Ok(Some(number)) => {
+                return Some(Ok(number));
+            }
+            Ok(None) => return None,
+            Err(e) => {
+                return Some(Err(e));
+            }
+        }
+    }
+}
+impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
+    pub fn new(command_iter: &mut CommandIter<T>) -> SetNumberIter<T> {
+        SetNumberIter {
+            xml_reader: &mut command_iter.xml_reader,
+            buf: &mut command_iter.buf,
+        }
+    }
+
+    pub fn number_vector(
+        xml_reader: &Reader<T>,
+        start_event: &events::BytesStart,
+    ) -> Result<SetNumberVector, DeError> {
+        let mut device: Option<String> = None;
+        let mut name: Option<String> = None;
+        let mut state: Option<PropertyState> = None;
+        let mut timeout: Option<u32> = None;
+        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut message: Option<String> = None;
+
+        for attr in start_event.attributes() {
+            let attr = attr?;
+            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            match attr.key {
+                b"device" => device = Some(attr_value),
+                b"name" => name = Some(attr_value),
+                b"state" => state = Some(PropertyState::try_from(attr)?),
+                b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
+                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                b"message" => message = Some(attr_value),
+                key => {
+                    return Err(DeError::UnexpectedAttr(format!(
+                        "Unexpected attribute {}",
+                        str::from_utf8(key)?
+                    )))
+                }
+            }
+        }
+        Ok(SetNumberVector {
+            device: device.ok_or(DeError::MissingAttr(&"device"))?,
+            name: name.ok_or(DeError::MissingAttr(&"name"))?,
+            state: state.ok_or(DeError::MissingAttr(&"state"))?,
+            timeout: timeout,
+            timestamp: timestamp,
+            message: message,
+            numbers: HashMap::new(),
+        })
+    }
+
+    fn next_number(&mut self) -> Result<Option<OneNumber>, DeError> {
+        let event = self.xml_reader.read_event(&mut self.buf)?;
+        match event {
+            Event::Start(e) => match e.name() {
+                b"oneNumber" => {
+                    let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
+
+                    for attr in e.attributes() {
+                        let attr = attr?;
+                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+
+                        match attr.key {
+                            b"name" => name = Ok(attr_value),
+                            key => {
+                                return Err(DeError::UnexpectedAttr(format!(
+                                    "Unexpected attribute {}",
+                                    str::from_utf8(key)?
+                                )))
+                            }
+                        }
+                    }
+
+                    let value: Result<f64, DeError> = match self.xml_reader.read_event(self.buf) {
+                        Ok(Event::Text(e)) => Ok(ISO_8859_1
+                            .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
+                            .parse::<f64>()?),
+                        _ => return Err(DeError::UnexpectedEvent()),
+                    };
+
+                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    match trailing_event {
+                        Event::End(_) => (),
+                        _ => {
+                            return Err(DeError::UnexpectedEvent());
+                        }
+                    }
+
+                    Ok(Some(OneNumber {
+                        name: name?,
+                        value: value?,
+                    }))
+                }
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+            },
+            Event::End(_) => Ok(None),
+            Event::Eof => Ok(None),
+            _ => Err(DeError::UnexpectedEvent()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_number() {
+    fn test_set_number() {
+        let xml = r#"
+    <oneNumber name="SIM_FOCUS_POSITION">
+7340
+    </oneNumber>
+"#;
+
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+        let mut number_iter = SetNumberIter::new(&mut command_iter);
+
+        let result = number_iter.next().unwrap().unwrap();
+
+        assert_eq!(
+            result,
+            OneNumber {
+                name: "SIM_FOCUS_POSITION".to_string(),
+                value: 7340.0
+            }
+        );
+    }
+
+    #[test]
+    fn test_def_number() {
         let xml = r#"
     <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
 1280
@@ -166,7 +309,7 @@ mod tests {
         let mut reader = Reader::from_str(xml);
         reader.trim_text(true);
         let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = NumberIter::new(&mut command_iter);
+        let mut number_iter = DefNumberIter::new(&mut command_iter);
 
         let result = number_iter.next().unwrap().unwrap();
 
@@ -192,7 +335,7 @@ mod tests {
         let mut reader = Reader::from_str(xml);
         reader.trim_text(true);
         let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = NumberIter::new(&mut command_iter);
+        let mut number_iter = DefNumberIter::new(&mut command_iter);
 
         let result = number_iter.next().unwrap().unwrap();
         assert_eq!(

@@ -1,5 +1,6 @@
 pub mod number_vector;
-pub use number_vector::NumberIter;
+pub use number_vector::DefNumberIter;
+pub use number_vector::SetNumberIter;
 
 pub mod text_vector;
 pub use text_vector::DefTextIter;
@@ -134,14 +135,25 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     }
                     b"defNumberVector" => {
                         let mut number_vector =
-                            NumberIter::def_number_vector(&self.xml_reader, &e)?;
+                            DefNumberIter::number_vector(&self.xml_reader, &e)?;
 
-                        for number in deserialize::NumberIter::new(self) {
+                        for number in deserialize::DefNumberIter::new(self) {
                             let number = number?;
                             number_vector.numbers.insert(number.name.clone(), number);
                         }
 
                         Ok(Some(Command::DefNumberVector(number_vector)))
+                    }
+                    b"setNumberVector" => {
+                        let mut number_vector =
+                            SetNumberIter::number_vector(&self.xml_reader, &e)?;
+
+                        for number in deserialize::SetNumberIter::new(self) {
+                            let number = number?;
+                            number_vector.numbers.insert(number.name.clone(), number);
+                        }
+
+                        Ok(Some(Command::SetNumberVector(number_vector)))
                     }
                     b"defSwitchVector" => {
                         let mut switch_vector =
@@ -194,7 +206,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 mod tests {
     use super::*;
     #[test]
-    fn test_number_vector() {
+    fn test_def_number_vector() {
         let xml = r#"
     <defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
         <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
@@ -216,6 +228,37 @@ mod tests {
             Command::DefNumberVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATOR_SETTINGS");
+                assert_eq!(param.numbers.len(), 3)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_number_vector() {
+        let xml = r#"
+<setNumberVector device="CCD Simulator" name="SIM_FOCUSING" state="Ok" timeout="60" timestamp="2022-10-01T21:21:10">
+    <oneNumber name="SIM_FOCUS_POSITION">
+7340
+    </oneNumber>
+    <oneNumber name="SIM_FOCUS_MAX">
+100000
+    </oneNumber>
+    <oneNumber name="SIM_SEEING">
+3.5
+    </oneNumber>
+</setNumberVector>
+"#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::SetNumberVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIM_FOCUSING");
                 assert_eq!(param.numbers.len(), 3)
             }
             e => {

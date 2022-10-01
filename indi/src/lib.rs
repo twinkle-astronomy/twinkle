@@ -31,6 +31,7 @@ pub enum Command {
     DefTextVector(DefTextVector),
     SetTextVector(SetTextVector),
     DefNumberVector(DefNumberVector),
+    SetNumberVector(SetNumberVector),
     DefSwitchVector(DefSwitchVector),
     DefLightVector(DefLightVector),
     DefBlobVector(DefBlobVector)
@@ -139,6 +140,23 @@ pub struct DefNumber {
     value: f64,
 }
 
+#[derive(Debug)]
+pub struct SetNumberVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub numbers: HashMap<String, OneNumber>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneNumber {
+    name: String,
+    value: f64,
+}
 #[derive(Debug)]
 pub struct DefSwitchVector {
     pub device: String,
