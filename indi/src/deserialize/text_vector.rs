@@ -14,7 +14,7 @@ pub struct SetTextIter<'a, T: std::io::BufRead> {
     buf: &'a mut Vec<u8>,
 }
 
-impl<'a, T: std::io::BufRead> Iterator for SetTextIter<'a, T>{
+impl<'a, T: std::io::BufRead> Iterator for SetTextIter<'a, T> {
     type Item = Result<OneText, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_text() {
@@ -128,13 +128,12 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
     }
 }
 
-
 pub struct DefTextIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,
 }
 
-impl<'a, T: std::io::BufRead> Iterator for DefTextIter<'a, T>{
+impl<'a, T: std::io::BufRead> Iterator for DefTextIter<'a, T> {
     type Item = Result<DefText, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_text() {

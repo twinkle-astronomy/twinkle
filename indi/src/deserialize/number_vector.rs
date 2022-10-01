@@ -151,7 +151,6 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
     }
 }
 
-
 pub struct SetNumberIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,

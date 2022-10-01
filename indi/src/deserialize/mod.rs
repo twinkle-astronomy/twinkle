@@ -7,7 +7,8 @@ pub use text_vector::DefTextIter;
 pub use text_vector::SetTextIter;
 
 pub mod switch_vector;
-pub use switch_vector::SwitchIter;
+pub use switch_vector::DefSwitchIter;
+pub use switch_vector::SetSwitchIter;
 
 pub mod light_vector;
 pub use light_vector::LightIter;
@@ -134,8 +135,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         Ok(Some(Command::SetTextVector(text_vector)))
                     }
                     b"defNumberVector" => {
-                        let mut number_vector =
-                            DefNumberIter::number_vector(&self.xml_reader, &e)?;
+                        let mut number_vector = DefNumberIter::number_vector(&self.xml_reader, &e)?;
 
                         for number in deserialize::DefNumberIter::new(self) {
                             let number = number?;
@@ -145,8 +145,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         Ok(Some(Command::DefNumberVector(number_vector)))
                     }
                     b"setNumberVector" => {
-                        let mut number_vector =
-                            SetNumberIter::number_vector(&self.xml_reader, &e)?;
+                        let mut number_vector = SetNumberIter::number_vector(&self.xml_reader, &e)?;
 
                         for number in deserialize::SetNumberIter::new(self) {
                             let number = number?;
@@ -156,17 +155,24 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         Ok(Some(Command::SetNumberVector(number_vector)))
                     }
                     b"defSwitchVector" => {
-                        let mut switch_vector =
-                            SwitchIter::def_switch_vector(&self.xml_reader, &e)?;
+                        let mut switch_vector = DefSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
-                        for switch in deserialize::SwitchIter::new(self) {
+                        for switch in deserialize::DefSwitchIter::new(self) {
                             let switch = switch?;
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
 
-                        Ok(Some(Command::DefSwitchVector(
-                            switch_vector,
-                        )))
+                        Ok(Some(Command::DefSwitchVector(switch_vector)))
+                    }
+                    b"setSwitchVector" => {
+                        let mut switch_vector = SetSwitchIter::switch_vector(&self.xml_reader, &e)?;
+
+                        for switch in deserialize::SetSwitchIter::new(self) {
+                            let switch = switch?;
+                            switch_vector.switches.insert(switch.name.clone(), switch);
+                        }
+
+                        Ok(Some(Command::SetSwitchVector(switch_vector)))
                     }
                     b"defLightVector" => {
                         let mut light_vector = LightIter::def_light_vector(&self.xml_reader, &e)?;
@@ -342,7 +348,7 @@ SQM
     }
 
     #[test]
-    fn test_switch_vector() {
+    fn test_def_switch_vector() {
         let xml = r#"
 <defSwitchVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-09-06T01:41:22">
     <defSwitch name="INDI_ENABLED" label="Enabled">
@@ -361,6 +367,34 @@ On
             Command::DefSwitchVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIMULATE_BAYER");
+                assert_eq!(param.switches.len(), 2)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_switch_vector() {
+        let xml = r#"
+<setSwitchVector device="CCD Simulator" name="DEBUG" state="Ok" timeout="0" timestamp="2022-10-01T22:07:22">
+    <oneSwitch name="ENABLE">
+On
+    </oneSwitch>
+    <oneSwitch name="DISABLE">
+Off
+    </oneSwitch>
+</setSwitchVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::SetSwitchVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "DEBUG");
                 assert_eq!(param.switches.len(), 2)
             }
             e => {
