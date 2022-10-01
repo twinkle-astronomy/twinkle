@@ -2,7 +2,8 @@ pub mod number_vector;
 pub use number_vector::NumberIter;
 
 pub mod text_vector;
-pub use text_vector::TextIter;
+pub use text_vector::DefTextIter;
+pub use text_vector::SetTextIter;
 
 pub mod switch_vector;
 pub use switch_vector::SwitchIter;
@@ -112,14 +113,24 @@ impl<T: std::io::BufRead> CommandIter<T> {
             Event::Start(e) => {
                 let result = match e.name() {
                     b"defTextVector" => {
-                        let mut text_vector = TextIter::def_text_vector(&self.xml_reader, &e)?;
+                        let mut text_vector = DefTextIter::text_vector(&self.xml_reader, &e)?;
 
-                        for text in deserialize::TextIter::new(self) {
+                        for text in deserialize::DefTextIter::new(self) {
                             let text = text?;
                             text_vector.texts.insert(text.name.clone(), text);
                         }
 
                         Ok(Some(Command::DefTextVector(text_vector)))
+                    }
+                    b"setTextVector" => {
+                        let mut text_vector = SetTextIter::text_vector(&self.xml_reader, &e)?;
+
+                        for text in deserialize::SetTextIter::new(self) {
+                            let text = text?;
+                            text_vector.texts.insert(text.name.clone(), text);
+                        }
+
+                        Ok(Some(Command::SetTextVector(text_vector)))
                     }
                     b"defNumberVector" => {
                         let mut number_vector =
@@ -214,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn test_text_vector() {
+    fn test_def_text_vector() {
         let xml = r#"
 <defTextVector device="CCD Simulator" name="ACTIVE_DEVICES" label="Snoop devices" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-09-05T21:07:22">
     <defText name="ACTIVE_TELESCOPE" label="Telescope">
@@ -240,6 +251,43 @@ SQM
 
         match command_iter.next().unwrap().unwrap() {
             Command::DefTextVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "ACTIVE_DEVICES");
+                assert_eq!(param.texts.len(), 5)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_text_vector() {
+        let xml = r#"
+<setTextVector device="CCD Simulator" name="ACTIVE_DEVICES" state="Ok" timeout="60" timestamp="2022-10-01T17:06:14">
+    <oneText name="ACTIVE_TELESCOPE">
+Simulator changed
+    </oneText>
+    <oneText name="ACTIVE_ROTATOR">
+Rotator Simulator
+    </oneText>
+    <oneText name="ACTIVE_FOCUSER">
+Focuser Simulator
+    </oneText>
+    <oneText name="ACTIVE_FILTER">
+CCD Simulator
+    </oneText>
+    <oneText name="ACTIVE_SKYQUALITY">
+SQM
+    </oneText>
+</setTextVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::SetTextVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "ACTIVE_DEVICES");
                 assert_eq!(param.texts.len(), 5)

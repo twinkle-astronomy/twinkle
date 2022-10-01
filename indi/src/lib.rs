@@ -29,6 +29,7 @@ pub struct Client {
 #[derive(Debug)]
 pub enum Command {
     DefTextVector(DefTextVector),
+    SetTextVector(SetTextVector),
     DefNumberVector(DefNumberVector),
     DefSwitchVector(DefSwitchVector),
     DefLightVector(DefLightVector),
@@ -87,9 +88,29 @@ pub struct DefTextVector {
 
 #[derive(Debug, PartialEq)]
 pub struct DefText {
-    name: String,
-    label: Option<String>,
-    value: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub value: String,
+}
+
+#[derive(Debug)]
+pub struct SetTextVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub texts: HashMap<String, OneText>,
+}
+
+
+#[derive(Debug, PartialEq)]
+pub struct OneText {
+    pub name: String,
+    pub value: String,
+
 }
 
 #[derive(Debug)]
