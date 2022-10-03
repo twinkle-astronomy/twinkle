@@ -121,15 +121,13 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                         Ok(Event::Text(e)) => Ok(ISO_8859_1
                             .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
                             .parse::<f64>()?),
-                        _ => return Err(DeError::UnexpectedEvent()),
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
 
                     Ok(Some(DefNumber {
@@ -146,7 +144,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -224,6 +222,9 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
             Event::Start(e) => match e.name() {
                 b"oneNumber" => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
+                    let mut min: Option<f64> = None;
+                    let mut max: Option<f64> = None;
+                    let mut step: Option<f64> = None;
 
                     for attr in e.attributes() {
                         let attr = attr?;
@@ -231,6 +232,9 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
 
                         match attr.key {
                             b"name" => name = Ok(attr_value),
+                            b"min" => min = Some(attr_value.parse::<f64>()?),
+                            b"max" => max = Some(attr_value.parse::<f64>()?),
+                            b"step" => step = Some(attr_value.parse::<f64>()?),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
@@ -244,19 +248,20 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
                         Ok(Event::Text(e)) => Ok(ISO_8859_1
                             .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
                             .parse::<f64>()?),
-                        _ => return Err(DeError::UnexpectedEvent()),
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
 
                     Ok(Some(OneNumber {
                         name: name?,
+                        min: min,
+                        max: max,
+                        step: step,
                         value: value?,
                     }))
                 }
@@ -264,7 +269,7 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -292,6 +297,9 @@ mod tests {
             result,
             OneNumber {
                 name: "SIM_FOCUS_POSITION".to_string(),
+                min: None,
+                max: None,
+                step: None,
                 value: 7340.0
             }
         );

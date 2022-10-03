@@ -103,15 +103,13 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
                     let value: Result<PropertyState, DeError> =
                         match self.xml_reader.read_event(self.buf) {
                             Ok(Event::Text(e)) => PropertyState::try_from(e),
-                            _ => return Err(DeError::UnexpectedEvent()),
+                            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
 
                     Ok(Some(DefLight {
@@ -124,7 +122,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -218,15 +216,13 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
                     let value: Result<PropertyState, DeError> =
                         match self.xml_reader.read_event(self.buf) {
                             Ok(Event::Text(e)) => PropertyState::try_from(e),
-                            _ => return Err(DeError::UnexpectedEvent()),
+                            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
 
                     Ok(Some(OneLight {
@@ -238,7 +234,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }

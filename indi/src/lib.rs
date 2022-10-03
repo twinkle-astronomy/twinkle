@@ -37,6 +37,8 @@ pub enum Command {
     DefLightVector(DefLightVector),
     SetLightVector(SetLightVector),
     DefBlobVector(DefBlobVector),
+    SetBlobVector(SetBlobVector),
+    Message(Message),
 }
 
 #[derive(Debug, PartialEq)]
@@ -155,6 +157,9 @@ pub struct SetNumberVector {
 #[derive(Debug, PartialEq)]
 pub struct OneNumber {
     name: String,
+    min: Option<f64>,
+    max: Option<f64>,
+    step: Option<f64>,
     value: f64,
 }
 #[derive(Debug)]
@@ -254,7 +259,34 @@ pub struct DefBlobVector {
 pub struct DefBlob {
     name: String,
     label: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct SetBlobVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub blobs: HashMap<String, OneBlob>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneBlob {
+    name: String,
+    size: u64,
+    enclen: Option<u64>,
+    format: String,
     value: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Message {
+    pub device: Option<String>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug)]
@@ -268,7 +300,7 @@ pub enum DeError {
     MissingAttr(&'static str),
     BadAttr(AttrError),
     UnexpectedAttr(String),
-    UnexpectedEvent(),
+    UnexpectedEvent(String),
     UnexpectedTag(String),
 }
 

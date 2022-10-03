@@ -15,7 +15,11 @@ pub use light_vector::DefLightIter;
 pub use light_vector::SetLightIter;
 
 pub mod blob_vector;
-pub use blob_vector::BlobIter;
+pub use blob_vector::DefBlobIter;
+pub use blob_vector::SetBlobIter;
+
+pub mod message;
+pub use message::MessageIter;
 
 use super::*;
 
@@ -27,7 +31,7 @@ impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
             Cow::Borrowed(b"OneOfMany") => Ok(SwitchRule::OneOfMany),
             Cow::Borrowed(b"AtMostOne") => Ok(SwitchRule::AtMostOne),
             Cow::Borrowed(b"AnyOfMany") => Ok(SwitchRule::AnyOfMany),
-            _ => return Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -41,7 +45,7 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyState {
             Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
             Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
             Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
-            _ => return Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -55,7 +59,7 @@ impl<'a> TryFrom<BytesText<'a>> for PropertyState {
             Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
             Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
             Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
-            _ => return Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -67,7 +71,7 @@ impl<'a> TryFrom<BytesText<'a>> for SwitchState {
         match value.unescaped()? {
             Cow::Borrowed(b"On") => Ok(SwitchState::On),
             Cow::Borrowed(b"Off") => Ok(SwitchState::Off),
-            _ => return Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -79,7 +83,7 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
             Cow::Borrowed(b"ro") => Ok(PropertyPerm::RO),
             Cow::Borrowed(b"wo") => Ok(PropertyPerm::WO),
             Cow::Borrowed(b"rw") => Ok(PropertyPerm::RW),
-            _ => return Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -108,6 +112,10 @@ impl<T: std::io::BufRead> CommandIter<T> {
     pub fn new(xml_reader: Reader<T>) -> CommandIter<T> {
         let buf = Vec::new();
         CommandIter { xml_reader, buf }
+    }
+
+    pub fn buffer_position(&self) -> usize {
+        self.xml_reader.buffer_position()
     }
 
     fn next_command(&mut self) -> Result<Option<Command>, DeError> {
@@ -195,15 +203,31 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetLightVector(light_vector)))
                     }
-                    b"defBlobVector" => {
-                        let mut blob_vector = BlobIter::def_blob_vector(&self.xml_reader, &e)?;
+                    b"defBLOBVector" => {
+                        let mut blob_vector = DefBlobIter::blob_vector(&self.xml_reader, &e)?;
 
-                        for blob in deserialize::BlobIter::new(self) {
+                        for blob in deserialize::DefBlobIter::new(self) {
                             let blob = blob?;
                             blob_vector.blobs.insert(blob.name.clone(), blob);
                         }
 
                         Ok(Some(Command::DefBlobVector(blob_vector)))
+                    }
+                    b"setBLOBVector" => {
+                        let mut blob_vector = SetBlobIter::blob_vector(&self.xml_reader, &e)?;
+
+                        for blob in deserialize::SetBlobIter::new(self) {
+                            let blob = blob?;
+                            blob_vector.blobs.insert(blob.name.clone(), blob);
+                        }
+
+                        Ok(Some(Command::SetBlobVector(blob_vector)))
+                    }
+                    b"message" => {
+                        let message = MessageIter::message(&self.xml_reader, &e)?;
+                        for _ in deserialize::MessageIter::new(self) { }
+
+                        Ok(Some(Command::Message(message)))
                     }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
@@ -211,10 +235,10 @@ impl<T: std::io::BufRead> CommandIter<T> {
             }
             Event::End(tag) => {
                 println!("Unexpected end: {}", tag.escape_ascii().to_string());
-                Err(DeError::UnexpectedEvent())
+                Err(DeError::UnexpectedEvent(format!("{:?}", tag)))
             }
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -473,10 +497,10 @@ Ok
     #[test]
     fn test_blob_vector() {
         let xml = r#"
-<defBlobVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" perm="rw"  state="Idle" timestamp="2022-09-06T01:41:22">
-    <defBlob name="INDI_ENABLED" label="Enabled"/>
-    <defBlob name="INDI_DISABLED" label="Disabled"/>
-</defBlobVector>
+<defBLOBVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" perm="rw"  state="Idle" timestamp="2022-09-06T01:41:22">
+    <defBLOB name="INDI_ENABLED" label="Enabled"/>
+    <defBLOB name="INDI_DISABLED" label="Disabled"/>
+</defBLOBVector>
                     "#;
         let mut reader = Reader::from_str(xml);
         reader.trim_text(true);
@@ -491,6 +515,74 @@ Ok
             }
             e => {
                 panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_blob_vector() {
+        let xml = include_str!("../../tests/image_capture_blob_vector.log");
+
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::SetBlobVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "CCD1");
+                assert_eq!(param.state, PropertyState::Ok);
+                assert_eq!(param.blobs.len(), 1)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_message() {
+        let xml = r#"
+<message device="Telescope Simulator" timestamp="2022-10-02T00:37:07" message="[INFO] update mount and pier side: Pier Side On, mount type 2"/>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::Message(param) => {
+                assert_eq!(param.device, Some(String::from("Telescope Simulator")));
+                assert_eq!(
+                    param.message,
+                    Some(String::from(
+                        "[INFO] update mount and pier side: Pier Side On, mount type 2"
+                    ))
+                );
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_simulator_log() {
+        let xml = include_str!("../../tests/image_capture.log");
+
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        for command in command_iter.by_ref() {
+            match command {
+                Ok(_) => (),
+                Err(e) => {
+                    println!("position: {}", command_iter.buffer_position());
+                    panic!("{:?}", e);
+                }
             }
         }
     }

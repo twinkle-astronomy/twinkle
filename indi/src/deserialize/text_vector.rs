@@ -100,19 +100,18 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
                     }
 
                     let value: Result<String, DeError> =
-                        match self.xml_reader.read_event(self.buf) {
-                            Ok(Event::Text(e)) => Ok(ISO_8859_1
-                                .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?),
-                            _ => return Err(DeError::UnexpectedEvent()),
+                        match self.xml_reader.read_event(self.buf)? {
+                            Event::Text(e) => {
+                                let v = ISO_8859_1
+                                    .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?;
+                                match self.xml_reader.read_event(&mut self.buf)? {
+                                    Event::End(_) => Ok(v),
+                                    e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                                }
+                            }
+                            Event::End(_) => Ok(String::from("")),
+                            e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
-
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
-                    match trailing_event {
-                        Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
-                    }
 
                     Ok(Some(OneText {
                         name: name?,
@@ -123,7 +122,7 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -229,19 +228,18 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
                     }
 
                     let value: Result<String, DeError> =
-                        match self.xml_reader.read_event(self.buf) {
-                            Ok(Event::Text(e)) => Ok(ISO_8859_1
-                                .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?),
-                            _ => return Err(DeError::UnexpectedEvent()),
+                        match self.xml_reader.read_event(self.buf)? {
+                            Event::Text(e) => {
+                                let v = ISO_8859_1
+                                    .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?;
+                                match self.xml_reader.read_event(&mut self.buf)? {
+                                    Event::End(_) => Ok(v),
+                                    e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                                }
+                            }
+                            Event::End(_) => Ok(String::from("")),
+                            e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
-
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
-                    match trailing_event {
-                        Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
-                    }
 
                     Ok(Some(DefText {
                         name: name?,
@@ -253,7 +251,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }

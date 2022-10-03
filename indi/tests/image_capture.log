@@ -1,0 +1,1874 @@
+<delProperty device="CCD Simulator"/>
+<delProperty device="Telescope Simulator"/>
+<setTextVector device="CCD Simulator" name="DRIVER_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneText name="DRIVER_NAME">
+CCD Simulator
+    </oneText>
+    <oneText name="DRIVER_EXEC">
+indi_simulator_ccd
+    </oneText>
+    <oneText name="DRIVER_VERSION">
+1.0
+    </oneText>
+    <oneText name="DRIVER_INTERFACE">
+6
+    </oneText>
+</setTextVector>
+<setTextVector device="CCD Simulator" name="DRIVER_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneText name="DRIVER_NAME">
+CCD Simulator
+    </oneText>
+    <oneText name="DRIVER_EXEC">
+indi_simulator_ccd
+    </oneText>
+    <oneText name="DRIVER_VERSION">
+1.0
+    </oneText>
+    <oneText name="DRIVER_INTERFACE">
+6
+    </oneText>
+</setTextVector>
+<defSwitchVector device="CCD Simulator" name="CONNECTION" label="Connection" group="Main Control" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="CONNECT" label="Connect">
+Off
+    </defSwitch>
+    <defSwitch name="DISCONNECT" label="Disconnect">
+On
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="CCD Simulator" name="DRIVER_INFO" label="Driver Info" group="General Info" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defText name="DRIVER_NAME" label="Name">
+CCD Simulator
+    </defText>
+    <defText name="DRIVER_EXEC" label="Exec">
+indi_simulator_ccd
+    </defText>
+    <defText name="DRIVER_VERSION" label="Version">
+1.0
+    </defText>
+    <defText name="DRIVER_INTERFACE" label="Interface">
+22
+    </defText>
+</defTextVector>
+<defNumberVector device="CCD Simulator" name="POLLING_PERIOD" label="Polling" group="Options" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defNumber name="PERIOD_MS" label="Period (ms)" format="%.f" min="10" max="600000" step="1000">
+1000
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="DEBUG" label="Debug" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="ENABLE" label="Enable">
+Off
+    </defSwitch>
+    <defSwitch name="DISABLE" label="Disable">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="CONFIG_PROCESS" label="Configuration" group="Options" state="Idle" perm="rw" rule="AtMostOne" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="CONFIG_LOAD" label="Load">
+Off
+    </defSwitch>
+    <defSwitch name="CONFIG_SAVE" label="Save">
+Off
+    </defSwitch>
+    <defSwitch name="CONFIG_DEFAULT" label="Default">
+Off
+    </defSwitch>
+    <defSwitch name="CONFIG_PURGE" label="Purge">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="CCD Simulator" name="ACTIVE_DEVICES" label="Snoop devices" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defText name="ACTIVE_TELESCOPE" label="Telescope">
+Telescope Simulator
+    </defText>
+    <defText name="ACTIVE_ROTATOR" label="Rotator">
+Rotator Simulator
+    </defText>
+    <defText name="ACTIVE_FOCUSER" label="Focuser">
+Focuser Simulator
+    </defText>
+    <defText name="ACTIVE_FILTER" label="Filter">
+CCD Simulator
+    </defText>
+    <defText name="ACTIVE_SKYQUALITY" label="Sky Quality">
+SQM
+    </defText>
+</defTextVector>
+<defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
+1280
+    </defNumber>
+    <defNumber name="SIM_YRES" label="CCD Y resolution" format="%4.0f" min="512" max="8192" step="512">
+1024
+    </defNumber>
+    <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
+5.2000000000000001776
+    </defNumber>
+    <defNumber name="SIM_YSIZE" label="CCD Y Pixel Size" format="%4.2f" min="1" max="30" step="5">
+5.2000000000000001776
+    </defNumber>
+    <defNumber name="SIM_MAXVAL" label="CCD Maximum ADU" format="%4.0f" min="255" max="65000" step="1000">
+65000
+    </defNumber>
+    <defNumber name="SIM_SATURATION" label="Saturation Mag" format="%4.1f" min="0" max="20" step="1">
+1
+    </defNumber>
+    <defNumber name="SIM_LIMITINGMAG" label="Limiting Mag" format="%4.1f" min="0" max="20" step="1">
+17
+    </defNumber>
+    <defNumber name="SIM_NOISE" label="CCD Noise" format="%4.0f" min="0" max="6000" step="500">
+10
+    </defNumber>
+    <defNumber name="SIM_SKYGLOW" label="Sky Glow (magnitudes)" format="%4.1f" min="0" max="6000" step="500">
+19.5
+    </defNumber>
+    <defNumber name="SIM_OAGOFFSET" label="Oag Offset (arcminutes)" format="%4.1f" min="0" max="6000" step="500">
+0
+    </defNumber>
+    <defNumber name="SIM_POLAR" label="PAE (arcminutes)" format="%4.1f" min="-600" max="600" step="100">
+0
+    </defNumber>
+    <defNumber name="SIM_POLARDRIFT" label="PAE Drift (minutes)" format="%4.1f" min="0" max="60" step="5">
+0
+    </defNumber>
+    <defNumber name="SIM_PEPERIOD" label="PE Period (minutes)" format="%4.1f" min="0" max="60" step="5">
+0
+    </defNumber>
+    <defNumber name="SIM_PEMAX" label="PE Max (arcsec)" format="%4.1f" min="0" max="6000" step="500">
+0
+    </defNumber>
+    <defNumber name="SIM_TIME_FACTOR" label="Time Factor (x)" format="%.2f" min="0.010000000000000000208" max="100" step="10">
+1
+    </defNumber>
+    <defNumber name="SIM_ROTATION" label="CCD Rotation" format="%.2f" min="0" max="360" step="10">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="EQUATORIAL_PE" label="EQ PE" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defNumber name="RA_PE" label="RA (hh:mm:ss)" format="%010.6m" min="0" max="24" step="0">
+0
+    </defNumber>
+    <defNumber name="DEC_PE" label="DEC (dd:mm:ss)" format="%010.6m" min="-90" max="90" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="SIM_FOCUSING" label="Focus Simulation" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defNumber name="SIM_FOCUS_POSITION" label="Focus" format="%.f" min="0" max="100000" step="1">
+36700
+    </defNumber>
+    <defNumber name="SIM_FOCUS_MAX" label="Max. Position" format="%.f" min="0" max="100000" step="1">
+100000
+    </defNumber>
+    <defNumber name="SIM_SEEING" label="Seeing (arcsec)" format="%4.2f" min="0" max="60" step="0">
+3.5
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+Off
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="CCD_SIMULATE_CRASH" label="Crash" group="Simulator Config" state="Idle" perm="wo" rule="AtMostOne" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="CRASH" label="Crash driver">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="CONNECTION" label="Connection" group="Main Control" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="CONNECT" label="Connect">
+Off
+    </defSwitch>
+    <defSwitch name="DISCONNECT" label="Disconnect">
+On
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="Telescope Simulator" name="DRIVER_INFO" label="Driver Info" group="Connection" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defText name="DRIVER_NAME" label="Name">
+Telescope Simulator
+    </defText>
+    <defText name="DRIVER_EXEC" label="Exec">
+indi_simulator_telescope
+    </defText>
+    <defText name="DRIVER_VERSION" label="Version">
+1.0
+    </defText>
+    <defText name="DRIVER_INTERFACE" label="Interface">
+5
+    </defText>
+</defTextVector>
+<defNumberVector device="Telescope Simulator" name="POLLING_PERIOD" label="Polling" group="Options" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defNumber name="PERIOD_MS" label="Period (ms)" format="%.f" min="10" max="600000" step="1000">
+250
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="Telescope Simulator" name="DEBUG" label="Debug" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="ENABLE" label="Enable">
+Off
+    </defSwitch>
+    <defSwitch name="DISABLE" label="Disable">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="CONFIG_PROCESS" label="Configuration" group="Options" state="Idle" perm="rw" rule="AtMostOne" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="CONFIG_LOAD" label="Load">
+Off
+    </defSwitch>
+    <defSwitch name="CONFIG_SAVE" label="Save">
+Off
+    </defSwitch>
+    <defSwitch name="CONFIG_DEFAULT" label="Default">
+Off
+    </defSwitch>
+    <defSwitch name="CONFIG_PURGE" label="Purge">
+Off
+    </defSwitch>
+</defSwitchVector>
+<setSwitchVector device="Telescope Simulator" name="DEBUG" state="Ok" timeout="0" timestamp="2022-10-03T01:00:14">
+    <oneSwitch name="ENABLE">
+Off
+    </oneSwitch>
+    <oneSwitch name="DISABLE">
+On
+    </oneSwitch>
+</setSwitchVector>
+<setNumberVector device="Telescope Simulator" name="POLLING_PERIOD" state="Ok" timeout="0" timestamp="2022-10-03T01:00:14">
+    <oneNumber name="PERIOD_MS">
+250
+    </oneNumber>
+</setNumberVector>
+<defSwitchVector device="Telescope Simulator" name="CONNECTION_MODE" label="Connection Mode" group="Connection" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="CONNECTION_SERIAL" label="Serial">
+On
+    </defSwitch>
+    <defSwitch name="CONNECTION_TCP" label="Network">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="Telescope Simulator" name="DEVICE_PORT" label="Ports" group="Connection" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defText name="PORT" label="Port">
+/dev/ttyUSB0
+    </defText>
+</defTextVector>
+<defSwitchVector device="Telescope Simulator" name="DEVICE_BAUD_RATE" label="Baud Rate" group="Connection" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="9600" label="9600">
+On
+    </defSwitch>
+    <defSwitch name="19200" label="19200">
+Off
+    </defSwitch>
+    <defSwitch name="38400" label="38400">
+Off
+    </defSwitch>
+    <defSwitch name="57600" label="57600">
+Off
+    </defSwitch>
+    <defSwitch name="115200" label="115200">
+Off
+    </defSwitch>
+    <defSwitch name="230400" label="230400">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="DEVICE_AUTO_SEARCH" label="Auto Search" group="Connection" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+On
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="DEVICE_PORT_SCAN" label="Refresh" group="Connection" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="Scan Ports" label="Scan Ports">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="Telescope Simulator" name="ACTIVE_DEVICES" label="Snoop devices" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defText name="ACTIVE_GPS" label="GPS">
+GPS Simulator
+    </defText>
+    <defText name="ACTIVE_DOME" label="DOME">
+Dome Simulator
+    </defText>
+</defTextVector>
+<setTextVector device="Telescope Simulator" name="ACTIVE_DEVICES" state="Ok" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneText name="ACTIVE_GPS">
+GPS Simulator
+    </oneText>
+    <oneText name="ACTIVE_DOME">
+Dome Simulator
+    </oneText>
+</setTextVector>
+<defSwitchVector device="Telescope Simulator" name="DOME_POLICY" label="Dome Policy" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="DOME_IGNORED" label="Dome ignored">
+On
+    </defSwitch>
+    <defSwitch name="DOME_LOCKS" label="Dome locks">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="Telescope Simulator" name="TELESCOPE_INFO" label="Scope Properties" group="Options" state="Ok" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defNumber name="TELESCOPE_APERTURE" label="Aperture (mm)" format="%g" min="10" max="5000" step="0">
+120
+    </defNumber>
+    <defNumber name="TELESCOPE_FOCAL_LENGTH" label="Focal Length (mm)" format="%g" min="10" max="10000" step="0">
+900
+    </defNumber>
+    <defNumber name="GUIDER_APERTURE" label="Guider Aperture (mm)" format="%g" min="10" max="5000" step="0">
+120
+    </defNumber>
+    <defNumber name="GUIDER_FOCAL_LENGTH" label="Guider Focal Length (mm)" format="%g" min="10" max="10000" step="0">
+900
+    </defNumber>
+</defNumberVector>
+<defTextVector device="Telescope Simulator" name="SCOPE_CONFIG_NAME" label="Scope Name" group="Options" state="Ok" perm="rw" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defText name="SCOPE_CONFIG_NAME" label="Config Name"/>
+</defTextVector>
+<setNumberVector device="Telescope Simulator" name="TELESCOPE_INFO" state="Ok" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneNumber name="TELESCOPE_APERTURE">
+120
+    </oneNumber>
+    <oneNumber name="TELESCOPE_FOCAL_LENGTH">
+900
+    </oneNumber>
+    <oneNumber name="GUIDER_APERTURE">
+120
+    </oneNumber>
+    <oneNumber name="GUIDER_FOCAL_LENGTH">
+900
+    </oneNumber>
+</setNumberVector>
+<setTextVector device="Telescope Simulator" name="SCOPE_CONFIG_NAME" state="Ok" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneText name="SCOPE_CONFIG_NAME"/>
+</setTextVector>
+<defSwitchVector device="Telescope Simulator" name="MOUNT_TYPE" label="Mount Type" group="Simulation" state="Idle" perm="wo" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="ALTAZ" label="AltAz">
+Off
+    </defSwitch>
+    <defSwitch name="EQ_FORK" label="Fork (Eq)">
+Off
+    </defSwitch>
+    <defSwitch name="EQ_GEM" label="GEM">
+On
+    </defSwitch>
+</defSwitchVector>
+<setSwitchVector device="Telescope Simulator" name="MOUNT_TYPE" state="Ok" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneSwitch name="ALTAZ">
+Off
+    </oneSwitch>
+    <oneSwitch name="EQ_FORK">
+Off
+    </oneSwitch>
+    <oneSwitch name="EQ_GEM">
+On
+    </oneSwitch>
+</setSwitchVector>
+<message device="Telescope Simulator" timestamp="2022-10-03T01:00:14" message="[INFO] update mount and pier side: Pier Side On, mount type 2"/>
+<defSwitchVector device="Telescope Simulator" name="SIM_PIER_SIDE" label="Sim Pier Side" group="Simulation" state="Idle" perm="wo" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:14">
+    <defSwitch name="PS_OFF" label="Off">
+Off
+    </defSwitch>
+    <defSwitch name="PS_ON" label="On">
+On
+    </defSwitch>
+</defSwitchVector>
+<setSwitchVector device="Telescope Simulator" name="SIM_PIER_SIDE" state="Ok" timeout="60" timestamp="2022-10-03T01:00:14">
+    <oneSwitch name="PS_OFF">
+Off
+    </oneSwitch>
+    <oneSwitch name="PS_ON">
+On
+    </oneSwitch>
+</setSwitchVector>
+<defNumberVector device="Telescope Simulator" name="MOUNT_MODEL" label="Mount Model" group="Simulation" state="Idle" perm="wo" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defNumber name="MM_IH" label="Ha Zero (IH)" format="%g" min="-5" max="5" step="0.010000000000000000208">
+0
+    </defNumber>
+    <defNumber name="MM_ID" label="Dec Zero (ID)" format="%g" min="-5" max="5" step="0.010000000000000000208">
+0
+    </defNumber>
+    <defNumber name="MM_CH" label="Cone (CH)" format="%g" min="-5" max="5" step="0.010000000000000000208">
+0
+    </defNumber>
+    <defNumber name="MM_NP" label="Ha/Dec (NP)" format="%g" min="-5" max="5" step="0.010000000000000000208">
+0
+    </defNumber>
+    <defNumber name="MM_MA" label="Pole Azm (MA)" format="%g" min="-5" max="5" step="0.010000000000000000208">
+0
+    </defNumber>
+    <defNumber name="MM_ME" label="Pole elev (ME)" format="%g" min="-5" max="5" step="0.010000000000000000208">
+0
+    </defNumber>
+</defNumberVector>
+<setNumberVector device="Telescope Simulator" name="MOUNT_MODEL" state="Ok" timeout="0" timestamp="2022-10-03T01:00:14">
+    <oneNumber name="MM_IH">
+0
+    </oneNumber>
+    <oneNumber name="MM_ID">
+0
+    </oneNumber>
+    <oneNumber name="MM_CH">
+0
+    </oneNumber>
+    <oneNumber name="MM_NP">
+0
+    </oneNumber>
+    <oneNumber name="MM_MA">
+0
+    </oneNumber>
+    <oneNumber name="MM_ME">
+0
+    </oneNumber>
+</setNumberVector>
+<defNumberVector device="Telescope Simulator" name="MOUNT_AXES" label="Mount Axes" group="Simulation" state="Idle" perm="ro" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defNumber name="PRIMARY" label="Primary (Ha)" format="%g" min="-180" max="180" step="0.010000000000000000208">
+0
+    </defNumber>
+    <defNumber name="SECONDARY" label="Secondary (Dec)" format="%g" min="-180" max="180" step="0.010000000000000000208">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="Telescope Simulator" name="FLIP_HA" label="Flip Posn." group="Simulation" state="Idle" perm="wo" timeout="0" timestamp="2022-10-03T01:00:14">
+    <defNumber name="FLIP_HA" label="Hour Angle (deg)" format="%g" min="-20" max="20" step="0.10000000000000000555">
+0
+    </defNumber>
+</defNumberVector>
+<setNumberVector device="Telescope Simulator" name="FLIP_HA" state="Ok" timeout="0" timestamp="2022-10-03T01:00:14">
+    <oneNumber name="FLIP_HA">
+0
+    </oneNumber>
+</setNumberVector>
+<message device="Telescope Simulator" timestamp="2022-10-03T01:00:18" message="[INFO] Telescope simulator is online."/>
+<setSwitchVector device="Telescope Simulator" name="CONNECTION" state="Ok" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneSwitch name="CONNECT">
+On
+    </oneSwitch>
+    <oneSwitch name="DISCONNECT">
+Off
+    </oneSwitch>
+</setSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="ON_COORD_SET" label="On Set" group="Main Control" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="TRACK" label="Track">
+On
+    </defSwitch>
+    <defSwitch name="SLEW" label="Slew">
+Off
+    </defSwitch>
+    <defSwitch name="SYNC" label="Sync">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" label="Eq. Coordinates" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="RA" label="RA (hh:mm:ss)" format="%010.6m" min="0" max="24" step="0">
+0
+    </defNumber>
+    <defNumber name="DEC" label="DEC (dd:mm:ss)" format="%010.6m" min="-90" max="90" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_ABORT_MOTION" label="Abort Motion" group="Main Control" state="Idle" perm="rw" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="ABORT" label="Abort">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_TRACK_MODE" label="Track Mode" group="Main Control" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="TRACK_SIDEREAL" label="Sidereal">
+On
+    </defSwitch>
+    <defSwitch name="TRACK_SOLAR" label="Solar">
+Off
+    </defSwitch>
+    <defSwitch name="TRACK_LUNAR" label="Lunar">
+Off
+    </defSwitch>
+    <defSwitch name="TRACK_CUSTOM" label="Custom">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_TRACK_STATE" label="Tracking" group="Main Control" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="TRACK_ON" label="On">
+Off
+    </defSwitch>
+    <defSwitch name="TRACK_OFF" label="Off">
+On
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="Telescope Simulator" name="TELESCOPE_TRACK_RATE" label="Track Rates" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="TRACK_RATE_RA" label="RA (arcsecs/s)" format="%.6f" min="-16384" max="16384" step="9.9999999999999995475e-07">
+15.04106717867020393
+    </defNumber>
+    <defNumber name="TRACK_RATE_DE" label="DE (arcsecs/s)" format="%.6f" min="-16384" max="16384" step="9.9999999999999995475e-07">
+0
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_MOTION_NS" label="Motion N/S" group="Motion Control" state="Idle" perm="rw" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="MOTION_NORTH" label="North">
+Off
+    </defSwitch>
+    <defSwitch name="MOTION_SOUTH" label="South">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_MOTION_WE" label="Motion W/E" group="Motion Control" state="Idle" perm="rw" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="MOTION_WEST" label="West">
+Off
+    </defSwitch>
+    <defSwitch name="MOTION_EAST" label="East">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_REVERSE_MOTION" label="Reverse" group="Motion Control" state="Idle" perm="rw" rule="AnyOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="REVERSE_NS" label="North/South">
+Off
+    </defSwitch>
+    <defSwitch name="REVERSE_WE" label="West/East">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_SLEW_RATE" label="Slew Rate" group="Motion Control" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="1x" label="Guide">
+Off
+    </defSwitch>
+    <defSwitch name="2x" label="Centering">
+Off
+    </defSwitch>
+    <defSwitch name="3x" label="Find">
+On
+    </defSwitch>
+    <defSwitch name="4x" label="Max">
+Off
+    </defSwitch>
+</defSwitchVector>
+<setSwitchVector device="CCD Simulator" name="CONNECTION" state="Ok" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneSwitch name="CONNECT">
+On
+    </oneSwitch>
+    <oneSwitch name="DISCONNECT">
+Off
+    </oneSwitch>
+</setSwitchVector>
+<defNumberVector device="CCD Simulator" name="CCD_EXPOSURE" label="Expose" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="CCD_EXPOSURE_VALUE" label="Duration (s)" format="%5.2f" min="0.010000000000000000208" max="3600" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_ABORT_EXPOSURE" label="Abort" group="Main Control" state="Idle" perm="rw" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="ABORT" label="Abort">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="CCD_FRAME" label="Frame" group="Image Settings" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="X" label="Left " format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="Y" label="Top" format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="WIDTH" label="Width" format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="HEIGHT" label="Height" format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_FRAME_RESET" label="Frame Values" group="Image Settings" state="Idle" perm="wo" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="RESET" label="Reset">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="CCD_BINNING" label="Binning" group="Image Settings" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="HOR_BIN" label="X" format="%2.0f" min="1" max="4" step="1">
+1
+    </defNumber>
+    <defNumber name="VER_BIN" label="Y" format="%2.0f" min="1" max="4" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defTextVector device="CCD Simulator" name="FITS_HEADER" label="FITS Header" group="General Info" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defText name="FITS_OBSERVER" label="Observer">
+Unknown
+    </defText>
+    <defText name="FITS_OBJECT" label="Object">
+Unknown
+    </defText>
+</defTextVector>
+<defNumberVector device="CCD Simulator" name="GUIDER_EXPOSURE" label="Guide Head" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="GUIDER_EXPOSURE_VALUE" label="Duration (s)" format="%5.2f" min="0.010000000000000000208" max="3600" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="GUIDER_ABORT_EXPOSURE" label="Abort" group="Main Control" state="Idle" perm="rw" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="ABORT" label="Abort">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="GUIDER_FRAME" label="Frame" group="Guider Head" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="X" label="Left " format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="Y" label="Top" format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="WIDTH" label="Width" format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="HEIGHT" label="Height" format="%4.0f" min="0" max="0" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="CCD_TEMPERATURE" label="Temperature" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="CCD_TEMPERATURE_VALUE" label="Temperature (C)" format="%5.2f" min="-50" max="50" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="CCD_TEMP_RAMP" label="Temp. Ramp" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="RAMP_SLOPE" label="Max. dT (C/min)" format="%.f" min="0" max="30" step="1">
+0
+    </defNumber>
+    <defNumber name="RAMP_THRESHOLD" label="Threshold (C)" format="%.1f" min="0.10000000000000000555" max="2" step="0.10000000000000000555">
+0.2000000000000000111
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_CAPTURE_FORMAT" label="Format" group="Image Settings" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="INDI_MONO" label="Mono">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="CCD_TRANSFER_FORMAT" label="Encode" group="Image Settings" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="FORMAT_FITS" label="FITS">
+On
+    </defSwitch>
+    <defSwitch name="FORMAT_NATIVE" label="Native">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="CCD_INFO" label="CCD Information" group="Image Info" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="CCD_MAX_X" label="Max. Width" format="%.f" min="1" max="16000" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_MAX_Y" label="Max. Height" format="%.f" min="1" max="16000" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_PIXEL_SIZE" label="Pixel size (um)" format="%.2f" min="1" max="40" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_PIXEL_SIZE_X" label="Pixel size X" format="%.2f" min="1" max="40" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_PIXEL_SIZE_Y" label="Pixel size Y" format="%.2f" min="1" max="40" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_BITSPERPIXEL" label="Bits per pixel" format="%.f" min="8" max="64" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="GUIDER_INFO" label="Info" group="Image Info" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="CCD_MAX_X" label="Max. Width" format="%4.0f" min="1" max="16000" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_MAX_Y" label="Max. Height" format="%4.0f" min="1" max="16000" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_PIXEL_SIZE" label="Pixel size (um)" format="%5.2f" min="1" max="40" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_PIXEL_SIZE_X" label="Pixel size X" format="%5.2f" min="1" max="40" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_PIXEL_SIZE_Y" label="Pixel size Y" format="%5.2f" min="1" max="40" step="0">
+0
+    </defNumber>
+    <defNumber name="CCD_BITSPERPIXEL" label="Bits per pixel" format="%3.0f" min="8" max="64" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="GUIDER_BINNING" label="Binning" group="Guider Head" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="HOR_BIN" label="X" format="%2.0f" min="1" max="4" step="1">
+1
+    </defNumber>
+    <defNumber name="VER_BIN" label="Y" format="%2.0f" min="1" max="4" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_COMPRESSION" label="Compression" group="Image Settings" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+Off
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+On
+    </defSwitch>
+</defSwitchVector>
+<defBLOBVector device="CCD Simulator" name="CCD1" label="Image Data" group="Image Info" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defBLOB name="CCD1" label="Image"/>
+</defBLOBVector>
+<defSwitchVector device="CCD Simulator" name="GUIDER_COMPRESSION" label="Compression" group="Guider Head" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+Off
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+On
+    </defSwitch>
+</defSwitchVector>
+<defBLOBVector device="CCD Simulator" name="CCD2" label="Image Data" group="Image Info" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defBLOB name="CCD2" label="Guider Image"/>
+</defBLOBVector>
+<defNumberVector device="CCD Simulator" name="TELESCOPE_TIMED_GUIDE_NS" label="Guide N/S" group="Guider Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="TIMED_GUIDE_N" label="North (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+    <defNumber name="TIMED_GUIDE_S" label="South (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="TELESCOPE_TIMED_GUIDE_WE" label="Guide E/W" group="Guider Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="TIMED_GUIDE_W" label="West (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+    <defNumber name="TIMED_GUIDE_E" label="East (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_FRAME_TYPE" label="Type" group="Image Settings" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="FRAME_LIGHT" label="Light">
+On
+    </defSwitch>
+    <defSwitch name="FRAME_BIAS" label="Bias">
+Off
+    </defSwitch>
+    <defSwitch name="FRAME_DARK" label="Dark">
+Off
+    </defSwitch>
+    <defSwitch name="FRAME_FLAT" label="Flat">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="GUIDER_FRAME_TYPE" label="Type" group="Guider Head" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="FRAME_LIGHT" label="Light">
+On
+    </defSwitch>
+    <defSwitch name="FRAME_BIAS" label="Bias">
+Off
+    </defSwitch>
+    <defSwitch name="FRAME_DARK" label="Dark">
+Off
+    </defSwitch>
+    <defSwitch name="FRAME_FLAT" label="Flat">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="TELESCOPE_TYPE" label="Telescope" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="TELESCOPE_PRIMARY" label="Primary">
+Off
+    </defSwitch>
+    <defSwitch name="TELESCOPE_GUIDE" label="Guide">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="WCS_CONTROL" label="WCS" group="WCS" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="WCS_ENABLE" label="Enable">
+Off
+    </defSwitch>
+    <defSwitch name="WCS_DISABLE" label="Disable">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="UPLOAD_MODE" label="Upload" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="UPLOAD_CLIENT" label="Client">
+On
+    </defSwitch>
+    <defSwitch name="UPLOAD_LOCAL" label="Local">
+Off
+    </defSwitch>
+    <defSwitch name="UPLOAD_BOTH" label="Both">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="CCD Simulator" name="UPLOAD_SETTINGS" label="Upload Settings" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defText name="UPLOAD_DIR" label="Dir">
+/home/cconstantine
+    </defText>
+    <defText name="UPLOAD_PREFIX" label="Prefix">
+IMAGE_XXX
+    </defText>
+</defTextVector>
+<defSwitchVector device="CCD Simulator" name="CCD_FAST_TOGGLE" label="Fast Exposure" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+Off
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+On
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="CCD_FAST_COUNT" label="Fast Count" group="Options" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defNumber name="FRAMES" label="Frames" format="%.f" min="0" max="100000" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_VIDEO_STREAM" label="Video Stream" group="Streaming" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="STREAM_ON" label="Stream On">
+Off
+    </defSwitch>
+    <defSwitch name="STREAM_OFF" label="Stream Off">
+On
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="STREAM_DELAY" label="Video Stream Delay" group="Streaming" state="Idle" perm="ro" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defNumber name="STREAM_DELAY_TIME" label="Delay (s)" format="%.3f" min="0" max="60" step="0.0010000000000000000208">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="STREAMING_EXPOSURE" label="Expose" group="Streaming" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="STREAMING_EXPOSURE_VALUE" label="Duration (s)" format="%.6f" min="9.9999999999999995475e-07" max="60" step="0.10000000000000000555">
+0.10000000000000000555
+    </defNumber>
+    <defNumber name="STREAMING_DIVISOR_VALUE" label="Divisor" format="%.f" min="1" max="15" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="FPS" label="FPS" group="Streaming" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="EST_FPS" label="Instant." format="%.2f" min="0" max="999" step="0">
+30
+    </defNumber>
+    <defNumber name="AVG_FPS" label="Average (1 sec.)" format="%.2f" min="0" max="999" step="0">
+30
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="RECORD_STREAM" label="Video Record" group="Streaming" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="RECORD_ON" label="Record On">
+Off
+    </defSwitch>
+    <defSwitch name="RECORD_DURATION_ON" label="Record (Duration)">
+Off
+    </defSwitch>
+    <defSwitch name="RECORD_FRAME_ON" label="Record (Frames)">
+Off
+    </defSwitch>
+    <defSwitch name="RECORD_OFF" label="Record Off">
+On
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="CCD Simulator" name="RECORD_FILE" label="Record File" group="Streaming" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defText name="RECORD_FILE_DIR" label="Dir.">
+/home/cconstantine/indi__D_
+    </defText>
+    <defText name="RECORD_FILE_NAME" label="Name">
+indi_record__T_
+    </defText>
+</defTextVector>
+<defNumberVector device="CCD Simulator" name="RECORD_OPTIONS" label="Record Options" group="Streaming" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="RECORD_DURATION" label="Duration (sec)" format="%.3f" min="0.0010000000000000000208" max="999999" step="0">
+1
+    </defNumber>
+    <defNumber name="RECORD_FRAME_TOTAL" label="Frames" format="%.f" min="1" max="999999999" step="1">
+30
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="CCD_STREAM_FRAME" label="Frame" group="Streaming" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="X" label="Left" format="%.f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="Y" label="Top" format="%.f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="WIDTH" label="Width" format="%.f" min="0" max="0" step="0">
+0
+    </defNumber>
+    <defNumber name="HEIGHT" label="Height" format="%.f" min="0" max="0" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="CCD_STREAM_ENCODER" label="Encoder" group="Streaming" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="RAW" label="RAW">
+On
+    </defSwitch>
+    <defSwitch name="MJPEG" label="MJPEG">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="CCD_STREAM_RECORDER" label="Recorder" group="Streaming" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="SER" label="SER">
+On
+    </defSwitch>
+    <defSwitch name="OGV" label="OGV">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="LIMITS" label="Limits" group="Streaming" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defNumber name="LIMITS_BUFFER_MAX" label="Maximum Buffer Size (MB)" format="%.0f" min="1" max="65536" step="1">
+512
+    </defNumber>
+    <defNumber name="LIMITS_PREVIEW_FPS" label="Maximum Preview FPS" format="%.0f" min="1" max="120" step="1">
+10
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="CCD Simulator" name="DSP_ACTIVATE_CONVOLUTION" label="Activate Convolution" group="Signal Processing" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="DSP_ACTIVATE_ON" label="Activate">
+Off
+    </defSwitch>
+    <defSwitch name="DSP_ACTIVATE_OFF" label="Deactivate">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="DSP_ACTIVATE_DFT" label="Activate DFT" group="Signal Processing" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="DSP_ACTIVATE_ON" label="Activate">
+Off
+    </defSwitch>
+    <defSwitch name="DSP_ACTIVATE_OFF" label="Deactivate">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="DSP_ACTIVATE_IDFT" label="Activate IDFT" group="Signal Processing" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="DSP_ACTIVATE_ON" label="Activate">
+Off
+    </defSwitch>
+    <defSwitch name="DSP_ACTIVATE_OFF" label="Deactivate">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="DSP_ACTIVATE_SPECTRUM" label="Activate Spectrum" group="Signal Processing" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="DSP_ACTIVATE_ON" label="Activate">
+Off
+    </defSwitch>
+    <defSwitch name="DSP_ACTIVATE_OFF" label="Deactivate">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="DSP_ACTIVATE_HISTOGRAM" label="Activate Histogram" group="Signal Processing" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="DSP_ACTIVATE_ON" label="Activate">
+Off
+    </defSwitch>
+    <defSwitch name="DSP_ACTIVATE_OFF" label="Deactivate">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="DSP_ACTIVATE_WAVELETS" label="Activate Wavelets" group="Signal Processing" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="DSP_ACTIVATE_ON" label="Activate">
+Off
+    </defSwitch>
+    <defSwitch name="DSP_ACTIVATE_OFF" label="Deactivate">
+On
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="CCD Simulator" name="CCD_COOLER" label="Cooler" group="Main Control" state="Idle" perm="wo" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="COOLER_ON" label="ON">
+Off
+    </defSwitch>
+    <defSwitch name="COOLER_OFF" label="OFF">
+On
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="CCD Simulator" name="CCD_GAIN" label="Gain" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="GAIN" label="value" format="%.f" min="0" max="100" step="10">
+90
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="CCD Simulator" name="CCD_OFFSET" label="Offset" group="Main Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="OFFSET" label="value" format="%.f" min="0" max="6000" step="500">
+0
+    </defNumber>
+</defNumberVector>
+<defTextVector device="CCD Simulator" name="CCD_DIRECTORY_LOCATION" label="Directory" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defText name="LOCATION" label="Location">
+/home/cconstantine
+    </defText>
+</defTextVector>
+<defSwitchVector device="CCD Simulator" name="CCD_DIRECTORY_TOGGLE" label="Use Dir." group="Simulator Config" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+Off
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+On
+    </defSwitch>
+</defSwitchVector>
+<setNumberVector device="CCD Simulator" name="CCD_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="CCD_MAX_X">
+1280
+    </oneNumber>
+    <oneNumber name="CCD_MAX_Y">
+1024
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE">
+0
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_X">
+0
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_Y">
+0
+    </oneNumber>
+    <oneNumber name="CCD_BITSPERPIXEL">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_FRAME" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="X" min="0" max="1279" step="0">
+0
+    </oneNumber>
+    <oneNumber name="Y" min="0" max="1023" step="0">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH" min="1" max="1280" step="0">
+0
+    </oneNumber>
+    <oneNumber name="HEIGHT" min="1" max="1024" step="0">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_FRAME" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="X">
+0
+    </oneNumber>
+    <oneNumber name="Y">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH">
+1280
+    </oneNumber>
+    <oneNumber name="HEIGHT">
+1024
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_BINNING" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="HOR_BIN">
+1
+    </oneNumber>
+    <oneNumber name="VER_BIN">
+1
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="CCD_MAX_X">
+1280
+    </oneNumber>
+    <oneNumber name="CCD_MAX_Y">
+1024
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE">
+5.1999998092651367188
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_X">
+5.1999998092651367188
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_Y">
+5.1999998092651367188
+    </oneNumber>
+    <oneNumber name="CCD_BITSPERPIXEL">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="CCD_MAX_X">
+1280
+    </oneNumber>
+    <oneNumber name="CCD_MAX_Y">
+1024
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE">
+5.1999998092651367188
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_X">
+5.1999998092651367188
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_Y">
+5.1999998092651367188
+    </oneNumber>
+    <oneNumber name="CCD_BITSPERPIXEL">
+16
+    </oneNumber>
+</setNumberVector>
+<defNumberVector device="Telescope Simulator" name="TARGET_EOD_COORD" label="Slew Target" group="Motion Control" state="Idle" perm="ro" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="RA" label="RA (hh:mm:ss)" format="%010.6m" min="0" max="24" step="0">
+0
+    </defNumber>
+    <defNumber name="DEC" label="DEC (dd:mm:ss)" format="%010.6m" min="-90" max="90" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defTextVector device="Telescope Simulator" name="TIME_UTC" label="UTC" group="Site Management" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defText name="UTC" label="UTC Time"/>
+    <defText name="OFFSET" label="UTC Offset"/>
+</defTextVector>
+<defNumberVector device="Telescope Simulator" name="GEOGRAPHIC_COORD" label="Scope Location" group="Site Management" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="LAT" label="Lat (dd:mm:ss.s)" format="%012.8m" min="-90" max="90" step="0">
+37.800555555555554577
+    </defNumber>
+    <defNumber name="LONG" label="Lon (dd:mm:ss.s)" format="%012.8m" min="0" max="360" step="0">
+237.73500000000001364
+    </defNumber>
+    <defNumber name="ELEV" label="Elevation (m)" format="%g" min="-200" max="10000" step="0">
+10.560000399999999843
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_PARK" label="Parking" group="Main Control" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="PARK" label="Park(ed)">
+Off
+    </defSwitch>
+    <defSwitch name="UNPARK" label="UnPark(ed)">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defNumberVector device="Telescope Simulator" name="TELESCOPE_PARK_POSITION" label="Park Position" group="Site Management" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="PARK_HA" label="HA (hh:mm:ss)" format="%010.6m" min="-12" max="12" step="0">
+0
+    </defNumber>
+    <defNumber name="PARK_DEC" label="DEC (dd:mm:ss)" format="%010.6m" min="-90" max="90" step="0">
+0
+    </defNumber>
+</defNumberVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_PARK_OPTION" label="Park Options" group="Site Management" state="Idle" perm="rw" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="PARK_CURRENT" label="Current">
+Off
+    </defSwitch>
+    <defSwitch name="PARK_DEFAULT" label="Default">
+Off
+    </defSwitch>
+    <defSwitch name="PARK_WRITE_DATA" label="Write Data">
+Off
+    </defSwitch>
+    <defSwitch name="PARK_PURGE_DATA" label="Purge Data">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="TELESCOPE_PIER_SIDE" label="Pier Side" group="Main Control" state="Idle" perm="ro" rule="AtMostOne" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="PIER_WEST" label="West (pointing east)">
+Off
+    </defSwitch>
+    <defSwitch name="PIER_EAST" label="East (pointing west)">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="Telescope Simulator" name="SCOPE_CONFIG_NAME" label="Scope Name" group="Options" state="Ok" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defText name="SCOPE_CONFIG_NAME" label="Config Name"/>
+</defTextVector>
+<defSwitchVector device="Telescope Simulator" name="APPLY_SCOPE_CONFIG" label="Scope Configs" group="Options" state="Ok" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="SCOPE_CONFIG1" label="Config #1">
+On
+    </defSwitch>
+    <defSwitch name="SCOPE_CONFIG2" label="Config #2">
+Off
+    </defSwitch>
+    <defSwitch name="SCOPE_CONFIG3" label="Config #3">
+Off
+    </defSwitch>
+    <defSwitch name="SCOPE_CONFIG4" label="Config #4">
+Off
+    </defSwitch>
+    <defSwitch name="SCOPE_CONFIG5" label="Config #5">
+Off
+    </defSwitch>
+    <defSwitch name="SCOPE_CONFIG6" label="Config #6">
+Off
+    </defSwitch>
+</defSwitchVector>
+<defSwitchVector device="Telescope Simulator" name="USEJOYSTICK" label="Joystick" group="Options" state="Idle" perm="rw" rule="OneOfMany" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defSwitch name="ENABLE" label="Enable">
+Off
+    </defSwitch>
+    <defSwitch name="DISABLE" label="Disable">
+On
+    </defSwitch>
+</defSwitchVector>
+<defTextVector device="Telescope Simulator" name="SNOOP_JOYSTICK" label="Snoop Joystick" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defText name="SNOOP_JOYSTICK_DEVICE" label="Device">
+Joystick
+    </defText>
+</defTextVector>
+<defNumberVector device="Telescope Simulator" name="TELESCOPE_TIMED_GUIDE_NS" label="Guide N/S" group="Motion Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="TIMED_GUIDE_N" label="North (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+    <defNumber name="TIMED_GUIDE_S" label="South (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="Telescope Simulator" name="TELESCOPE_TIMED_GUIDE_WE" label="Guide E/W" group="Motion Control" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="TIMED_GUIDE_W" label="West (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+    <defNumber name="TIMED_GUIDE_E" label="East (ms)" format="%.f" min="0" max="60000" step="100">
+0
+    </defNumber>
+</defNumberVector>
+<defNumberVector device="Telescope Simulator" name="GUIDE_RATE" label="Guiding Rate" group="Motion Control" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defNumber name="GUIDE_RATE_WE" label="W/E Rate" format="%g" min="0" max="1" step="0.10000000000000000555">
+0.5
+    </defNumber>
+    <defNumber name="GUIDE_RATE_NS" label="N/S Rate" format="%g" min="0" max="1" step="0.10000000000000000555">
+0.5
+    </defNumber>
+</defNumberVector>
+<setNumberVector device="Telescope Simulator" name="GUIDE_RATE" state="Ok" timeout="0" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="GUIDE_RATE_WE">
+0.5
+    </oneNumber>
+    <oneNumber name="GUIDE_RATE_NS">
+0.5
+    </oneNumber>
+</setNumberVector>
+<message device="Telescope Simulator" timestamp="2022-10-03T01:00:18" message="[INFO] InitPark: No Park data in file /home/cconstantine/.indi/ParkData.xml: No such file or directory"/>
+<message device="Telescope Simulator" timestamp="2022-10-03T01:00:18" message="[INFO] Mount is unparked."/>
+<setSwitchVector device="Telescope Simulator" name="TELESCOPE_PARK" state="Ok" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneSwitch name="PARK">
+Off
+    </oneSwitch>
+    <oneSwitch name="UNPARK">
+On
+    </oneSwitch>
+</setSwitchVector>
+<setNumberVector device="Telescope Simulator" name="TELESCOPE_PARK_POSITION" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="PARK_HA">
+-6
+    </oneNumber>
+    <oneNumber name="PARK_DEC">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="TELESCOPE_PARK_POSITION" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="PARK_HA">
+-6
+    </oneNumber>
+    <oneNumber name="PARK_DEC">
+0
+    </oneNumber>
+</setNumberVector>
+<setTextVector device="Telescope Simulator" name="TIME_UTC" state="Ok" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneText name="UTC">
+2022-10-03T01:00:18
+    </oneText>
+    <oneText name="OFFSET">
+-7.00
+    </oneText>
+</setTextVector>
+<setNumberVector device="CCD Simulator" name="CCD_STREAM_FRAME" state="Ok" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="X" min="0" max="1279" step="0">
+0
+    </oneNumber>
+    <oneNumber name="Y" min="0" max="1023" step="0">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH" min="10" max="1280" step="0">
+1280
+    </oneNumber>
+    <oneNumber name="HEIGHT" min="10" max="1024" step="0">
+1024
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="GUIDER_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="CCD_MAX_X">
+500
+    </oneNumber>
+    <oneNumber name="CCD_MAX_Y">
+290
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE">
+0
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_X">
+0
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_Y">
+0
+    </oneNumber>
+    <oneNumber name="CCD_BITSPERPIXEL">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="GUIDER_FRAME" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="X" min="0" max="499" step="0">
+0
+    </oneNumber>
+    <oneNumber name="Y" min="0" max="289" step="0">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH" min="1" max="500" step="0">
+0
+    </oneNumber>
+    <oneNumber name="HEIGHT" min="1" max="290" step="0">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="GUIDER_FRAME" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="X">
+0
+    </oneNumber>
+    <oneNumber name="Y">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH">
+500
+    </oneNumber>
+    <oneNumber name="HEIGHT">
+290
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="GUIDER_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="CCD_MAX_X">
+500
+    </oneNumber>
+    <oneNumber name="CCD_MAX_Y">
+290
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE">
+9.8000001907348632812
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_X">
+9.8000001907348632812
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_Y">
+12.600000381469726562
+    </oneNumber>
+    <oneNumber name="CCD_BITSPERPIXEL">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="GUIDER_INFO" state="Idle" timeout="60" timestamp="2022-10-03T01:00:18">
+    <oneNumber name="CCD_MAX_X">
+500
+    </oneNumber>
+    <oneNumber name="CCD_MAX_Y">
+290
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE">
+9.8000001907348632812
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_X">
+9.8000001907348632812
+    </oneNumber>
+    <oneNumber name="CCD_PIXEL_SIZE_Y">
+12.600000381469726562
+    </oneNumber>
+    <oneNumber name="CCD_BITSPERPIXEL">
+16
+    </oneNumber>
+</setNumberVector>
+<defNumberVector device="CCD Simulator" name="FILTER_SLOT" label="Filter Slot" group="Filter Wheel" state="Idle" perm="rw" timeout="60" timestamp="2022-10-03T01:00:18">
+    <defNumber name="FILTER_SLOT_VALUE" label="Filter" format="%3.0f" min="1" max="8" step="1">
+1
+    </defNumber>
+</defNumberVector>
+<defTextVector device="CCD Simulator" name="FILTER_NAME" label="Filter" group="Filter Wheel" state="Idle" perm="rw" timeout="0" timestamp="2022-10-03T01:00:18">
+    <defText name="FILTER_SLOT_NAME_1" label="Filter#1">
+Red
+    </defText>
+    <defText name="FILTER_SLOT_NAME_2" label="Filter#2">
+Green
+    </defText>
+    <defText name="FILTER_SLOT_NAME_3" label="Filter#3">
+Blue
+    </defText>
+    <defText name="FILTER_SLOT_NAME_4" label="Filter#4">
+H_Alpha
+    </defText>
+    <defText name="FILTER_SLOT_NAME_5" label="Filter#5">
+SII
+    </defText>
+    <defText name="FILTER_SLOT_NAME_6" label="Filter#6">
+OIII
+    </defText>
+    <defText name="FILTER_SLOT_NAME_7" label="Filter#7">
+LPR
+    </defText>
+    <defText name="FILTER_SLOT_NAME_8" label="Filter#8">
+Luminance
+    </defText>
+</defTextVector>
+<setSwitchVector device="Telescope Simulator" name="TELESCOPE_PIER_SIDE" state="Ok" timeout="60" timestamp="2022-10-03T01:00:19">
+    <oneSwitch name="PIER_WEST">
+Off
+    </oneSwitch>
+    <oneSwitch name="PIER_EAST">
+On
+    </oneSwitch>
+</setSwitchVector>
+<setNumberVector device="Telescope Simulator" name="MOUNT_AXES" state="Idle" timeout="0" timestamp="2022-10-03T01:00:19">
+    <oneNumber name="PRIMARY">
+90
+    </oneNumber>
+    <oneNumber name="SECONDARY">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:19">
+    <oneNumber name="RA">
+19.786737785852931637
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:19">
+    <oneNumber name="RA">
+19.786807523721936519
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:19">
+    <oneNumber name="RA">
+19.786877250384026894
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:19">
+    <oneNumber name="RA">
+19.786946909804626671
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:20">
+    <oneNumber name="RA">
+19.787016636435669881
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:20">
+    <oneNumber name="RA">
+19.787086363097760255
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:20">
+    <oneNumber name="RA">
+19.78715608975985063
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:20">
+    <oneNumber name="RA">
+19.78722581639089384
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:21">
+    <oneNumber name="RA">
+19.787295543052984215
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:21">
+    <oneNumber name="RA">
+19.787365258508160082
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:21">
+    <oneNumber name="RA">
+19.787434985170250457
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:21">
+    <oneNumber name="RA">
+19.787504711801293666
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:22">
+    <oneNumber name="RA">
+19.787574438463384041
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:22">
+    <oneNumber name="RA">
+19.787644165125470863
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:22">
+    <oneNumber name="RA">
+19.787713891756517626
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:22">
+    <oneNumber name="RA">
+19.787783607211693493
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:23">
+    <oneNumber name="RA">
+19.787853333873783868
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:23">
+    <oneNumber name="RA">
+19.787923060504827077
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:23">
+    <oneNumber name="RA">
+19.787992775959999392
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:23">
+    <oneNumber name="RA">
+19.788062502622089767
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="RA">
+19.788132229284180141
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_STREAM_FRAME" state="Ok" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="X" min="0" max="9" step="0">
+0
+    </oneNumber>
+    <oneNumber name="Y" min="0" max="9" step="0">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH" min="10" max="10" step="0">
+10
+    </oneNumber>
+    <oneNumber name="HEIGHT" min="10" max="10" step="0">
+10
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_FRAME" state="Idle" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="X">
+0
+    </oneNumber>
+    <oneNumber name="Y">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH">
+10
+    </oneNumber>
+    <oneNumber name="HEIGHT">
+10
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_FRAME" state="Ok" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="X">
+0
+    </oneNumber>
+    <oneNumber name="Y">
+0
+    </oneNumber>
+    <oneNumber name="WIDTH">
+10
+    </oneNumber>
+    <oneNumber name="HEIGHT">
+10
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="RA">
+19.788201955915226904
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="RA">
+19.788271648956570203
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:24">
+    <oneNumber name="RA">
+19.788341375618660578
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<message device="CCD Simulator" timestamp="2022-10-03T01:00:25" message="[ERROR] Got no stars, is gsc installed with appropriate environment variables set ??"/>
+<setNumberVector device="CCD Simulator" name="CCD_EXPOSURE" state="Busy" timeout="60" timestamp="2022-10-03T01:00:25">
+    <oneNumber name="CCD_EXPOSURE_VALUE">
+1
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:25">
+    <oneNumber name="RA">
+19.78841109104278928
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:25">
+    <oneNumber name="RA">
+19.788480817704879655
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:25">
+    <oneNumber name="RA">
+19.78855054436697003
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_EXPOSURE" state="Busy" timeout="60" timestamp="2022-10-03T01:00:25">
+    <oneNumber name="CCD_EXPOSURE_VALUE">
+0.17399999499320983887
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:25">
+    <oneNumber name="RA">
+19.78862027099801324
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="CCD Simulator" name="CCD_EXPOSURE" state="Busy" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneNumber name="CCD_EXPOSURE_VALUE">
+0
+    </oneNumber>
+</setNumberVector>
+<setBLOBVector device="CCD Simulator" name="CCD1" state="Ok" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneBLOB name="CCD1" size="8640" enclen="11520" format=".fits">
+U0lNUExFICA9ICAgICAgICAgICAgICAgICAgICBUIC8gZmlsZSBkb2VzIGNvbmZvcm0gdG8g
+RklUUyBzdGFuZGFyZCAgICAgICAgICAgICBCSVRQSVggID0gICAgICAgICAgICAgICAgICAg
+MTYgLyBudW1iZXIgb2YgYml0cyBwZXIgZGF0YSBwaXhlbCAgICAgICAgICAgICAgICAgIE5B
+WElTICAgPSAgICAgICAgICAgICAgICAgICAgMiAvIG51bWJlciBvZiBkYXRhIGF4ZXMgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgTkFYSVMxICA9ICAgICAgICAgICAgICAgICAgIDEw
+IC8gbGVuZ3RoIG9mIGRhdGEgYXhpcyAxICAgICAgICAgICAgICAgICAgICAgICAgICBOQVhJ
+UzIgID0gICAgICAgICAgICAgICAgICAgMTAgLyBsZW5ndGggb2YgZGF0YSBheGlzIDIgICAg
+ICAgICAgICAgICAgICAgICAgICAgIEVYVEVORCAgPSAgICAgICAgICAgICAgICAgICAgVCAv
+IEZJVFMgZGF0YXNldCBtYXkgY29udGFpbiBleHRlbnNpb25zICAgICAgICAgICAgQ09NTUVO
+VCAgIEZJVFMgKEZsZXhpYmxlIEltYWdlIFRyYW5zcG9ydCBTeXN0ZW0pIGZvcm1hdCBpcyBk
+ZWZpbmVkIGluICdBc3Ryb25vbXlDT01NRU5UICAgYW5kIEFzdHJvcGh5c2ljcycsIHZvbHVt
+ZSAzNzYsIHBhZ2UgMzU5OyBiaWJjb2RlOiAyMDAxQSZBLi4uMzc2Li4zNTlIIEJaRVJPICAg
+PSAgICAgICAgICAgICAgICAzMjc2OCAvIG9mZnNldCBkYXRhIHJhbmdlIHRvIHRoYXQgb2Yg
+dW5zaWduZWQgc2hvcnQgICAgQlNDQUxFICA9ICAgICAgICAgICAgICAgICAgICAxIC8gZGVm
+YXVsdCBzY2FsaW5nIGZhY3RvciAgICAgICAgICAgICAgICAgICAgICAgICBST1dPUkRFUj0g
+J1RPUC1ET1dOJyAgICAgICAgICAgLyBSb3cgT3JkZXIgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgIElOU1RSVU1FPSAnQ0NEIFNpbXVsYXRvcicgICAgICAvIENDRCBO
+YW1lICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgVEVMRVNDT1A9ICdU
+ZWxlc2NvcGUgU2ltdWxhdG9yJyAvIFRlbGVzY29wZSBuYW1lICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICBPQlNFUlZFUj0gJ1Vua25vd24gJyAgICAgICAgICAgLyBPYnNlcnZl
+ciBuYW1lICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIE9CSkVDVCAgPSAnVW5r
+bm93biAnICAgICAgICAgICAvIE9iamVjdCBuYW1lICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgRVhQVElNRSA9ICAgICAgICAgMS4wMDAwMDBFKzAwIC8gVG90YWwgRXhw
+b3N1cmUgVGltZSAocykgICAgICAgICAgICAgICAgICAgICAgICBDQ0QtVEVNUD0gICAgICAg
+ICAgICAwLjAwMEUrMDAgLyBDQ0QgVGVtcGVyYXR1cmUgKENlbHNpdXMpICAgICAgICAgICAg
+ICAgICAgICAgIFBJWFNJWkUxPSAgICAgICAgIDUuMjAwMDAwRSswMCAvIFBpeGVsIFNpemUg
+MSAobWljcm9ucykgICAgICAgICAgICAgICAgICAgICAgICAgUElYU0laRTI9ICAgICAgICAg
+NS4yMDAwMDBFKzAwIC8gUGl4ZWwgU2l6ZSAyIChtaWNyb25zKSAgICAgICAgICAgICAgICAg
+ICAgICAgICBYQklOTklORz0gICAgICAgICAgICAgICAgICAgIDEgLyBCaW5uaW5nIGZhY3Rv
+ciBpbiB3aWR0aCAgICAgICAgICAgICAgICAgICAgICAgIFlCSU5OSU5HPSAgICAgICAgICAg
+ICAgICAgICAgMSAvIEJpbm5pbmcgZmFjdG9yIGluIGhlaWdodCAgICAgICAgICAgICAgICAg
+ICAgICAgWFBJWFNaICA9ICAgICAgICAgNS4yMDAwMDBFKzAwIC8gWCBiaW5uZWQgcGl4ZWwg
+c2l6ZSBpbiBtaWNyb25zICAgICAgICAgICAgICAgICBZUElYU1ogID0gICAgICAgICA1LjIw
+MDAwMEUrMDAgLyBZIGJpbm5lZCBwaXhlbCBzaXplIGluIG1pY3JvbnMgICAgICAgICAgICAg
+ICAgIEZSQU1FICAgPSAnTGlnaHQgICAnICAgICAgICAgICAvIEZyYW1lIFR5cGUgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgSU1BR0VUWVA9ICdMaWdodCBGcmFtZScg
+ICAgICAgIC8gRnJhbWUgVHlwZSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBGSUxURVIgID0gJ1JlZCAgICAgJyAgICAgICAgICAgLyBGaWx0ZXIgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIEZPQ0FMTEVOPSAgICAgICAgICAgIDkuMDAw
+RSswMiAvIEZvY2FsIExlbmd0aCAobW0pICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+QVBURElBICA9ICAgICAgICAgICAgMS4yMDBFKzAyIC8gVGVsZXNjb3BlIGRpYW1ldGVyICht
+bSkgICAgICAgICAgICAgICAgICAgICAgICBST1RBVEFORz0gICAgICAgICAgICAwLjAwMEUr
+MDAgLyBSb3RhdG9yIGFuZ2xlIGluIGRlZ3JlZXMgICAgICAgICAgICAgICAgICAgICAgIFND
+QUxFICAgPSAgICAgICAgIDEuMTkxOTU2RSswMCAvIGFyY3NlY3MgcGVyIHBpeGVsICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgU0lURUxBVCA9ICAgICAgICAgMy43ODAwNTZFKzAx
+IC8gTGF0aXR1ZGUgb2YgdGhlIGltYWdpbmcgc2l0ZSBpbiBkZWdyZWVzICAgICAgICBTSVRF
+TE9ORz0gICAgICAgIC0xLjIyMjY1MEUrMDIgLyBMb25naXR1ZGUgb2YgdGhlIGltYWdpbmcg
+c2l0ZSBpbiBkZWdyZWVzICAgICAgIEFJUk1BU1MgPSAgICAgICAgIDEuNjI5OTk1RSswMCAv
+IEFpcm1hc3MgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgT0JKQ1RB
+WiA9ICAgICAgICAgMy41OTk5OTZFKzAyIC8gQXppbXV0aCBvZiBjZW50ZXIgb2YgaW1hZ2Ug
+aW4gRGVncmVlcyAgICAgICAgICBPQkpDVEFMVD0gICAgICAgICAzLjc3OTM3NkUrMDEgLyBB
+bHRpdHVkZSBvZiBjZW50ZXIgb2YgaW1hZ2UgaW4gRGVncmVlcyAgICAgICAgIE9CSkNUUkEg
+PSAnIDAgMDcgMTAuODAnICAgICAgICAvIE9iamVjdCBKMjAwMCBSQSBpbiBIb3VycyAgICAg
+ICAgICAgICAgICAgICAgICAgT0JKQ1RERUM9ICc4OSA1MSA1NS45MCcgICAgICAgIC8gT2Jq
+ZWN0IEoyMDAwIERFQyBpbiBEZWdyZWVzICAgICAgICAgICAgICAgICAgICBSQSAgICAgID0g
+ICAgICAgICAxLjc5NDk4OEUrMDAgLyBPYmplY3QgSjIwMDAgUkEgaW4gRGVncmVlcyAgICAg
+ICAgICAgICAgICAgICAgIERFQyAgICAgPSAgICAgICAgIDguOTg2NTUzRSswMSAvIE9iamVj
+dCBKMjAwMCBERUMgaW4gRGVncmVlcyAgICAgICAgICAgICAgICAgICAgUElFUlNJREU9ICdF
+QVNUICAgICcgICAgICAgICAgIC8gRWFzdCwgbG9va2luZyBXZXN0ICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICBFUVVJTk9YID0gICAgICAgICAgICAgICAgIDIwMDAgLyBFcXVpbm94
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIERBVEUtT0JTPSAnMjAy
+Mi0xMC0wM1QwMTowMDoyNS4xNjYnIC8gVVRDIHN0YXJ0IGRhdGUgb2Ygb2JzZXJ2YXRpb24g
+ICAgICAgICAgICAgQ09NTUVOVCBHZW5lcmF0ZWQgYnkgSU5ESSAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBHQUlOICAgID0gICAgICAg
+ICAgICA5LjAwMEUrMDEgLyBHYWluICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgIEVORCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAggAOAAoABgAmACYADgAWABIAH
+gAKABoAHgAiAAoADgAaABYAFgAiAAIAHgACAB4ACgAGAAYAEgAKABoAGgAWACYAJgAmACoAB
+gAiABoAIgAiAA4ADgAKACoAFgAeAB4AFgAiACYAFgAaAAIAIgAiABIAGgAiABIACgAaAAIAC
+gASACYADgAeABYADgAaAAoAGgAOAB4AFgAGACoAFgAGABoAJgAKAB4ABgAWABoADgAOABIAE
+gAGABoAFgAKAAIABgAeAAIAJgAkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    </oneBLOB>
+</setBLOBVector>
+<setNumberVector device="CCD Simulator" name="CCD_EXPOSURE" state="Ok" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneNumber name="CCD_EXPOSURE_VALUE">
+0
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneNumber name="RA">
+19.788689986453189107
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneNumber name="RA">
+19.788759645873788884
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneNumber name="RA">
+19.788829338915132183
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>
+<setNumberVector device="Telescope Simulator" name="EQUATORIAL_EOD_COORD" state="Idle" timeout="60" timestamp="2022-10-03T01:00:26">
+    <oneNumber name="RA">
+19.788899076753093453
+    </oneNumber>
+    <oneNumber name="DEC">
+90
+    </oneNumber>
+</setNumberVector>

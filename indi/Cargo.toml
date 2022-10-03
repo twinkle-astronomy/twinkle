@@ -9,3 +9,5 @@ edition = "2021"
 quick-xml = "~0.23.0"
 chrono = "0.4"
 encoding = "0.2"
+base64 = "0.13.0"
+

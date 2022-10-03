@@ -112,15 +112,13 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
                     let value: Result<SwitchState, DeError> =
                         match self.xml_reader.read_event(self.buf) {
                             Ok(Event::Text(e)) => SwitchState::try_from(e),
-                            _ => return Err(DeError::UnexpectedEvent()),
+                            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
 
                     Ok(Some(DefSwitch {
@@ -133,7 +131,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
@@ -230,15 +228,13 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
                     let value: Result<SwitchState, DeError> =
                         match self.xml_reader.read_event(self.buf) {
                             Ok(Event::Text(e)) => SwitchState::try_from(e),
-                            _ => return Err(DeError::UnexpectedEvent()),
+                            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
                     let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
-                        _ => {
-                            return Err(DeError::UnexpectedEvent());
-                        }
+                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
 
                     Ok(Some(OneSwitch {
@@ -250,7 +246,7 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
-            _ => Err(DeError::UnexpectedEvent()),
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }
