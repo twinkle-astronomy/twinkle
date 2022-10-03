@@ -39,6 +39,7 @@ pub enum Command {
     DefBlobVector(DefBlobVector),
     SetBlobVector(SetBlobVector),
     Message(Message),
+    DelProperty(DelProperty)
 }
 
 #[derive(Debug, PartialEq)]
@@ -285,6 +286,14 @@ pub struct OneBlob {
 #[derive(Debug, PartialEq)]
 pub struct Message {
     pub device: Option<String>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DelProperty {
+    pub device: String,
+    pub name: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 }

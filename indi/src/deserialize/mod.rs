@@ -21,6 +21,9 @@ pub use blob_vector::SetBlobIter;
 pub mod message;
 pub use message::MessageIter;
 
+pub mod del_property;
+pub use del_property::DelPropertyIter;
+
 use super::*;
 
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
@@ -228,6 +231,12 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         for _ in deserialize::MessageIter::new(self) { }
 
                         Ok(Some(Command::Message(message)))
+                    }
+                    b"delProperty" => {
+                        let message = DelPropertyIter::del_property(&self.xml_reader, &e)?;
+                        for _ in deserialize::DelPropertyIter::new(self) { }
+
+                        Ok(Some(Command::DelProperty(message)))
                     }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
