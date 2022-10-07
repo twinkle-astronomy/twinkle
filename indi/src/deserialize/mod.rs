@@ -24,6 +24,8 @@ pub use message::MessageIter;
 pub mod del_property;
 pub use del_property::DelPropertyIter;
 
+pub mod get_properties;
+pub use get_properties::GetPropertiesIter;
 use super::*;
 
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
@@ -237,6 +239,13 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         for _ in deserialize::DelPropertyIter::new(self) { }
 
                         Ok(Some(Command::DelProperty(message)))
+                    }
+
+                    b"getProperties" => {
+                        let get_properties = GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
+                        for _ in deserialize::GetPropertiesIter::new(self) { }
+
+                        Ok(Some(Command::GetProperties(get_properties)))
                     }
                     tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
                 };
@@ -569,6 +578,28 @@ Ok
                         "[INFO] update mount and pier side: Pier Side On, mount type 2"
                     ))
                 );
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_properties() {
+        let xml = r#"
+<getProperties version="1.7" device="Telescope Simulator" name="foothing"/>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::GetProperties(param) => {
+                assert_eq!(param.device, Some(String::from("Telescope Simulator")));
+                assert_eq!(param.name, Some(String::from("foothing")));
+                assert_eq!(param.version,String::from("1.7"));
             }
             e => {
                 panic!("Unexpected: {:?}", e)

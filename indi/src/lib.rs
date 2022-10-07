@@ -28,6 +28,7 @@ pub struct Client {
 
 #[derive(Debug)]
 pub enum Command {
+    // Commands from Device to Clients
     DefTextVector(DefTextVector),
     SetTextVector(SetTextVector),
     DefNumberVector(DefNumberVector),
@@ -39,7 +40,10 @@ pub enum Command {
     DefBlobVector(DefBlobVector),
     SetBlobVector(SetBlobVector),
     Message(Message),
-    DelProperty(DelProperty)
+    DelProperty(DelProperty),
+
+    // Commands from Client to Device
+    GetProperties(GetProperties)
 }
 
 #[derive(Debug, PartialEq)]
@@ -296,6 +300,13 @@ pub struct DelProperty {
     pub name: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct GetProperties {
+    pub version: String,
+    pub device: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug)]
