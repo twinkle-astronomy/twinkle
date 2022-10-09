@@ -4,6 +4,7 @@ pub use number_vector::SetNumberIter;
 
 pub mod text_vector;
 pub use text_vector::DefTextIter;
+pub use text_vector::NewTextIter;
 pub use text_vector::SetTextIter;
 
 pub mod switch_vector;
@@ -147,6 +148,16 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         }
 
                         Ok(Some(Command::SetTextVector(text_vector)))
+                    }
+                    b"newTextVector" => {
+                        let mut text_vector = NewTextIter::text_vector(&self.xml_reader, &e)?;
+
+                        for text in deserialize::NewTextIter::new(self) {
+                            let text = text?;
+                            text_vector.texts.insert(text.name.clone(), text);
+                        }
+
+                        Ok(Some(Command::NewTextVector(text_vector)))
                     }
                     b"defNumberVector" => {
                         let mut number_vector = DefNumberIter::number_vector(&self.xml_reader, &e)?;
@@ -391,6 +402,43 @@ SQM
 
         match command_iter.next().unwrap().unwrap() {
             Command::SetTextVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "ACTIVE_DEVICES");
+                assert_eq!(param.texts.len(), 5)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_new_text_vector() {
+        let xml = r#"
+<newTextVector device="CCD Simulator" name="ACTIVE_DEVICES" timestamp="2022-10-01T17:06:14">
+    <oneText name="ACTIVE_TELESCOPE">
+Simulator changed
+    </oneText>
+    <oneText name="ACTIVE_ROTATOR">
+Rotator Simulator
+    </oneText>
+    <oneText name="ACTIVE_FOCUSER">
+Focuser Simulator
+    </oneText>
+    <oneText name="ACTIVE_FILTER">
+CCD Simulator
+    </oneText>
+    <oneText name="ACTIVE_SKYQUALITY">
+SQM
+    </oneText>
+</newTextVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::NewTextVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "ACTIVE_DEVICES");
                 assert_eq!(param.texts.len(), 5)

@@ -31,6 +31,7 @@ pub enum Command {
     // Commands from Device to Clients
     DefTextVector(DefTextVector),
     SetTextVector(SetTextVector),
+    NewTextVector(NewTextVector),
     DefNumberVector(DefNumberVector),
     SetNumberVector(SetNumberVector),
     DefSwitchVector(DefSwitchVector),
@@ -111,6 +112,15 @@ pub struct SetTextVector {
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
+
+    pub texts: HashMap<String, OneText>,
+}
+
+#[derive(Debug)]
+pub struct NewTextVector {
+    pub device: String,
+    pub name: String,
+    pub timestamp: Option<DateTime<Utc>>,
 
     pub texts: HashMap<String, OneText>,
 }

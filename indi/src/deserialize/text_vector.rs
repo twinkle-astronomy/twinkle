@@ -9,6 +9,120 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
+// xml_reader: &'a mut Reader<T>,
+// buf: &'a mut Vec<u8>,
+
+fn next_one_text<T: std::io::BufRead>(
+    xml_reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+) -> Result<Option<OneText>, DeError> {
+    let event = xml_reader.read_event(buf)?;
+    match event {
+        Event::Start(e) => match e.name() {
+            b"oneText" => {
+                let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
+
+                for attr in e.attributes() {
+                    let attr = attr?;
+                    let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+
+                    match attr.key {
+                        b"name" => name = Ok(attr_value),
+                        key => {
+                            return Err(DeError::UnexpectedAttr(format!(
+                                "Unexpected attribute {}",
+                                str::from_utf8(key)?
+                            )))
+                        }
+                    }
+                }
+
+                let value: Result<String, DeError> = match xml_reader.read_event(buf)? {
+                    Event::Text(e) => {
+                        let v =
+                            ISO_8859_1.decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?;
+                        match xml_reader.read_event(buf)? {
+                            Event::End(_) => Ok(v),
+                            e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                        }
+                    }
+                    Event::End(_) => Ok(String::from("")),
+                    e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                };
+
+                Ok(Some(OneText {
+                    name: name?,
+                    value: value?,
+                }))
+            }
+            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+        },
+        Event::End(_) => Ok(None),
+        Event::Eof => Ok(None),
+        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+    }
+}
+
+pub struct NewTextIter<'a, T: std::io::BufRead> {
+    xml_reader: &'a mut Reader<T>,
+    buf: &'a mut Vec<u8>,
+}
+
+impl<'a, T: std::io::BufRead> Iterator for NewTextIter<'a, T> {
+    type Item = Result<OneText, DeError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match next_one_text(&mut self.xml_reader, &mut self.buf) {
+            Ok(Some(number)) => {
+                return Some(Ok(number));
+            }
+            Ok(None) => return None,
+            Err(e) => {
+                return Some(Err(e));
+            }
+        }
+    }
+}
+
+impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
+    pub fn new(command_iter: &mut CommandIter<T>) -> NewTextIter<T> {
+        NewTextIter {
+            xml_reader: &mut command_iter.xml_reader,
+            buf: &mut command_iter.buf,
+        }
+    }
+
+    pub fn text_vector(
+        xml_reader: &Reader<T>,
+        start_event: &events::BytesStart,
+    ) -> Result<NewTextVector, DeError> {
+        let mut device: Option<String> = None;
+        let mut name: Option<String> = None;
+        let mut timestamp: Option<DateTime<Utc>> = None;
+
+        for attr in start_event.attributes() {
+            let attr = attr?;
+            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            match attr.key {
+                b"device" => device = Some(attr_value),
+                b"name" => name = Some(attr_value),
+                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                key => {
+                    return Err(DeError::UnexpectedAttr(format!(
+                        "Unexpected attribute {}",
+                        str::from_utf8(key)?
+                    )))
+                }
+            }
+        }
+        Ok(NewTextVector {
+            device: device.ok_or(DeError::MissingAttr(&"device"))?,
+            name: name.ok_or(DeError::MissingAttr(&"name"))?,
+            timestamp: timestamp,
+            texts: HashMap::new(),
+        })
+    }
+}
+
 pub struct SetTextIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,
@@ -17,7 +131,7 @@ pub struct SetTextIter<'a, T: std::io::BufRead> {
 impl<'a, T: std::io::BufRead> Iterator for SetTextIter<'a, T> {
     type Item = Result<OneText, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.next_text() {
+        match next_one_text(&mut self.xml_reader, &mut self.buf) {
             Ok(Some(number)) => {
                 return Some(Ok(number));
             }
@@ -75,55 +189,6 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
             message: message,
             texts: HashMap::new(),
         })
-    }
-
-    fn next_text(&mut self) -> Result<Option<OneText>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
-        match event {
-            Event::Start(e) => match e.name() {
-                b"oneText" => {
-                    let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
-
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
-
-                        match attr.key {
-                            b"name" => name = Ok(attr_value),
-                            key => {
-                                return Err(DeError::UnexpectedAttr(format!(
-                                    "Unexpected attribute {}",
-                                    str::from_utf8(key)?
-                                )))
-                            }
-                        }
-                    }
-
-                    let value: Result<String, DeError> =
-                        match self.xml_reader.read_event(self.buf)? {
-                            Event::Text(e) => {
-                                let v = ISO_8859_1
-                                    .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?;
-                                match self.xml_reader.read_event(&mut self.buf)? {
-                                    Event::End(_) => Ok(v),
-                                    e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                                }
-                            }
-                            Event::End(_) => Ok(String::from("")),
-                            e => Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                        };
-
-                    Ok(Some(OneText {
-                        name: name?,
-                        value: value?,
-                    }))
-                }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
-            },
-            Event::End(_) => Ok(None),
-            Event::Eof => Ok(None),
-            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-        }
     }
 }
 
