@@ -67,7 +67,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
         let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
         match trailing_event {
             Event::End(_) => Ok(None),
-            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e)))
+            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
 }

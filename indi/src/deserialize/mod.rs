@@ -25,8 +25,8 @@ pub mod del_property;
 pub use del_property::DelPropertyIter;
 
 pub mod get_properties;
-pub use get_properties::GetPropertiesIter;
 use super::*;
+pub use get_properties::GetPropertiesIter;
 
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
     type Error = DeError;
@@ -230,20 +230,21 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     }
                     b"message" => {
                         let message = MessageIter::message(&self.xml_reader, &e)?;
-                        for _ in deserialize::MessageIter::new(self) { }
+                        for _ in deserialize::MessageIter::new(self) {}
 
                         Ok(Some(Command::Message(message)))
                     }
                     b"delProperty" => {
                         let message = DelPropertyIter::del_property(&self.xml_reader, &e)?;
-                        for _ in deserialize::DelPropertyIter::new(self) { }
+                        for _ in deserialize::DelPropertyIter::new(self) {}
 
                         Ok(Some(Command::DelProperty(message)))
                     }
 
                     b"getProperties" => {
-                        let get_properties = GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
-                        for _ in deserialize::GetPropertiesIter::new(self) { }
+                        let get_properties =
+                            GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
+                        for _ in deserialize::GetPropertiesIter::new(self) {}
 
                         Ok(Some(Command::GetProperties(get_properties)))
                     }
@@ -599,7 +600,7 @@ Ok
             Command::GetProperties(param) => {
                 assert_eq!(param.device, Some(String::from("Telescope Simulator")));
                 assert_eq!(param.name, Some(String::from("foothing")));
-                assert_eq!(param.version,String::from("1.7"));
+                assert_eq!(param.version, String::from("1.7"));
             }
             e => {
                 panic!("Unexpected: {:?}", e)

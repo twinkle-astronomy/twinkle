@@ -43,7 +43,7 @@ pub enum Command {
     DelProperty(DelProperty),
 
     // Commands from Client to Device
-    GetProperties(GetProperties)
+    GetProperties(GetProperties),
 }
 
 #[derive(Debug, PartialEq)]
@@ -167,6 +167,7 @@ pub struct OneNumber {
     step: Option<f64>,
     value: f64,
 }
+
 #[derive(Debug)]
 pub struct DefSwitchVector {
     pub device: String,
