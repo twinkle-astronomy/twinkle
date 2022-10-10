@@ -346,6 +346,7 @@ pub enum DeError {
     DecodeLatin(Cow<'static, str>),
     ParseIntError(num::ParseIntError),
     ParseFloatError(num::ParseFloatError),
+    ParseSexagesimalError(String),
     ParseDateTimeError(ParseError),
     MissingAttr(&'static str),
     BadAttr(AttrError),

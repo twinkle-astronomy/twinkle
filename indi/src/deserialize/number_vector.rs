@@ -9,6 +9,26 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
+fn parse_number(e: &BytesText) -> Result<f64, DeError> {
+    let text = ISO_8859_1.decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?;
+    let mut components = text.split([' ', ':']);
+
+    let mut val: f64 = match components.next() {
+        Some(comp) => comp.parse::<f64>()?,
+        None => return Err(DeError::ParseSexagesimalError(text.clone())),
+    };
+
+    let sign = val.signum();
+    let mut div = 60.0;
+
+    for comp in components {
+        val += sign * comp.parse::<f64>()? / div;
+
+        div = div * 60.0;
+    }
+    return Ok(val);
+}
+
 fn next_one_number<T: std::io::BufRead>(
     xml_reader: &mut Reader<T>,
     buf: &mut Vec<u8>,
@@ -41,9 +61,7 @@ fn next_one_number<T: std::io::BufRead>(
                 }
 
                 let value: Result<f64, DeError> = match xml_reader.read_event(buf) {
-                    Ok(Event::Text(e)) => Ok(ISO_8859_1
-                        .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
-                        .parse::<f64>()?),
+                    Ok(Event::Text(e)) => parse_number(&e),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 };
 
@@ -178,9 +196,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                     }
 
                     let value: Result<f64, DeError> = match self.xml_reader.read_event(self.buf) {
-                        Ok(Event::Text(e)) => Ok(ISO_8859_1
-                            .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
-                            .parse::<f64>()?),
+                        Ok(Event::Text(e)) => parse_number(&e),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     };
 
@@ -419,5 +435,53 @@ mod tests {
                 value: 5.2000000000000001776
             }
         );
+    }
+
+    #[test]
+    fn test_parse_number_normal() {
+        let mut buf = Vec::new();
+        let xml = r#"-10.505"#;
+
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+
+        let event = reader.read_event(&mut buf);
+        if let Ok(Event::Text(e)) = event {
+            assert_eq!(-10.505, parse_number(&e).unwrap());
+        } else {
+            panic!("Unexpected");
+        }
+    }
+
+    #[test]
+    fn test_parse_number_sexagesimal_1() {
+        let mut buf = Vec::new();
+        let xml = r#"-10 30.3"#;
+
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+
+        let event = reader.read_event(&mut buf);
+        if let Ok(Event::Text(e)) = event {
+            assert_eq!(-10.505, parse_number(&e).unwrap());
+        } else {
+            panic!("Unexpected");
+        }
+    }
+
+    #[test]
+    fn test_parse_number_sexagesimal_2() {
+        let mut buf = Vec::new();
+        let xml = r#"-10:30:18"#;
+
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+
+        let event = reader.read_event(&mut buf);
+        if let Ok(Event::Text(e)) = event {
+            assert_eq!(-10.505, parse_number(&e).unwrap());
+        } else {
+            panic!("Unexpected");
+        }
     }
 }
