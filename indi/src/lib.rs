@@ -34,6 +34,7 @@ pub enum Command {
     NewTextVector(NewTextVector),
     DefNumberVector(DefNumberVector),
     SetNumberVector(SetNumberVector),
+    NewNumberVector(NewNumberVector),
     DefSwitchVector(DefSwitchVector),
     SetSwitchVector(SetSwitchVector),
     NewSwitchVector(NewSwitchVector),
@@ -166,6 +167,15 @@ pub struct SetNumberVector {
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
+
+    pub numbers: HashMap<String, OneNumber>,
+}
+
+#[derive(Debug)]
+pub struct NewNumberVector {
+    pub device: String,
+    pub name: String,
+    pub timestamp: Option<DateTime<Utc>>,
 
     pub numbers: HashMap<String, OneNumber>,
 }

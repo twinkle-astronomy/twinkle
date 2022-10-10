@@ -9,6 +9,66 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
+fn next_one_number<T: std::io::BufRead>(
+    xml_reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+) -> Result<Option<OneNumber>, DeError> {
+    let event = xml_reader.read_event(buf)?;
+    match event {
+        Event::Start(e) => match e.name() {
+            b"oneNumber" => {
+                let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
+                let mut min: Option<f64> = None;
+                let mut max: Option<f64> = None;
+                let mut step: Option<f64> = None;
+
+                for attr in e.attributes() {
+                    let attr = attr?;
+                    let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+
+                    match attr.key {
+                        b"name" => name = Ok(attr_value),
+                        b"min" => min = Some(attr_value.parse::<f64>()?),
+                        b"max" => max = Some(attr_value.parse::<f64>()?),
+                        b"step" => step = Some(attr_value.parse::<f64>()?),
+                        key => {
+                            return Err(DeError::UnexpectedAttr(format!(
+                                "Unexpected attribute {}",
+                                str::from_utf8(key)?
+                            )))
+                        }
+                    }
+                }
+
+                let value: Result<f64, DeError> = match xml_reader.read_event(buf) {
+                    Ok(Event::Text(e)) => Ok(ISO_8859_1
+                        .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
+                        .parse::<f64>()?),
+                    e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                };
+
+                let trailing_event = xml_reader.read_event(buf)?;
+                match trailing_event {
+                    Event::End(_) => (),
+                    e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                }
+
+                Ok(Some(OneNumber {
+                    name: name?,
+                    min: min,
+                    max: max,
+                    step: step,
+                    value: value?,
+                }))
+            }
+            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+        },
+        Event::End(_) => Ok(None),
+        Event::Eof => Ok(None),
+        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+    }
+}
+
 pub struct DefNumberIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,
@@ -157,7 +217,7 @@ pub struct SetNumberIter<'a, T: std::io::BufRead> {
 impl<'a, T: std::io::BufRead> Iterator for SetNumberIter<'a, T> {
     type Item = Result<OneNumber, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.next_number() {
+        match next_one_number(&mut self.xml_reader, &mut self.buf) {
             Ok(Some(number)) => {
                 return Some(Ok(number));
             }
@@ -215,62 +275,64 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
             numbers: HashMap::new(),
         })
     }
+}
 
-    fn next_number(&mut self) -> Result<Option<OneNumber>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
-        match event {
-            Event::Start(e) => match e.name() {
-                b"oneNumber" => {
-                    let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
-                    let mut min: Option<f64> = None;
-                    let mut max: Option<f64> = None;
-                    let mut step: Option<f64> = None;
+pub struct NewNumberIter<'a, T: std::io::BufRead> {
+    xml_reader: &'a mut Reader<T>,
+    buf: &'a mut Vec<u8>,
+}
 
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
-
-                        match attr.key {
-                            b"name" => name = Ok(attr_value),
-                            b"min" => min = Some(attr_value.parse::<f64>()?),
-                            b"max" => max = Some(attr_value.parse::<f64>()?),
-                            b"step" => step = Some(attr_value.parse::<f64>()?),
-                            key => {
-                                return Err(DeError::UnexpectedAttr(format!(
-                                    "Unexpected attribute {}",
-                                    str::from_utf8(key)?
-                                )))
-                            }
-                        }
-                    }
-
-                    let value: Result<f64, DeError> = match self.xml_reader.read_event(self.buf) {
-                        Ok(Event::Text(e)) => Ok(ISO_8859_1
-                            .decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?
-                            .parse::<f64>()?),
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    };
-
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
-                    match trailing_event {
-                        Event::End(_) => (),
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    }
-
-                    Ok(Some(OneNumber {
-                        name: name?,
-                        min: min,
-                        max: max,
-                        step: step,
-                        value: value?,
-                    }))
-                }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
-            },
-            Event::End(_) => Ok(None),
-            Event::Eof => Ok(None),
-            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+impl<'a, T: std::io::BufRead> Iterator for NewNumberIter<'a, T> {
+    type Item = Result<OneNumber, DeError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match next_one_number(&mut self.xml_reader, &mut self.buf) {
+            Ok(Some(number)) => {
+                return Some(Ok(number));
+            }
+            Ok(None) => return None,
+            Err(e) => {
+                return Some(Err(e));
+            }
         }
+    }
+}
+impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
+    pub fn new(command_iter: &mut CommandIter<T>) -> NewNumberIter<T> {
+        NewNumberIter {
+            xml_reader: &mut command_iter.xml_reader,
+            buf: &mut command_iter.buf,
+        }
+    }
+
+    pub fn number_vector(
+        xml_reader: &Reader<T>,
+        start_event: &events::BytesStart,
+    ) -> Result<NewNumberVector, DeError> {
+        let mut device: Option<String> = None;
+        let mut name: Option<String> = None;
+        let mut timestamp: Option<DateTime<Utc>> = None;
+
+        for attr in start_event.attributes() {
+            let attr = attr?;
+            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            match attr.key {
+                b"device" => device = Some(attr_value),
+                b"name" => name = Some(attr_value),
+                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                key => {
+                    return Err(DeError::UnexpectedAttr(format!(
+                        "Unexpected attribute {}",
+                        str::from_utf8(key)?
+                    )))
+                }
+            }
+        }
+        Ok(NewNumberVector {
+            device: device.ok_or(DeError::MissingAttr(&"device"))?,
+            name: name.ok_or(DeError::MissingAttr(&"name"))?,
+            timestamp: timestamp,
+            numbers: HashMap::new(),
+        })
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod number_vector;
 pub use number_vector::DefNumberIter;
+pub use number_vector::NewNumberIter;
 pub use number_vector::SetNumberIter;
 
 pub mod text_vector;
@@ -180,6 +181,16 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetNumberVector(number_vector)))
                     }
+                    b"newNumberVector" => {
+                        let mut number_vector = NewNumberIter::number_vector(&self.xml_reader, &e)?;
+
+                        for number in deserialize::NewNumberIter::new(self) {
+                            let number = number?;
+                            number_vector.numbers.insert(number.name.clone(), number);
+                        }
+
+                        Ok(Some(Command::NewNumberVector(number_vector)))
+                    }
                     b"defSwitchVector" => {
                         let mut switch_vector = DefSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
@@ -339,6 +350,37 @@ mod tests {
 
         match command_iter.next().unwrap().unwrap() {
             Command::SetNumberVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIM_FOCUSING");
+                assert_eq!(param.numbers.len(), 3)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_new_number_vector() {
+        let xml = r#"
+<newNumberVector device="CCD Simulator" name="SIM_FOCUSING" timestamp="2022-10-01T21:21:10">
+    <oneNumber name="SIM_FOCUS_POSITION">
+7340
+    </oneNumber>
+    <oneNumber name="SIM_FOCUS_MAX">
+100000
+    </oneNumber>
+    <oneNumber name="SIM_SEEING">
+3.5
+    </oneNumber>
+</newNumberVector>
+"#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::NewNumberVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "SIM_FOCUSING");
                 assert_eq!(param.numbers.len(), 3)
