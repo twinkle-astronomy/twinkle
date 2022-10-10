@@ -9,6 +9,7 @@ pub use text_vector::SetTextIter;
 
 pub mod switch_vector;
 pub use switch_vector::DefSwitchIter;
+pub use switch_vector::NewSwitchIter;
 pub use switch_vector::SetSwitchIter;
 
 pub mod light_vector;
@@ -198,6 +199,16 @@ impl<T: std::io::BufRead> CommandIter<T> {
                         }
 
                         Ok(Some(Command::SetSwitchVector(switch_vector)))
+                    }
+                    b"newSwitchVector" => {
+                        let mut switch_vector = NewSwitchIter::switch_vector(&self.xml_reader, &e)?;
+
+                        for switch in deserialize::NewSwitchIter::new(self) {
+                            let switch = switch?;
+                            switch_vector.switches.insert(switch.name.clone(), switch);
+                        }
+
+                        Ok(Some(Command::NewSwitchVector(switch_vector)))
                     }
                     b"defLightVector" => {
                         let mut light_vector = DefLightIter::light_vector(&self.xml_reader, &e)?;
@@ -495,6 +506,34 @@ Off
 
         match command_iter.next().unwrap().unwrap() {
             Command::SetSwitchVector(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "DEBUG");
+                assert_eq!(param.switches.len(), 2)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_new_switch_vector() {
+        let xml = r#"
+<newSwitchVector device="CCD Simulator" name="DEBUG" timestamp="2022-10-01T22:07:22">
+    <oneSwitch name="ENABLE">
+On
+    </oneSwitch>
+    <oneSwitch name="DISABLE">
+Off
+    </oneSwitch>
+</newSwitchVector>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::NewSwitchVector(param) => {
                 assert_eq!(param.device, "CCD Simulator");
                 assert_eq!(param.name, "DEBUG");
                 assert_eq!(param.switches.len(), 2)

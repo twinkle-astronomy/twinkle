@@ -36,6 +36,7 @@ pub enum Command {
     SetNumberVector(SetNumberVector),
     DefSwitchVector(DefSwitchVector),
     SetSwitchVector(SetSwitchVector),
+    NewSwitchVector(NewSwitchVector),
     DefLightVector(DefLightVector),
     SetLightVector(SetLightVector),
     DefBlobVector(DefBlobVector),
@@ -209,6 +210,14 @@ pub struct SetSwitchVector {
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
+
+    pub switches: HashMap<String, OneSwitch>,
+}
+#[derive(Debug)]
+pub struct NewSwitchVector {
+    pub device: String,
+    pub name: String,
+    pub timestamp: Option<DateTime<Utc>>,
 
     pub switches: HashMap<String, OneSwitch>,
 }
