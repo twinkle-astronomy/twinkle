@@ -31,6 +31,60 @@ pub mod get_properties;
 use super::*;
 pub use get_properties::GetPropertiesIter;
 
+
+
+#[derive(Debug)]
+pub enum DeError {
+    XmlError(quick_xml::Error),
+    DecodeUtf8(str::Utf8Error),
+    DecodeLatin(Cow<'static, str>),
+    ParseIntError(num::ParseIntError),
+    ParseFloatError(num::ParseFloatError),
+    ParseSexagesimalError(String),
+    ParseDateTimeError(ParseError),
+    MissingAttr(&'static str),
+    BadAttr(AttrError),
+    UnexpectedAttr(String),
+    UnexpectedEvent(String),
+    UnexpectedTag(String),
+}
+
+impl From<quick_xml::Error> for DeError {
+    fn from(err: quick_xml::Error) -> Self {
+        DeError::XmlError(err)
+    }
+}
+impl From<str::Utf8Error> for DeError {
+    fn from(err: str::Utf8Error) -> Self {
+        DeError::DecodeUtf8(err)
+    }
+}
+impl From<Cow<'static, str>> for DeError {
+    fn from(err: Cow<'static, str>) -> Self {
+        DeError::DecodeLatin(err)
+    }
+}
+impl From<num::ParseIntError> for DeError {
+    fn from(err: num::ParseIntError) -> Self {
+        DeError::ParseIntError(err)
+    }
+}
+impl From<num::ParseFloatError> for DeError {
+    fn from(err: num::ParseFloatError) -> Self {
+        DeError::ParseFloatError(err)
+    }
+}
+impl From<ParseError> for DeError {
+    fn from(err: ParseError) -> Self {
+        DeError::ParseDateTimeError(err)
+    }
+}
+impl From<AttrError> for DeError {
+    fn from(err: AttrError) -> Self {
+        DeError::BadAttr(err)
+    }
+}
+
 impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
     type Error = DeError;
 
@@ -134,7 +188,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"defTextVector" => {
                         let mut text_vector = DefTextIter::text_vector(&self.xml_reader, &e)?;
 
-                        for text in deserialize::DefTextIter::new(self) {
+                        for text in DefTextIter::new(self) {
                             let text = text?;
                             text_vector.texts.insert(text.name.clone(), text);
                         }
@@ -144,7 +198,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"setTextVector" => {
                         let mut text_vector = SetTextIter::text_vector(&self.xml_reader, &e)?;
 
-                        for text in deserialize::SetTextIter::new(self) {
+                        for text in SetTextIter::new(self) {
                             let text = text?;
                             text_vector.texts.insert(text.name.clone(), text);
                         }
@@ -154,7 +208,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"newTextVector" => {
                         let mut text_vector = NewTextIter::text_vector(&self.xml_reader, &e)?;
 
-                        for text in deserialize::NewTextIter::new(self) {
+                        for text in NewTextIter::new(self) {
                             let text = text?;
                             text_vector.texts.insert(text.name.clone(), text);
                         }
@@ -164,7 +218,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"defNumberVector" => {
                         let mut number_vector = DefNumberIter::number_vector(&self.xml_reader, &e)?;
 
-                        for number in deserialize::DefNumberIter::new(self) {
+                        for number in DefNumberIter::new(self) {
                             let number = number?;
                             number_vector.numbers.insert(number.name.clone(), number);
                         }
@@ -174,7 +228,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"setNumberVector" => {
                         let mut number_vector = SetNumberIter::number_vector(&self.xml_reader, &e)?;
 
-                        for number in deserialize::SetNumberIter::new(self) {
+                        for number in SetNumberIter::new(self) {
                             let number = number?;
                             number_vector.numbers.insert(number.name.clone(), number);
                         }
@@ -184,7 +238,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"newNumberVector" => {
                         let mut number_vector = NewNumberIter::number_vector(&self.xml_reader, &e)?;
 
-                        for number in deserialize::NewNumberIter::new(self) {
+                        for number in NewNumberIter::new(self) {
                             let number = number?;
                             number_vector.numbers.insert(number.name.clone(), number);
                         }
@@ -194,7 +248,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"defSwitchVector" => {
                         let mut switch_vector = DefSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
-                        for switch in deserialize::DefSwitchIter::new(self) {
+                        for switch in DefSwitchIter::new(self) {
                             let switch = switch?;
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
@@ -204,7 +258,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"setSwitchVector" => {
                         let mut switch_vector = SetSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
-                        for switch in deserialize::SetSwitchIter::new(self) {
+                        for switch in SetSwitchIter::new(self) {
                             let switch = switch?;
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
@@ -214,7 +268,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"newSwitchVector" => {
                         let mut switch_vector = NewSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
-                        for switch in deserialize::NewSwitchIter::new(self) {
+                        for switch in NewSwitchIter::new(self) {
                             let switch = switch?;
                             switch_vector.switches.insert(switch.name.clone(), switch);
                         }
@@ -224,7 +278,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"defLightVector" => {
                         let mut light_vector = DefLightIter::light_vector(&self.xml_reader, &e)?;
 
-                        for light in deserialize::DefLightIter::new(self) {
+                        for light in DefLightIter::new(self) {
                             let light = light?;
                             light_vector.lights.insert(light.name.clone(), light);
                         }
@@ -234,7 +288,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"setLightVector" => {
                         let mut light_vector = SetLightIter::light_vector(&self.xml_reader, &e)?;
 
-                        for light in deserialize::SetLightIter::new(self) {
+                        for light in SetLightIter::new(self) {
                             let light = light?;
                             light_vector.lights.insert(light.name.clone(), light);
                         }
@@ -244,7 +298,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"defBLOBVector" => {
                         let mut blob_vector = DefBlobIter::blob_vector(&self.xml_reader, &e)?;
 
-                        for blob in deserialize::DefBlobIter::new(self) {
+                        for blob in DefBlobIter::new(self) {
                             let blob = blob?;
                             blob_vector.blobs.insert(blob.name.clone(), blob);
                         }
@@ -254,7 +308,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"setBLOBVector" => {
                         let mut blob_vector = SetBlobIter::blob_vector(&self.xml_reader, &e)?;
 
-                        for blob in deserialize::SetBlobIter::new(self) {
+                        for blob in SetBlobIter::new(self) {
                             let blob = blob?;
                             blob_vector.blobs.insert(blob.name.clone(), blob);
                         }
@@ -263,13 +317,13 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     }
                     b"message" => {
                         let message = MessageIter::message(&self.xml_reader, &e)?;
-                        for _ in deserialize::MessageIter::new(self) {}
+                        for _ in MessageIter::new(self) {}
 
                         Ok(Some(Command::Message(message)))
                     }
                     b"delProperty" => {
                         let message = DelPropertyIter::del_property(&self.xml_reader, &e)?;
-                        for _ in deserialize::DelPropertyIter::new(self) {}
+                        for _ in DelPropertyIter::new(self) {}
 
                         Ok(Some(Command::DelProperty(message)))
                     }
@@ -277,7 +331,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
                     b"getProperties" => {
                         let get_properties =
                             GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
-                        for _ in deserialize::GetPropertiesIter::new(self) {}
+                        for _ in GetPropertiesIter::new(self) {}
 
                         Ok(Some(Command::GetProperties(get_properties)))
                     }

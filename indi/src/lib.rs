@@ -20,11 +20,7 @@ use std::str::FromStr;
 
 static INDI_PROTOCOL_VERSION: &str = "1.7";
 
-pub mod deserialize;
-pub struct Client {
-    connection: TcpStream,
-    xml_writer: Writer<BufWriter<TcpStream>>,
-}
+pub mod serialization;
 
 #[derive(Debug)]
 pub enum Command {
@@ -339,56 +335,9 @@ pub struct GetProperties {
     pub name: Option<String>,
 }
 
-#[derive(Debug)]
-pub enum DeError {
-    XmlError(quick_xml::Error),
-    DecodeUtf8(str::Utf8Error),
-    DecodeLatin(Cow<'static, str>),
-    ParseIntError(num::ParseIntError),
-    ParseFloatError(num::ParseFloatError),
-    ParseSexagesimalError(String),
-    ParseDateTimeError(ParseError),
-    MissingAttr(&'static str),
-    BadAttr(AttrError),
-    UnexpectedAttr(String),
-    UnexpectedEvent(String),
-    UnexpectedTag(String),
-}
-
-impl From<quick_xml::Error> for DeError {
-    fn from(err: quick_xml::Error) -> Self {
-        DeError::XmlError(err)
-    }
-}
-impl From<str::Utf8Error> for DeError {
-    fn from(err: str::Utf8Error) -> Self {
-        DeError::DecodeUtf8(err)
-    }
-}
-impl From<Cow<'static, str>> for DeError {
-    fn from(err: Cow<'static, str>) -> Self {
-        DeError::DecodeLatin(err)
-    }
-}
-impl From<num::ParseIntError> for DeError {
-    fn from(err: num::ParseIntError) -> Self {
-        DeError::ParseIntError(err)
-    }
-}
-impl From<num::ParseFloatError> for DeError {
-    fn from(err: num::ParseFloatError) -> Self {
-        DeError::ParseFloatError(err)
-    }
-}
-impl From<ParseError> for DeError {
-    fn from(err: ParseError) -> Self {
-        DeError::ParseDateTimeError(err)
-    }
-}
-impl From<AttrError> for DeError {
-    fn from(err: AttrError) -> Self {
-        DeError::BadAttr(err)
-    }
+pub struct Client {
+    connection: TcpStream,
+    xml_writer: Writer<BufWriter<TcpStream>>,
 }
 
 impl Client {
@@ -404,11 +353,11 @@ impl Client {
 
     pub fn command_iter(
         &self,
-    ) -> Result<deserialize::CommandIter<BufReader<TcpStream>>, std::io::Error> {
+    ) -> Result<serialization::CommandIter<BufReader<TcpStream>>, std::io::Error> {
         let mut xml_reader = Reader::from_reader(BufReader::new(self.connection.try_clone()?));
         xml_reader.trim_text(true);
         xml_reader.expand_empty_elements(true);
-        Ok(deserialize::CommandIter::new(xml_reader))
+        Ok(serialization::CommandIter::new(xml_reader))
     }
 
     pub fn query_devices(&mut self) {
