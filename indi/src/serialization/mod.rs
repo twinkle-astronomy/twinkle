@@ -31,7 +31,15 @@ pub mod get_properties;
 use super::*;
 pub use get_properties::GetPropertiesIter;
 
+use quick_xml::Result as XmlResult;
+use quick_xml::{Reader, Writer};
 
+pub trait XmlSerialization {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>>;
+}
 
 #[derive(Debug)]
 pub enum DeError {

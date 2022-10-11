@@ -3,13 +3,14 @@ use quick_xml::events::attributes::AttrError;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::BytesText;
 use quick_xml::events::Event;
+use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::net::TcpStream;
 
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter};
 
 use std::num;
 use std::str;
@@ -18,9 +19,10 @@ use chrono::format::ParseError;
 use chrono::prelude::*;
 use std::str::FromStr;
 
-static INDI_PROTOCOL_VERSION: &str = "1.7";
+pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 
 pub mod serialization;
+use serialization::XmlSerialization;
 
 #[derive(Debug)]
 pub enum Command {
@@ -360,13 +362,10 @@ impl Client {
         Ok(serialization::CommandIter::new(xml_reader))
     }
 
-    pub fn query_devices(&mut self) {
-        self.xml_writer
-            .create_element("getProperties")
-            .with_attribute(("version", INDI_PROTOCOL_VERSION))
-            .write_empty()
-            .unwrap();
-        self.xml_writer.write_indent().unwrap();
-        self.xml_writer.inner().flush().unwrap();
+    pub fn send<T: XmlSerialization>(
+        &mut self,
+        command: &T,
+    ) -> XmlResult<&mut Writer<BufWriter<TcpStream>>> {
+        command.send(&mut self.xml_writer)
     }
 }

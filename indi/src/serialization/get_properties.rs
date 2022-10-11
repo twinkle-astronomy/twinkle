@@ -1,10 +1,33 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::Result as XmlResult;
+use quick_xml::{Reader, Writer};
 
 use std::str;
 
 use super::super::*;
 use super::*;
+
+impl XmlSerialization for GetProperties {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        let mut creator = xml_writer
+            .create_element("getProperties")
+            .with_attribute(("version", &*self.version));
+
+        if let Some(device) = &self.device {
+            creator = creator.with_attribute(("device", &device[..]));
+        }
+        if let Some(name) = &self.name {
+            creator = creator.with_attribute(("name", &name[..]));
+        }
+
+        creator.write_empty()?;
+        xml_writer.inner().flush()?;
+        Ok(xml_writer)
+    }
+}
 
 pub struct GetPropertiesIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
@@ -69,5 +92,30 @@ impl<'a, T: std::io::BufRead> GetPropertiesIter<'a, T> {
             Event::End(_) => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_send_get_properties() {
+        let mut writer = Writer::new(Cursor::new(Vec::new()));
+
+        let command = GetProperties {
+            version: String::from_str("1.7").unwrap(),
+            device: Some(String::from_str("CCD Simulator").unwrap()),
+            name: None,
+        };
+
+        command.send(&mut writer).unwrap();
+
+        let result = writer.into_inner().into_inner();
+        assert_eq!(
+            String::from_utf8(result).unwrap(),
+            String::from_str("<getProperties version=\"1.7\" device=\"CCD Simulator\"/>").unwrap()
+        );
     }
 }
