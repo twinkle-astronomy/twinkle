@@ -316,6 +316,14 @@ pub struct OneBlob {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct EnableBlob {
+    pub device: String,
+    pub name: Option<String>,
+
+    pub enabled: BlobEnable,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Message {
     pub device: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,

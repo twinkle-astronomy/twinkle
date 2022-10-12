@@ -6,6 +6,30 @@ use std::str;
 use super::super::*;
 use super::*;
 
+impl XmlSerialization for EnableBlob {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        let mut creator = xml_writer
+            .create_element("enableBLOB")
+            .with_attribute(("device", &*self.device));
+
+        if let Some(name) = &self.name {
+            creator = creator.with_attribute(("name", &name[..]));
+        }
+
+        match self.enabled {
+            BlobEnable::Never => creator.write_text_content(BytesText::from_plain_str("Never")),
+            BlobEnable::Also => creator.write_text_content(BytesText::from_plain_str("Also")),
+            BlobEnable::Only => creator.write_text_content(BytesText::from_plain_str("Only")),
+        }?;
+
+        xml_writer.inner().flush()?;
+        Ok(xml_writer)
+    }
+}
+
 pub struct DefBlobIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,
@@ -266,6 +290,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_parse_blob() {
@@ -306,6 +331,25 @@ mod tests {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
             }
+        );
+    }
+
+    #[test]
+    fn test_send_enable_blob() {
+        let mut writer = Writer::new(Cursor::new(Vec::new()));
+
+        let command = EnableBlob {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: None,
+            enabled: BlobEnable::Also,
+        };
+
+        command.send(&mut writer).unwrap();
+
+        let result = writer.into_inner().into_inner();
+        assert_eq!(
+            String::from_utf8(result).unwrap(),
+            String::from_str("<enableBLOB device=\"CCD Simulator\">Also</enableBLOB>").unwrap()
         );
     }
 

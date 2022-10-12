@@ -2,11 +2,13 @@ use indi;
 
 fn main() {
     let mut client = indi::Client::new("localhost:7624").unwrap();
-    client.send(&indi::GetProperties {
-        version: indi::INDI_PROTOCOL_VERSION.to_string(),
-        device: None,
-        name: None,
-    }).unwrap();
+    client
+        .send(&indi::GetProperties {
+            version: indi::INDI_PROTOCOL_VERSION.to_string(),
+            device: None,
+            name: None,
+        })
+        .unwrap();
 
     for command in client.command_iter().unwrap() {
         match command {
