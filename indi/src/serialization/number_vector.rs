@@ -9,6 +9,58 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
+impl XmlSerialization for OneNumber {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        let mut creator = xml_writer
+            .create_element("oneNumber")
+            .with_attribute(("name", &*self.name));
+
+        if let Some(min) = &self.min {
+            creator = creator.with_attribute(("min", min.to_string().as_str()));
+        }
+        if let Some(max) = &self.max {
+            creator = creator.with_attribute(("max", max.to_string().as_str()));
+        }
+        if let Some(step) = &self.step {
+            creator = creator.with_attribute(("step", step.to_string().as_str()));
+        }
+        creator.write_text_content(BytesText::from_plain_str(self.value.to_string().as_str()))?;
+
+        Ok(xml_writer)
+    }
+}
+
+impl XmlSerialization for NewNumberVector {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        mut xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        {
+            let mut creator = xml_writer
+                .create_element("newNumberVector")
+                .with_attribute(("device", &*self.device))
+                .with_attribute(("name", &*self.name));
+
+            if let Some(timestamp) = &self.timestamp {
+                //  YYYY-MM-DDTHH:MM:SS.S
+                let formated = format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f"));
+                creator = creator.with_attribute(("timestamp", formated.as_str()));
+            }
+            xml_writer = creator.write_inner_content(|xml_writer| {
+                for number in self.numbers.iter() {
+                    number.send(xml_writer)?;
+                }
+                Ok(())
+            })?;
+        }
+
+        Ok(xml_writer)
+    }
+}
+
 fn parse_number(e: &BytesText) -> Result<f64, DeError> {
     let text = ISO_8859_1.decode(&e.unescaped()?.into_owned(), DecoderTrap::Strict)?;
     let mut components = text.split([' ', ':']);
@@ -355,7 +407,7 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use std::io::Cursor;
     #[test]
     fn test_set_number() {
         let xml = r#"
@@ -483,5 +535,32 @@ mod tests {
         } else {
             panic!("Unexpected");
         }
+    }
+
+    #[test]
+    fn test_send_new_number_vector() {
+        let mut writer = Writer::new(Cursor::new(Vec::new()));
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+
+        let command = NewNumberVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            timestamp: Some(timestamp),
+            numbers: vec![OneNumber {
+                name: String::from_str("seconds").unwrap(),
+                max: None,
+                min: None,
+                step: None,
+                value: 3.0,
+            }],
+        };
+
+        command.send(&mut writer).unwrap();
+
+        let result = writer.into_inner().into_inner();
+        assert_eq!(
+            String::from_utf8(result).unwrap(),
+            String::from_str("<newNumberVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneNumber name=\"seconds\">3</oneNumber></newNumberVector>").unwrap()
+        );
     }
 }

@@ -25,7 +25,6 @@ impl XmlSerialization for EnableBlob {
             BlobEnable::Only => creator.write_text_content(BytesText::from_plain_str("Only")),
         }?;
 
-        xml_writer.inner().flush()?;
         Ok(xml_writer)
     }
 }

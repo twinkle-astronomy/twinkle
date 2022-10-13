@@ -24,7 +24,6 @@ impl XmlSerialization for GetProperties {
         }
 
         creator.write_empty()?;
-        xml_writer.inner().flush()?;
         Ok(xml_writer)
     }
 }

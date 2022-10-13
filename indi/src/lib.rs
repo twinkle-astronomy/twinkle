@@ -16,6 +16,7 @@ use std::str;
 
 use chrono::format::ParseError;
 use chrono::prelude::*;
+use std::io::Write;
 use std::str::FromStr;
 
 pub static INDI_PROTOCOL_VERSION: &str = "1.7";
@@ -165,7 +166,7 @@ pub struct SetNumberVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub numbers: Vec< OneNumber>,
+    pub numbers: Vec<OneNumber>,
 }
 
 #[derive(Debug)]
@@ -369,10 +370,9 @@ impl Client {
         Ok(serialization::CommandIter::new(xml_reader))
     }
 
-    pub fn send<T: XmlSerialization>(
-        &mut self,
-        command: &T,
-    ) -> XmlResult<&mut Writer<BufWriter<TcpStream>>> {
-        command.send(&mut self.xml_writer)
+    pub fn send<T: XmlSerialization>(&mut self, command: &T) -> Result<(), quick_xml::Error> {
+        command.send(&mut self.xml_writer)?;
+        self.xml_writer.inner().flush()?;
+        Ok(())
     }
 }

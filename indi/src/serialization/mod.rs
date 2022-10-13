@@ -228,7 +228,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for number in DefNumberIter::new(self) {
                             let number = number?;
-                            number_vector.numbers.push( number);
+                            number_vector.numbers.push(number);
                         }
 
                         Ok(Some(Command::DefNumberVector(number_vector)))
@@ -258,7 +258,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for switch in DefSwitchIter::new(self) {
                             let switch = switch?;
-                            switch_vector.switches.push( switch);
+                            switch_vector.switches.push(switch);
                         }
 
                         Ok(Some(Command::DefSwitchVector(switch_vector)))
@@ -268,7 +268,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for switch in SetSwitchIter::new(self) {
                             let switch = switch?;
-                            switch_vector.switches.push( switch);
+                            switch_vector.switches.push(switch);
                         }
 
                         Ok(Some(Command::SetSwitchVector(switch_vector)))
@@ -288,7 +288,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for light in DefLightIter::new(self) {
                             let light = light?;
-                            light_vector.lights.push( light);
+                            light_vector.lights.push(light);
                         }
 
                         Ok(Some(Command::DefLightVector(light_vector)))
