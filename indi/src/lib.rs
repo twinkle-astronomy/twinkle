@@ -7,7 +7,6 @@ use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::net::TcpStream;
 
 use std::io::{BufReader, BufWriter};
@@ -94,7 +93,7 @@ pub struct DefTextVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub texts: HashMap<String, DefText>,
+    pub texts: Vec<DefText>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -113,7 +112,7 @@ pub struct SetTextVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub texts: HashMap<String, OneText>,
+    pub texts: Vec<OneText>,
 }
 
 #[derive(Debug)]
@@ -122,7 +121,7 @@ pub struct NewTextVector {
     pub name: String,
     pub timestamp: Option<DateTime<Utc>>,
 
-    pub texts: HashMap<String, OneText>,
+    pub texts: Vec<OneText>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -143,7 +142,7 @@ pub struct DefNumberVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub numbers: HashMap<String, DefNumber>,
+    pub numbers: Vec<DefNumber>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -166,7 +165,7 @@ pub struct SetNumberVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub numbers: HashMap<String, OneNumber>,
+    pub numbers: Vec< OneNumber>,
 }
 
 #[derive(Debug)]
@@ -175,7 +174,7 @@ pub struct NewNumberVector {
     pub name: String,
     pub timestamp: Option<DateTime<Utc>>,
 
-    pub numbers: HashMap<String, OneNumber>,
+    pub numbers: Vec<OneNumber>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -200,7 +199,7 @@ pub struct DefSwitchVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub switches: HashMap<String, DefSwitch>,
+    pub switches: Vec<DefSwitch>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -219,7 +218,7 @@ pub struct SetSwitchVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub switches: HashMap<String, OneSwitch>,
+    pub switches: Vec<OneSwitch>,
 }
 #[derive(Debug)]
 pub struct NewSwitchVector {
@@ -227,7 +226,7 @@ pub struct NewSwitchVector {
     pub name: String,
     pub timestamp: Option<DateTime<Utc>>,
 
-    pub switches: HashMap<String, OneSwitch>,
+    pub switches: Vec<OneSwitch>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -246,7 +245,7 @@ pub struct DefLightVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub lights: HashMap<String, DefLight>,
+    pub lights: Vec<DefLight>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -264,7 +263,7 @@ pub struct SetLightVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub lights: HashMap<String, OneLight>,
+    pub lights: Vec<OneLight>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -285,7 +284,7 @@ pub struct DefBlobVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub blobs: HashMap<String, DefBlob>,
+    pub blobs: Vec<DefBlob>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -303,7 +302,7 @@ pub struct SetBlobVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub blobs: HashMap<String, OneBlob>,
+    pub blobs: Vec<OneBlob>,
 }
 
 #[derive(Debug, PartialEq)]

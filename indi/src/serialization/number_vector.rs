@@ -159,7 +159,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            numbers: HashMap::new(),
+            numbers: Vec::new(),
         })
     }
 
@@ -288,7 +288,7 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            numbers: HashMap::new(),
+            numbers: Vec::new(),
         })
     }
 }
@@ -347,7 +347,7 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             timestamp: timestamp,
-            numbers: HashMap::new(),
+            numbers: Vec::new(),
         })
     }
 }

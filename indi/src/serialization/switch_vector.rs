@@ -130,7 +130,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            switches: HashMap::new(),
+            switches: Vec::new(),
         })
     }
 
@@ -249,7 +249,7 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            switches: HashMap::new(),
+            switches: Vec::new(),
         })
     }
 }
@@ -309,7 +309,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             timestamp: timestamp,
-            switches: HashMap::new(),
+            switches: Vec::new(),
         })
     }
 }

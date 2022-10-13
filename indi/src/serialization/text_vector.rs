@@ -118,7 +118,7 @@ impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             timestamp: timestamp,
-            texts: HashMap::new(),
+            texts: Vec::new(),
         })
     }
 }
@@ -187,7 +187,7 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            texts: HashMap::new(),
+            texts: Vec::new(),
         })
     }
 }
@@ -265,7 +265,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            texts: HashMap::new(),
+            texts: Vec::new(),
         })
     }
     fn next_text(&mut self) -> Result<Option<DefText>, DeError> {

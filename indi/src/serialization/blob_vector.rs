@@ -102,7 +102,7 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            blobs: HashMap::new(),
+            blobs: Vec::new(),
         })
     }
 
@@ -213,7 +213,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
             timeout: timeout,
             timestamp: timestamp,
             message: message,
-            blobs: HashMap::new(),
+            blobs: Vec::new(),
         })
     }
 

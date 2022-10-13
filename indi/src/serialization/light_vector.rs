@@ -72,7 +72,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
             state: state.ok_or(DeError::MissingAttr(&"state"))?,
             timestamp: timestamp,
             message: message,
-            lights: HashMap::new(),
+            lights: Vec::new(),
         })
     }
 
@@ -187,7 +187,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
             state: state.ok_or(DeError::MissingAttr(&"state"))?,
             timestamp: timestamp,
             message: message,
-            lights: HashMap::new(),
+            lights: Vec::new(),
         })
     }
 

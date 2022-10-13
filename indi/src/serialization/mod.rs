@@ -198,7 +198,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for text in DefTextIter::new(self) {
                             let text = text?;
-                            text_vector.texts.insert(text.name.clone(), text);
+                            text_vector.texts.push(text);
                         }
 
                         Ok(Some(Command::DefTextVector(text_vector)))
@@ -208,7 +208,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for text in SetTextIter::new(self) {
                             let text = text?;
-                            text_vector.texts.insert(text.name.clone(), text);
+                            text_vector.texts.push(text);
                         }
 
                         Ok(Some(Command::SetTextVector(text_vector)))
@@ -218,7 +218,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for text in NewTextIter::new(self) {
                             let text = text?;
-                            text_vector.texts.insert(text.name.clone(), text);
+                            text_vector.texts.push(text);
                         }
 
                         Ok(Some(Command::NewTextVector(text_vector)))
@@ -228,7 +228,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for number in DefNumberIter::new(self) {
                             let number = number?;
-                            number_vector.numbers.insert(number.name.clone(), number);
+                            number_vector.numbers.push( number);
                         }
 
                         Ok(Some(Command::DefNumberVector(number_vector)))
@@ -238,7 +238,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for number in SetNumberIter::new(self) {
                             let number = number?;
-                            number_vector.numbers.insert(number.name.clone(), number);
+                            number_vector.numbers.push(number);
                         }
 
                         Ok(Some(Command::SetNumberVector(number_vector)))
@@ -248,7 +248,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for number in NewNumberIter::new(self) {
                             let number = number?;
-                            number_vector.numbers.insert(number.name.clone(), number);
+                            number_vector.numbers.push(number);
                         }
 
                         Ok(Some(Command::NewNumberVector(number_vector)))
@@ -258,7 +258,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for switch in DefSwitchIter::new(self) {
                             let switch = switch?;
-                            switch_vector.switches.insert(switch.name.clone(), switch);
+                            switch_vector.switches.push( switch);
                         }
 
                         Ok(Some(Command::DefSwitchVector(switch_vector)))
@@ -268,7 +268,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for switch in SetSwitchIter::new(self) {
                             let switch = switch?;
-                            switch_vector.switches.insert(switch.name.clone(), switch);
+                            switch_vector.switches.push( switch);
                         }
 
                         Ok(Some(Command::SetSwitchVector(switch_vector)))
@@ -278,7 +278,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for switch in NewSwitchIter::new(self) {
                             let switch = switch?;
-                            switch_vector.switches.insert(switch.name.clone(), switch);
+                            switch_vector.switches.push(switch);
                         }
 
                         Ok(Some(Command::NewSwitchVector(switch_vector)))
@@ -288,7 +288,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for light in DefLightIter::new(self) {
                             let light = light?;
-                            light_vector.lights.insert(light.name.clone(), light);
+                            light_vector.lights.push( light);
                         }
 
                         Ok(Some(Command::DefLightVector(light_vector)))
@@ -298,7 +298,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for light in SetLightIter::new(self) {
                             let light = light?;
-                            light_vector.lights.insert(light.name.clone(), light);
+                            light_vector.lights.push(light);
                         }
 
                         Ok(Some(Command::SetLightVector(light_vector)))
@@ -308,7 +308,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for blob in DefBlobIter::new(self) {
                             let blob = blob?;
-                            blob_vector.blobs.insert(blob.name.clone(), blob);
+                            blob_vector.blobs.push(blob);
                         }
 
                         Ok(Some(Command::DefBlobVector(blob_vector)))
@@ -318,7 +318,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         for blob in SetBlobIter::new(self) {
                             let blob = blob?;
-                            blob_vector.blobs.insert(blob.name.clone(), blob);
+                            blob_vector.blobs.push(blob);
                         }
 
                         Ok(Some(Command::SetBlobVector(blob_vector)))
