@@ -1,16 +1,68 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
-
 use std::str;
 
 use encoding::all::ISO_8859_1;
-use encoding::{DecoderTrap, Encoding};
+use encoding::{DecoderTrap, EncoderTrap, Encoding};
+
+use log::warn;
 
 use super::super::*;
 use super::*;
 
-// xml_reader: &'a mut Reader<T>,
-// buf: &'a mut Vec<u8>,
+impl XmlSerialization for OneText {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        let creator = xml_writer
+            .create_element("oneText")
+            .with_attribute(("name", &*self.name));
+
+        match ISO_8859_1.encode(self.value.as_str(), EncoderTrap::Replace) {
+            Ok(content) => {
+                creator.write_text_content(BytesText::from_plain(&content))?;
+            }
+            Err(e) => {
+                warn!(
+                    "Encoding error during indi::XmlSerialization::send(): {:?}",
+                    e
+                );
+            }
+        }
+
+        Ok(xml_writer)
+    }
+}
+
+impl XmlSerialization for NewTextVector {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        mut xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        {
+            let mut creator = xml_writer
+                .create_element("newTextVector")
+                .with_attribute(("device", &*self.device))
+                .with_attribute(("name", &*self.name));
+
+            if let Some(timestamp) = &self.timestamp {
+                creator = creator.with_attribute((
+                    "timestamp",
+                    format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
+                ));
+            }
+            xml_writer = creator.write_inner_content(|xml_writer| {
+                for text in self.texts.iter() {
+                    text.send(xml_writer)?;
+                }
+                Ok(())
+            })?;
+        }
+
+        Ok(xml_writer)
+    }
+}
 
 fn next_one_text<T: std::io::BufRead>(
     xml_reader: &mut Reader<T>,
@@ -324,6 +376,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_def_text() {
@@ -352,13 +405,13 @@ Telescope Simulator
 
     #[test]
     fn test_one_text() {
-        let xml = r#"
-    <oneText name="ACTIVE_TELESCOPE">
-Simulator changed
+        let xml = b"\
+    <oneText name=\"ACTIVE_TELESCOPE\">
+Simulator \xFF changed
     </oneText>
-"#;
+";
 
-        let mut reader = Reader::from_str(xml);
+        let mut reader = Reader::from_bytes(xml);
         reader.trim_text(true);
         let mut command_iter = CommandIter::new(reader);
         let mut number_iter = SetTextIter::new(&mut command_iter);
@@ -369,8 +422,32 @@ Simulator changed
             result,
             OneText {
                 name: "ACTIVE_TELESCOPE".to_string(),
-                value: "Simulator changed".to_string()
+                value: "Simulator ÿ changed".to_string()
             }
+        );
+    }
+
+    #[test]
+    fn test_send_new_text_vector() {
+        let mut writer = Writer::new(Cursor::new(Vec::new()));
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+
+        let command = NewTextVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            timestamp: Some(timestamp),
+            texts: vec![OneText {
+                name: String::from_str("seconds").unwrap(),
+                value: String::from_str("Long ÿ enough").unwrap(),
+            }],
+        };
+
+        command.send(&mut writer).unwrap();
+
+        let result = writer.into_inner().into_inner();
+        assert_eq!(
+            result,
+            b"<newTextVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneText name=\"seconds\">Long \xFF enough</oneText></newTextVector>"
         );
     }
 }

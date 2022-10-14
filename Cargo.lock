@@ -227,6 +227,7 @@ dependencies = [
  "base64",
  "chrono",
  "encoding",
+ "log",
  "quick-xml",
 ]
 

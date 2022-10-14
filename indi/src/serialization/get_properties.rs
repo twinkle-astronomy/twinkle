@@ -1,5 +1,4 @@
 use quick_xml::events::Event;
-use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
 use std::str;
