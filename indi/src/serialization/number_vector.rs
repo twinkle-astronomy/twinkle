@@ -45,9 +45,10 @@ impl XmlSerialization for NewNumberVector {
                 .with_attribute(("name", &*self.name));
 
             if let Some(timestamp) = &self.timestamp {
-                //  YYYY-MM-DDTHH:MM:SS.S
-                let formated = format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f"));
-                creator = creator.with_attribute(("timestamp", formated.as_str()));
+                creator = creator.with_attribute((
+                    "timestamp",
+                    format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
+                ));
             }
             xml_writer = creator.write_inner_content(|xml_writer| {
                 for number in self.numbers.iter() {

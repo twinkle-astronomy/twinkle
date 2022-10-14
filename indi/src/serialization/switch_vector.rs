@@ -6,6 +6,53 @@ use std::str;
 use super::super::*;
 use super::*;
 
+impl XmlSerialization for OneSwitch {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        let creator = xml_writer
+            .create_element("oneSwitch")
+            .with_attribute(("name", &*self.name));
+
+        match self.value {
+            SwitchState::On => creator.write_text_content(BytesText::from_plain_str("On")),
+            SwitchState::Off => creator.write_text_content(BytesText::from_plain_str("Off")),
+        }?;
+
+        Ok(xml_writer)
+    }
+}
+
+impl XmlSerialization for NewSwitchVector {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        mut xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        {
+            let mut creator = xml_writer
+                .create_element("newSwitchVector")
+                .with_attribute(("device", &*self.device))
+                .with_attribute(("name", &*self.name));
+
+            if let Some(timestamp) = &self.timestamp {
+                creator = creator.with_attribute((
+                    "timestamp",
+                    format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
+                ));
+            }
+            xml_writer = creator.write_inner_content(|xml_writer| {
+                for number in self.switches.iter() {
+                    number.send(xml_writer)?;
+                }
+                Ok(())
+            })?;
+        }
+
+        Ok(xml_writer)
+    }
+}
+
 fn next_one_switch<T: std::io::BufRead>(
     xml_reader: &mut Reader<T>,
     buf: &mut Vec<u8>,
@@ -316,6 +363,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_parse_switch() {
@@ -384,6 +432,29 @@ On
                 name: "INDI_DISABLED".to_string(),
                 value: SwitchState::On
             }
+        );
+    }
+    #[test]
+    fn test_send_new_switch_vector() {
+        let mut writer = Writer::new(Cursor::new(Vec::new()));
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+
+        let command = NewSwitchVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            timestamp: Some(timestamp),
+            switches: vec![OneSwitch {
+                name: String::from_str("seconds").unwrap(),
+                value: SwitchState::On,
+            }],
+        };
+
+        command.send(&mut writer).unwrap();
+
+        let result = writer.into_inner().into_inner();
+        assert_eq!(
+            String::from_utf8(result).unwrap(),
+            String::from_str("<newSwitchVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneSwitch name=\"seconds\">On</oneSwitch></newSwitchVector>").unwrap()
         );
     }
 }
