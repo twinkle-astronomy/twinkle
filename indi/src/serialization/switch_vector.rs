@@ -6,6 +6,36 @@ use std::str;
 use super::super::*;
 use super::*;
 
+impl DefSwitchVector {
+    pub fn switch_vector(self) -> (String, SwitchVector) {
+        (
+            self.name,
+            SwitchVector {
+                group: self.group,
+                label: self.label,
+                state: self.state,
+                perm: self.perm,
+                rule: self.rule,
+                timeout: self.timeout,
+                timestamp: self.timestamp,
+                values: self
+                    .switches
+                    .into_iter()
+                    .map(|i| {
+                        (
+                            i.name,
+                            Switch {
+                                label: i.label,
+                                value: i.value,
+                            },
+                        )
+                    })
+                    .collect(),
+            },
+        )
+    }
+}
+
 impl XmlSerialization for OneSwitch {
     fn send<'a, T: std::io::Write>(
         &self,

@@ -34,6 +34,330 @@ pub use get_properties::GetPropertiesIter;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug)]
+pub enum Command {
+    // Commands from Device to Clients
+    DefTextVector(DefTextVector),
+    SetTextVector(SetTextVector),
+    NewTextVector(NewTextVector),
+    DefNumberVector(DefNumberVector),
+    SetNumberVector(SetNumberVector),
+    NewNumberVector(NewNumberVector),
+    DefSwitchVector(DefSwitchVector),
+    SetSwitchVector(SetSwitchVector),
+    NewSwitchVector(NewSwitchVector),
+    DefLightVector(DefLightVector),
+    SetLightVector(SetLightVector),
+    DefBlobVector(DefBlobVector),
+    SetBlobVector(SetBlobVector),
+    Message(Message),
+    DelProperty(DelProperty),
+
+    // Commands from Client to Device
+    GetProperties(GetProperties),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PropertyState {
+    Idle,
+    Ok,
+    Busy,
+    Alert,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SwitchState {
+    On,
+    Off,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SwitchRule {
+    OneOfMany,
+    AtMostOne,
+    AnyOfMany,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PropertyPerm {
+    RO,
+    WO,
+    RW,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BlobEnable {
+    Never,
+    Also,
+    Only,
+}
+
+#[derive(Debug)]
+pub struct DefTextVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub texts: Vec<DefText>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DefText {
+    pub name: String,
+    pub label: Option<String>,
+    pub value: String,
+}
+
+#[derive(Debug)]
+pub struct SetTextVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub texts: Vec<OneText>,
+}
+
+#[derive(Debug)]
+pub struct NewTextVector {
+    pub device: String,
+    pub name: String,
+    pub timestamp: Option<DateTime<Utc>>,
+
+    pub texts: Vec<OneText>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneText {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug)]
+pub struct DefNumberVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub numbers: Vec<DefNumber>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DefNumber {
+    name: String,
+    label: Option<String>,
+    format: String,
+    min: f64,
+    max: f64,
+    step: f64,
+    value: f64,
+}
+
+#[derive(Debug)]
+pub struct SetNumberVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub numbers: Vec<OneNumber>,
+}
+
+#[derive(Debug)]
+pub struct NewNumberVector {
+    pub device: String,
+    pub name: String,
+    pub timestamp: Option<DateTime<Utc>>,
+
+    pub numbers: Vec<OneNumber>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneNumber {
+    pub name: String,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub step: Option<f64>,
+    pub value: f64,
+}
+
+#[derive(Debug)]
+pub struct DefSwitchVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub rule: SwitchRule,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub switches: Vec<DefSwitch>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DefSwitch {
+    pub name: String,
+    pub label: Option<String>,
+    pub value: SwitchState,
+}
+
+#[derive(Debug)]
+pub struct SetSwitchVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub switches: Vec<OneSwitch>,
+}
+#[derive(Debug)]
+pub struct NewSwitchVector {
+    pub device: String,
+    pub name: String,
+    pub timestamp: Option<DateTime<Utc>>,
+
+    pub switches: Vec<OneSwitch>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneSwitch {
+    pub name: String,
+    pub value: SwitchState,
+}
+
+#[derive(Debug)]
+pub struct DefLightVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub lights: Vec<DefLight>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DefLight {
+    name: String,
+    label: Option<String>,
+    value: PropertyState,
+}
+
+#[derive(Debug)]
+pub struct SetLightVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub lights: Vec<OneLight>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneLight {
+    name: String,
+    value: PropertyState,
+}
+
+#[derive(Debug)]
+pub struct DefBlobVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub blobs: Vec<DefBlob>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DefBlob {
+    name: String,
+    label: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct SetBlobVector {
+    pub device: String,
+    pub name: String,
+    pub state: PropertyState,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+
+    pub blobs: Vec<OneBlob>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OneBlob {
+    name: String,
+    size: u64,
+    enclen: Option<u64>,
+    format: String,
+    value: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct EnableBlob {
+    pub device: String,
+    pub name: Option<String>,
+
+    pub enabled: BlobEnable,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Message {
+    pub device: Option<String>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DelProperty {
+    pub device: String,
+    pub name: Option<String>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct GetProperties {
+    pub version: String,
+    pub device: Option<String>,
+    pub name: Option<String>,
+}
+
 pub trait XmlSerialization {
     fn send<'a, T: std::io::Write>(
         &self,
@@ -353,469 +677,6 @@ impl<T: std::io::BufRead> CommandIter<T> {
             }
             Event::Eof => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_def_number_vector() {
-        let xml = r#"
-    <defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
-        <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-    1280
-        </defNumber>
-        <defNumber name="SIM_YRES" label="CCD Y resolution" format="%4.0f" min="512" max="8192" step="512">
-    1024
-        </defNumber>
-        <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-    5.2000000000000001776
-        </defNumber>
-    </defNumberVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::DefNumberVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIMULATOR_SETTINGS");
-                assert_eq!(param.numbers.len(), 3)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_set_number_vector() {
-        let xml = r#"
-<setNumberVector device="CCD Simulator" name="SIM_FOCUSING" state="Ok" timeout="60" timestamp="2022-10-01T21:21:10">
-    <oneNumber name="SIM_FOCUS_POSITION">
-7340
-    </oneNumber>
-    <oneNumber name="SIM_FOCUS_MAX">
-100000
-    </oneNumber>
-    <oneNumber name="SIM_SEEING">
-3.5
-    </oneNumber>
-</setNumberVector>
-"#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::SetNumberVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIM_FOCUSING");
-                assert_eq!(param.numbers.len(), 3)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_new_number_vector() {
-        let xml = r#"
-<newNumberVector device="CCD Simulator" name="SIM_FOCUSING" timestamp="2022-10-01T21:21:10">
-    <oneNumber name="SIM_FOCUS_POSITION">
-7340
-    </oneNumber>
-    <oneNumber name="SIM_FOCUS_MAX">
-100000
-    </oneNumber>
-    <oneNumber name="SIM_SEEING">
-3.5
-    </oneNumber>
-</newNumberVector>
-"#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::NewNumberVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIM_FOCUSING");
-                assert_eq!(param.numbers.len(), 3)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_def_text_vector() {
-        let xml = r#"
-<defTextVector device="CCD Simulator" name="ACTIVE_DEVICES" label="Snoop devices" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-09-05T21:07:22">
-    <defText name="ACTIVE_TELESCOPE" label="Telescope">
-Telescope Simulator
-    </defText>
-    <defText name="ACTIVE_ROTATOR" label="Rotator">
-Rotator Simulator
-    </defText>
-    <defText name="ACTIVE_FOCUSER" label="Focuser">
-Focuser Simulator
-    </defText>
-    <defText name="ACTIVE_FILTER" label="Filter">
-CCD Simulator
-    </defText>
-    <defText name="ACTIVE_SKYQUALITY" label="Sky Quality">
-SQM
-    </defText>
-</defTextVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::DefTextVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "ACTIVE_DEVICES");
-                assert_eq!(param.texts.len(), 5)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_set_text_vector() {
-        let xml = r#"
-<setTextVector device="CCD Simulator" name="ACTIVE_DEVICES" state="Ok" timeout="60" timestamp="2022-10-01T17:06:14">
-    <oneText name="ACTIVE_TELESCOPE">
-Simulator changed
-    </oneText>
-    <oneText name="ACTIVE_ROTATOR">
-Rotator Simulator
-    </oneText>
-    <oneText name="ACTIVE_FOCUSER">
-Focuser Simulator
-    </oneText>
-    <oneText name="ACTIVE_FILTER">
-CCD Simulator
-    </oneText>
-    <oneText name="ACTIVE_SKYQUALITY">
-SQM
-    </oneText>
-</setTextVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::SetTextVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "ACTIVE_DEVICES");
-                assert_eq!(param.texts.len(), 5)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_new_text_vector() {
-        let xml = r#"
-<newTextVector device="CCD Simulator" name="ACTIVE_DEVICES" timestamp="2022-10-01T17:06:14">
-    <oneText name="ACTIVE_TELESCOPE">
-Simulator changed
-    </oneText>
-    <oneText name="ACTIVE_ROTATOR">
-Rotator Simulator
-    </oneText>
-    <oneText name="ACTIVE_FOCUSER">
-Focuser Simulator
-    </oneText>
-    <oneText name="ACTIVE_FILTER">
-CCD Simulator
-    </oneText>
-    <oneText name="ACTIVE_SKYQUALITY">
-SQM
-    </oneText>
-</newTextVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::NewTextVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "ACTIVE_DEVICES");
-                assert_eq!(param.texts.len(), 5)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_def_switch_vector() {
-        let xml = r#"
-<defSwitchVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-09-06T01:41:22">
-    <defSwitch name="INDI_ENABLED" label="Enabled">
-Off
-    </defSwitch>
-    <defSwitch name="INDI_DISABLED" label="Disabled">
-On
-    </defSwitch>
-</defSwitchVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::DefSwitchVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIMULATE_BAYER");
-                assert_eq!(param.switches.len(), 2)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_set_switch_vector() {
-        let xml = r#"
-<setSwitchVector device="CCD Simulator" name="DEBUG" state="Ok" timeout="0" timestamp="2022-10-01T22:07:22">
-    <oneSwitch name="ENABLE">
-On
-    </oneSwitch>
-    <oneSwitch name="DISABLE">
-Off
-    </oneSwitch>
-</setSwitchVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::SetSwitchVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "DEBUG");
-                assert_eq!(param.switches.len(), 2)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_new_switch_vector() {
-        let xml = r#"
-<newSwitchVector device="CCD Simulator" name="DEBUG" timestamp="2022-10-01T22:07:22">
-    <oneSwitch name="ENABLE">
-On
-    </oneSwitch>
-    <oneSwitch name="DISABLE">
-Off
-    </oneSwitch>
-</newSwitchVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::NewSwitchVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "DEBUG");
-                assert_eq!(param.switches.len(), 2)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_def_light_vector() {
-        let xml = r#"
-<defLightVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" timestamp="2022-09-06T01:41:22">
-    <defLight name="INDI_ENABLED" label="Enabled">
-Busy
-    </defLight>
-    <defLight name="INDI_DISABLED" label="Disabled">
-Ok
-    </defLight>
-</defLightVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::DefLightVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIMULATE_BAYER");
-                assert_eq!(param.lights.len(), 2)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_set_light_vector() {
-        let xml = r#"
-<setLightVector device="CCD Simulator" name="SIMULATE_BAYER" state="Idle" timestamp="2022-09-06T01:41:22">
-    <oneLight name="INDI_ENABLED">
-Busy
-    </oneLight>
-    <oneLight name="INDI_DISABLED">
-Ok
-    </oneLight>
-</setLightVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::SetLightVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIMULATE_BAYER");
-                assert_eq!(param.lights.len(), 2)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_blob_vector() {
-        let xml = r#"
-<defBLOBVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" perm="rw"  state="Idle" timestamp="2022-09-06T01:41:22">
-    <defBLOB name="INDI_ENABLED" label="Enabled"/>
-    <defBLOB name="INDI_DISABLED" label="Disabled"/>
-</defBLOBVector>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::DefBlobVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "SIMULATE_BAYER");
-                assert_eq!(param.blobs.len(), 2)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_set_blob_vector() {
-        let xml = include_str!("../../tests/image_capture_blob_vector.log");
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::SetBlobVector(param) => {
-                assert_eq!(param.device, "CCD Simulator");
-                assert_eq!(param.name, "CCD1");
-                assert_eq!(param.state, PropertyState::Ok);
-                assert_eq!(param.blobs.len(), 1)
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_message() {
-        let xml = r#"
-<message device="Telescope Simulator" timestamp="2022-10-02T00:37:07" message="[INFO] update mount and pier side: Pier Side On, mount type 2"/>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::Message(param) => {
-                assert_eq!(param.device, Some(String::from("Telescope Simulator")));
-                assert_eq!(
-                    param.message,
-                    Some(String::from(
-                        "[INFO] update mount and pier side: Pier Side On, mount type 2"
-                    ))
-                );
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_get_properties() {
-        let xml = r#"
-<getProperties version="1.7" device="Telescope Simulator" name="foothing"/>
-                    "#;
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        match command_iter.next().unwrap().unwrap() {
-            Command::GetProperties(param) => {
-                assert_eq!(param.device, Some(String::from("Telescope Simulator")));
-                assert_eq!(param.name, Some(String::from("foothing")));
-                assert_eq!(param.version, String::from("1.7"));
-            }
-            e => {
-                panic!("Unexpected: {:?}", e)
-            }
-        }
-    }
-
-    #[test]
-    fn test_set_simulator_log() {
-        let xml = include_str!("../../tests/image_capture.log");
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-
-        for command in command_iter.by_ref() {
-            match command {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("position: {}", command_iter.buffer_position());
-                    panic!("{:?}", e);
-                }
-            }
         }
     }
 }

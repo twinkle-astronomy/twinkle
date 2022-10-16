@@ -19,330 +19,174 @@ use chrono::prelude::*;
 use std::io::Write;
 use std::str::FromStr;
 
+use std::collections::HashMap;
+
 pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 
 pub mod serialization;
-use serialization::XmlSerialization;
-
-#[derive(Debug)]
-pub enum Command {
-    // Commands from Device to Clients
-    DefTextVector(DefTextVector),
-    SetTextVector(SetTextVector),
-    NewTextVector(NewTextVector),
-    DefNumberVector(DefNumberVector),
-    SetNumberVector(SetNumberVector),
-    NewNumberVector(NewNumberVector),
-    DefSwitchVector(DefSwitchVector),
-    SetSwitchVector(SetSwitchVector),
-    NewSwitchVector(NewSwitchVector),
-    DefLightVector(DefLightVector),
-    SetLightVector(SetLightVector),
-    DefBlobVector(DefBlobVector),
-    SetBlobVector(SetBlobVector),
-    Message(Message),
-    DelProperty(DelProperty),
-
-    // Commands from Client to Device
-    GetProperties(GetProperties),
-}
+pub use serialization::*;
 
 #[derive(Debug, PartialEq)]
-pub enum PropertyState {
-    Idle,
-    Ok,
-    Busy,
-    Alert,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum SwitchState {
-    On,
-    Off,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum SwitchRule {
-    OneOfMany,
-    AtMostOne,
-    AnyOfMany,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum PropertyPerm {
-    RO,
-    WO,
-    RW,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum BlobEnable {
-    Never,
-    Also,
-    Only,
-}
-
-#[derive(Debug)]
-pub struct DefTextVector {
-    pub device: String,
-    pub name: String,
+pub struct Switch {
     pub label: Option<String>,
+    pub value: SwitchState,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SwitchVector {
     pub group: Option<String>,
-    pub state: PropertyState,
-    pub perm: PropertyPerm,
-    pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-
-    pub texts: Vec<DefText>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct DefText {
-    pub name: String,
     pub label: Option<String>,
-    pub value: String,
-}
-
-#[derive(Debug)]
-pub struct SetTextVector {
-    pub device: String,
-    pub name: String,
-    pub state: PropertyState,
-    pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-
-    pub texts: Vec<OneText>,
-}
-
-#[derive(Debug)]
-pub struct NewTextVector {
-    pub device: String,
-    pub name: String,
-    pub timestamp: Option<DateTime<Utc>>,
-
-    pub texts: Vec<OneText>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct OneText {
-    pub name: String,
-    pub value: String,
-}
-
-#[derive(Debug)]
-pub struct DefNumberVector {
-    pub device: String,
-    pub name: String,
-    pub label: Option<String>,
-    pub group: Option<String>,
-    pub state: PropertyState,
-    pub perm: PropertyPerm,
-    pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-
-    pub numbers: Vec<DefNumber>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct DefNumber {
-    name: String,
-    label: Option<String>,
-    format: String,
-    min: f64,
-    max: f64,
-    step: f64,
-    value: f64,
-}
-
-#[derive(Debug)]
-pub struct SetNumberVector {
-    pub device: String,
-    pub name: String,
-    pub state: PropertyState,
-    pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-
-    pub numbers: Vec<OneNumber>,
-}
-
-#[derive(Debug)]
-pub struct NewNumberVector {
-    pub device: String,
-    pub name: String,
-    pub timestamp: Option<DateTime<Utc>>,
-
-    pub numbers: Vec<OneNumber>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct OneNumber {
-    name: String,
-    min: Option<f64>,
-    max: Option<f64>,
-    step: Option<f64>,
-    value: f64,
-}
-
-#[derive(Debug)]
-pub struct DefSwitchVector {
-    pub device: String,
-    pub name: String,
-    pub label: Option<String>,
-    pub group: Option<String>,
     pub state: PropertyState,
     pub perm: PropertyPerm,
     pub rule: SwitchRule,
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
 
-    pub switches: Vec<DefSwitch>,
+    pub values: HashMap<String, Switch>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DefSwitch {
-    name: String,
-    label: Option<String>,
-    value: SwitchState,
+pub struct Number {
+    pub label: Option<String>,
+    pub format: String,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub value: f64,
 }
-
-#[derive(Debug)]
-pub struct SetSwitchVector {
-    pub device: String,
-    pub name: String,
+#[derive(Debug, PartialEq)]
+pub struct NumberVector {
+    pub group: Option<String>,
+    pub label: Option<String>,
     pub state: PropertyState,
+    pub perm: PropertyPerm,
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
 
-    pub switches: Vec<OneSwitch>,
-}
-#[derive(Debug)]
-pub struct NewSwitchVector {
-    pub device: String,
-    pub name: String,
-    pub timestamp: Option<DateTime<Utc>>,
-
-    pub switches: Vec<OneSwitch>,
+    pub values: HashMap<String, Number>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct OneSwitch {
-    name: String,
-    value: SwitchState,
-}
-
-#[derive(Debug)]
-pub struct DefLightVector {
-    pub device: String,
-    pub name: String,
+pub struct Text {
     pub label: Option<String>,
+    pub value: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TextVector {
     pub group: Option<String>,
-    pub state: PropertyState,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
+    pub label: Option<String>,
 
-    pub lights: Vec<DefLight>,
+    pub state: PropertyState,
+    pub perm: PropertyPerm,
+    pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
+
+    pub values: HashMap<String, Text>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DefLight {
-    name: String,
-    label: Option<String>,
-    value: PropertyState,
-}
-
-#[derive(Debug)]
-pub struct SetLightVector {
-    pub device: String,
-    pub name: String,
-    pub state: PropertyState,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-
-    pub lights: Vec<OneLight>,
+pub struct Blob {
+    pub label: Option<String>,
+    pub format: String,
+    pub value: Option<Vec<u8>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct OneLight {
-    name: String,
-    value: PropertyState,
-}
-
-#[derive(Debug)]
-pub struct DefBlobVector {
-    pub device: String,
-    pub name: String,
+pub struct BlobVector {
     pub label: Option<String>,
     pub group: Option<String>,
     pub state: PropertyState,
     pub perm: PropertyPerm,
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
 
-    pub blobs: Vec<DefBlob>,
+    pub values: HashMap<String, Blob>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DefBlob {
-    name: String,
-    label: Option<String>,
+pub enum Properties {
+    TextVector(TextVector),
+    NumberVector(NumberVector),
+    SwitchVector(SwitchVector),
+    BlobVector(BlobVector),
 }
 
-#[derive(Debug)]
-pub struct SetBlobVector {
-    pub device: String,
-    pub name: String,
-    pub state: PropertyState,
-    pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-
-    pub blobs: Vec<OneBlob>,
+pub struct Device {
+    properties: HashMap<String, Properties>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct OneBlob {
-    name: String,
-    size: u64,
-    enclen: Option<u64>,
-    format: String,
-    value: Vec<u8>,
+impl Device {
+    pub fn new() -> Device {
+        Device {
+            properties: HashMap::new(),
+        }
+    }
+
+    pub fn update(&mut self, command: serialization::Command) {
+        if let Command::DefSwitchVector(def_param) = command {
+            let (name, param) = def_param.switch_vector();
+            self.properties
+                .insert(name, Properties::SwitchVector(param));
+        }
+    }
+
+    pub fn get_properties(&self) -> &HashMap<String, Properties> {
+        return &self.properties;
+    }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct EnableBlob {
-    pub device: String,
-    pub name: Option<String>,
+#[cfg(test)]
+mod device_tests {
+    use super::*;
 
-    pub enabled: BlobEnable,
-}
+    #[test]
+    fn test_update_switch() {
+        let mut device = Device::new();
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
 
-#[derive(Debug, PartialEq)]
-pub struct Message {
-    pub device: Option<String>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-}
+        let new_switch = DefSwitchVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            label: Some(String::from_str("thingo").unwrap()),
+            group: Some(String::from_str("group").unwrap()),
+            state: PropertyState::Ok,
+            perm: PropertyPerm::RW,
+            rule: SwitchRule::AtMostOne,
+            timeout: Some(60),
+            timestamp: Some(timestamp),
+            message: None,
+            switches: vec![DefSwitch {
+                name: String::from_str("seconds").unwrap(),
+                label: Some(String::from_str("asdf").unwrap()),
+                value: SwitchState::On,
+            }],
+        };
+        assert_eq!(device.get_properties().len(), 0);
+        device.update(serialization::Command::DefSwitchVector(new_switch));
+        assert_eq!(device.get_properties().len(), 1);
 
-#[derive(Debug, PartialEq)]
-pub struct DelProperty {
-    pub device: String,
-    pub name: Option<String>,
-    pub timestamp: Option<DateTime<Utc>>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct GetProperties {
-    pub version: String,
-    pub device: Option<String>,
-    pub name: Option<String>,
+        if let Properties::SwitchVector(stored) = device.get_properties().get("Exposure").unwrap() {
+            assert_eq!(
+                stored,
+                &SwitchVector {
+                    group: Some(String::from_str("group").unwrap()),
+                    label: Some(String::from_str("thingo").unwrap()),
+                    state: PropertyState::Ok,
+                    perm: PropertyPerm::RW,
+                    rule: SwitchRule::AtMostOne,
+                    timeout: Some(60),
+                    timestamp: Some(timestamp),
+                    values: HashMap::from([(
+                        String::from_str("seconds").unwrap(),
+                        Switch {
+                            label: Some(String::from_str("asdf").unwrap()),
+                            value: SwitchState::On
+                        }
+                    )])
+                }
+            );
+        }
+    }
 }
 
 pub struct Client {
