@@ -6,33 +6,55 @@ use std::str;
 use super::super::*;
 use super::*;
 
-impl DefSwitchVector {
-    pub fn switch_vector(self) -> (String, SwitchVector) {
-        (
-            self.name,
-            SwitchVector {
-                group: self.group,
-                label: self.label,
-                state: self.state,
-                perm: self.perm,
-                rule: self.rule,
-                timeout: self.timeout,
-                timestamp: self.timestamp,
-                values: self
-                    .switches
-                    .into_iter()
-                    .map(|i| {
-                        (
-                            i.name,
-                            Switch {
-                                label: i.label,
-                                value: i.value,
-                            },
-                        )
-                    })
-                    .collect(),
-            },
-        )
+impl CommandtoParam for DefSwitchVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+    fn to_param(self) -> Parameter {
+        Parameter::SwitchVector(SwitchVector {
+            name: self.name,
+            group: self.group,
+            label: self.label,
+            state: self.state,
+            perm: self.perm,
+            rule: self.rule,
+            timeout: self.timeout,
+            timestamp: self.timestamp,
+            values: self
+                .switches
+                .into_iter()
+                .map(|i| {
+                    (
+                        i.name,
+                        Switch {
+                            label: i.label,
+                            value: i.value,
+                        },
+                    )
+                })
+                .collect(),
+        })
+    }
+}
+
+impl CommandToUpdate for NewSwitchVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
+    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+        match param {
+            Parameter::SwitchVector(switch_vector) => {
+                switch_vector.timestamp = self.timestamp;
+                for switch in self.switches {
+                    if let Some(existing) = switch_vector.values.get_mut(&switch.name) {
+                        existing.value = switch.value;
+                    }
+                }
+                Ok(self.name)
+            }
+            _ => Err(UpdateError::ParameterTypeMismatch(self.name.clone())),
+        }
     }
 }
 
