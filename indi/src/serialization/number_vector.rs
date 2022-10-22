@@ -9,6 +9,64 @@ use encoding::{DecoderTrap, Encoding};
 use super::super::*;
 use super::*;
 
+impl CommandtoParam for DefNumberVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+    fn to_param(self) -> Parameter {
+        Parameter::NumberVector(NumberVector {
+            name: self.name,
+            group: self.group,
+            label: self.label,
+            state: self.state,
+            perm: self.perm,
+            timeout: self.timeout,
+            timestamp: self.timestamp,
+            values: self
+                .numbers
+                .into_iter()
+                .map(|i| {
+                    (
+                        i.name,
+                        Number {
+                            label: i.label,
+                            format: i.format,
+                            min: i.min,
+                            max: i.max,
+                            step: i.step,
+                            value: i.value,
+                        },
+                    )
+                })
+                .collect(),
+        })
+    }
+}
+
+impl CommandToUpdate for NewNumberVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
+    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+        match param {
+            Parameter::NumberVector(number_vector) => {
+                number_vector.timestamp = self.timestamp;
+                for number in self.numbers {
+                    if let Some(existing) = number_vector.values.get_mut(&number.name) {
+                        existing.min = number.min.unwrap_or(existing.min);
+                        existing.max = number.max.unwrap_or(existing.max);
+                        existing.step = number.step.unwrap_or(existing.step);
+                        existing.value = number.value;
+                    }
+                }
+                Ok(self.name)
+            }
+            _ => Err(UpdateError::ParameterTypeMismatch(self.name.clone())),
+        }
+    }
+}
+
 impl XmlSerialization for OneNumber {
     fn send<'a, T: std::io::Write>(
         &self,

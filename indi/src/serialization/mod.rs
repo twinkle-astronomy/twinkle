@@ -161,13 +161,13 @@ pub struct DefNumberVector {
 
 #[derive(Debug, PartialEq)]
 pub struct DefNumber {
-    name: String,
-    label: Option<String>,
-    format: String,
-    min: f64,
-    max: f64,
-    step: f64,
-    value: f64,
+    pub name: String,
+    pub label: Option<String>,
+    pub format: String,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub value: f64,
 }
 
 #[derive(Debug)]

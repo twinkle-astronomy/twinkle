@@ -137,9 +137,12 @@ impl Device {
         command: serialization::Command,
     ) -> Result<Option<&Parameter>, UpdateError> {
         match command {
-            Command::DefSwitchVector(def_param) => self.new_param(def_param),
+            Command::DefSwitchVector(def_command) => self.new_param(def_command),
             Command::SetSwitchVector(_) => Ok(None),
             Command::NewSwitchVector(new_command) => self.update_param(new_command),
+            Command::DefNumberVector(def_command) => self.new_param(def_command),
+            Command::SetNumberVector(_) => Ok(None),
+            Command::NewNumberVector(new_command) => self.update_param(new_command),
             unhandled => panic!("Unhandled: {:?}", unhandled),
         }
     }
@@ -303,6 +306,113 @@ mod device_tests {
                         Switch {
                             label: Some(String::from_str("asdf").unwrap()),
                             value: SwitchState::Off
+                        }
+                    )])
+                }
+            );
+        } else {
+            panic!("Unexpected");
+        }
+    }
+
+    #[test]
+    fn test_update_number() {
+        let mut device = Device::new();
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+
+        let def_number = DefNumberVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            label: Some(String::from_str("thingo").unwrap()),
+            group: Some(String::from_str("group").unwrap()),
+            state: PropertyState::Ok,
+            perm: PropertyPerm::RW,
+            timeout: Some(60),
+            timestamp: Some(timestamp),
+            message: None,
+            numbers: vec![DefNumber {
+                name: String::from_str("seconds").unwrap(),
+                label: Some(String::from_str("asdf").unwrap()),
+                format: String::from_str("%4.0f").unwrap(),
+                min: 0.0,
+                max: 100.0,
+                step: 1.0,
+                value: 13.3,
+            }],
+        };
+        assert_eq!(device.get_parameters().len(), 0);
+        device
+            .update(serialization::Command::DefNumberVector(def_number))
+            .unwrap();
+        assert_eq!(device.get_parameters().len(), 1);
+
+        if let Parameter::NumberVector(stored) = device.get_parameters().get("Exposure").unwrap() {
+            assert_eq!(
+                stored,
+                &NumberVector {
+                    name: String::from_str("Exposure").unwrap(),
+                    group: Some(String::from_str("group").unwrap()),
+                    label: Some(String::from_str("thingo").unwrap()),
+                    state: PropertyState::Ok,
+                    perm: PropertyPerm::RW,
+                    timeout: Some(60),
+                    timestamp: Some(timestamp),
+                    values: HashMap::from([(
+                        String::from_str("seconds").unwrap(),
+                        Number {
+                            label: Some(String::from_str("asdf").unwrap()),
+                            format: String::from_str("%4.0f").unwrap(),
+                            min: 0.0,
+                            max: 100.0,
+                            step: 1.0,
+                            value: 13.3,
+                        }
+                    )])
+                }
+            );
+        } else {
+            panic!("Unexpected");
+        }
+
+        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
+        let new_number = NewNumberVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            timestamp: Some(timestamp),
+            numbers: vec![OneNumber {
+                name: String::from_str("seconds").unwrap(),
+                min: None,
+                max: None,
+                step: None,
+                value: 5.0,
+            }],
+        };
+        assert_eq!(device.get_parameters().len(), 1);
+        device
+            .update(serialization::Command::NewNumberVector(new_number))
+            .unwrap();
+        assert_eq!(device.get_parameters().len(), 1);
+
+        if let Parameter::NumberVector(stored) = device.get_parameters().get("Exposure").unwrap() {
+            assert_eq!(
+                stored,
+                &NumberVector {
+                    name: String::from_str("Exposure").unwrap(),
+                    group: Some(String::from_str("group").unwrap()),
+                    label: Some(String::from_str("thingo").unwrap()),
+                    state: PropertyState::Ok,
+                    perm: PropertyPerm::RW,
+                    timeout: Some(60),
+                    timestamp: Some(timestamp),
+                    values: HashMap::from([(
+                        String::from_str("seconds").unwrap(),
+                        Number {
+                            label: Some(String::from_str("asdf").unwrap()),
+                            format: String::from_str("%4.0f").unwrap(),
+                            min: 0.0,
+                            max: 100.0,
+                            step: 1.0,
+                            value: 5.0
                         }
                     )])
                 }
