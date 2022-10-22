@@ -10,6 +10,57 @@ use log::warn;
 use super::super::*;
 use super::*;
 
+impl CommandtoParam for DefTextVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+    fn to_param(self) -> Parameter {
+        Parameter::TextVector(TextVector {
+            name: self.name,
+            group: self.group,
+            label: self.label,
+            state: self.state,
+            perm: self.perm,
+            timeout: self.timeout,
+            timestamp: self.timestamp,
+            values: self
+                .texts
+                .into_iter()
+                .map(|i| {
+                    (
+                        i.name,
+                        Text {
+                            label: i.label,
+                            value: i.value,
+                        },
+                    )
+                })
+                .collect(),
+        })
+    }
+}
+
+impl CommandToUpdate for NewTextVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
+    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+        match param {
+            Parameter::TextVector(text_vector) => {
+                text_vector.timestamp = self.timestamp;
+                for text in self.texts {
+                    if let Some(existing) = text_vector.values.get_mut(&text.name) {
+                        existing.value = text.value;
+                    }
+                }
+                Ok(self.name)
+            }
+            _ => Err(UpdateError::ParameterTypeMismatch(self.name.clone())),
+        }
+    }
+}
+
 impl XmlSerialization for OneText {
     fn send<'a, T: std::io::Write>(
         &self,

@@ -143,6 +143,9 @@ impl Device {
             Command::DefNumberVector(def_command) => self.new_param(def_command),
             Command::SetNumberVector(_) => Ok(None),
             Command::NewNumberVector(new_command) => self.update_param(new_command),
+            Command::DefTextVector(def_command) => self.new_param(def_command),
+            Command::SetTextVector(_) => Ok(None),
+            Command::NewTextVector(new_command) => self.update_param(new_command),
             unhandled => panic!("Unhandled: {:?}", unhandled),
         }
     }
@@ -413,6 +416,98 @@ mod device_tests {
                             max: 100.0,
                             step: 1.0,
                             value: 5.0
+                        }
+                    )])
+                }
+            );
+        } else {
+            panic!("Unexpected");
+        }
+    }
+
+    #[test]
+    fn test_update_text() {
+        let mut device = Device::new();
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+
+        let def_text = DefTextVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            label: Some(String::from_str("thingo").unwrap()),
+            group: Some(String::from_str("group").unwrap()),
+            state: PropertyState::Ok,
+            perm: PropertyPerm::RW,
+            timeout: Some(60),
+            timestamp: Some(timestamp),
+            message: None,
+            texts: vec![DefText {
+                name: String::from_str("seconds").unwrap(),
+                label: Some(String::from_str("asdf").unwrap()),
+                value: String::from_str("something").unwrap(),
+            }],
+        };
+        assert_eq!(device.get_parameters().len(), 0);
+        device
+            .update(serialization::Command::DefTextVector(def_text))
+            .unwrap();
+        assert_eq!(device.get_parameters().len(), 1);
+
+        if let Parameter::TextVector(stored) = device.get_parameters().get("Exposure").unwrap() {
+            assert_eq!(
+                stored,
+                &TextVector {
+                    name: String::from_str("Exposure").unwrap(),
+                    group: Some(String::from_str("group").unwrap()),
+                    label: Some(String::from_str("thingo").unwrap()),
+                    state: PropertyState::Ok,
+                    perm: PropertyPerm::RW,
+                    timeout: Some(60),
+                    timestamp: Some(timestamp),
+                    values: HashMap::from([(
+                        String::from_str("seconds").unwrap(),
+                        Text {
+                            label: Some(String::from_str("asdf").unwrap()),
+                            value: String::from_str("something").unwrap(),
+                        }
+                    )])
+                }
+            );
+        } else {
+            panic!("Unexpected");
+        }
+
+        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
+        let new_number = NewTextVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            timestamp: Some(timestamp),
+            texts: vec![OneText {
+                name: String::from_str("seconds").unwrap(),
+                value: String::from_str("something else").unwrap(),
+            }],
+        };
+        assert_eq!(device.get_parameters().len(), 1);
+        device
+            .update(serialization::Command::NewTextVector(new_number))
+            .unwrap();
+        assert_eq!(device.get_parameters().len(), 1);
+
+        if let Parameter::TextVector(stored) = device.get_parameters().get("Exposure").unwrap() {
+            assert_eq!(
+                stored,
+                &TextVector {
+                    name: String::from_str("Exposure").unwrap(),
+                    group: Some(String::from_str("group").unwrap()),
+                    label: Some(String::from_str("thingo").unwrap()),
+                    state: PropertyState::Ok,
+                    perm: PropertyPerm::RW,
+                    timeout: Some(60),
+                    timestamp: Some(timestamp),
+                    values: HashMap::from([(
+                        String::from_str("seconds").unwrap(),
+                        Text {
+                            label: Some(String::from_str("asdf").unwrap()),
+                            value: String::from_str("something else").unwrap(),
                         }
                     )])
                 }
