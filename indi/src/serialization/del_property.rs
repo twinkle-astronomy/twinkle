@@ -35,7 +35,7 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
     }
 
     pub fn del_property(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DelProperty, DeError> {
         let mut device: Result<String, DeError> = Err(DeError::MissingAttr(&"device"));
@@ -45,7 +45,7 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Ok(attr_value),
                 QName(b"name") => name = Some(attr_value),

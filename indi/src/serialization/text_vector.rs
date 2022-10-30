@@ -116,7 +116,7 @@ fn next_one_text<T: std::io::BufRead>(
 
                 for attr in e.attributes() {
                     let attr = attr?;
-                    let attr_value = attr.unescape_value()?.into_owned();
+                    let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
 
                     match attr.key {
                         QName(b"name") => name = Ok(attr_value),
@@ -188,7 +188,7 @@ impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
     }
 
     pub fn text_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<NewTextVector, DeError> {
         let mut device: Option<String> = None;
@@ -197,7 +197,7 @@ impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
@@ -248,7 +248,7 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
     }
 
     pub fn text_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetTextVector, DeError> {
         let mut device: Option<String> = None;
@@ -260,11 +260,11 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
@@ -317,7 +317,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
     }
 
     pub fn text_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefTextVector, DeError> {
         let mut device: Option<String> = None;
@@ -332,14 +332,14 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"label") => label = Some(attr_value),
                 QName(b"group") => group = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
-                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
+                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
@@ -375,7 +375,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_value()?.into_owned();
+                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -424,7 +424,10 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+use bytes::{BytesMut, BufMut};
+use bytes::Buf;
+use std::io::Cursor;
+use std::io::Read;
     #[test]
     fn test_def_text() {
         let xml = r#"
@@ -459,12 +462,18 @@ Telescope Simulator
 // Simulator \xFF changed
 //     </oneText>
 // ";
-//         let mut buf = BytesMut::with_capacity(1024);
-//         buf.put(&xml[..]);
-//         // let buf = Bytes::from(xml);
+//         // let mut preamble : BytesMut = BytesMut::with_capacity(1024);
+//         // preamble.put(&b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"[..]);
+//         let preamble_read = Cursor::new(b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\"><xml/>");
 
-//         let mut reader = Reader::from_reader(buf.reader());
+//         // let mut buf : BytesMut = BytesMut::with_capacity(1024);
+//         // buf.put(&xml[..]);
+//         let buf_read = Cursor::new(xml);
+
+//         let mut reader = Reader::from_reader(std::io::Read::chain(preamble_read, buf_read));
+
 //         reader.trim_text(true);
+//         reader.expand_empty_elements(true);
 //         let mut command_iter = CommandIter::new(reader);
 //         let mut number_iter = SetTextIter::new(&mut command_iter);
 

@@ -35,7 +35,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
     }
 
     pub fn message(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<Message, DeError> {
         let mut device: Option<String> = None;
@@ -44,7 +44,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),

@@ -486,11 +486,9 @@ impl From<AttrError> for DeError {
     }
 }
 
-impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
-    type Error = DeError;
-
-    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescape_value()? {
+impl<'a> SwitchRule {
+    fn try_from<T: std::io::BufRead>(value: Attribute<'a>, xml_reader: &Reader<T>) -> Result<Self, DeError> {
+        match value.decode_and_unescape_value(xml_reader)? {
             Cow::Borrowed("OneOfMany") => Ok(SwitchRule::OneOfMany),
             Cow::Borrowed("AtMostOne") => Ok(SwitchRule::AtMostOne),
             Cow::Borrowed("AnyOfMany") => Ok(SwitchRule::AnyOfMany),
@@ -499,11 +497,9 @@ impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
     }
 }
 
-impl<'a> TryFrom<Attribute<'a>> for PropertyState {
-    type Error = DeError;
-
-    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescape_value()? {
+impl<'a>  PropertyState {
+    fn try_from<T: std::io::BufRead>(value: Attribute<'a>, xml_reader: &Reader<T>) -> Result<Self, DeError> {
+        match value.decode_and_unescape_value(xml_reader)? {
             Cow::Borrowed("Idle") => Ok(PropertyState::Idle),
             Cow::Borrowed("Ok") => Ok(PropertyState::Ok),
             Cow::Borrowed("Busy") => Ok(PropertyState::Busy),
@@ -511,12 +507,8 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyState {
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
-}
 
-impl<'a> TryFrom<BytesText<'a>> for PropertyState {
-    type Error = DeError;
-
-    fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
+    fn try_from_event(value: BytesText<'a>) -> Result<Self, DeError> {
         match value.unescape()? {
             Cow::Borrowed("Idle") => Ok(PropertyState::Idle),
             Cow::Borrowed("Ok") => Ok(PropertyState::Ok),
@@ -527,10 +519,8 @@ impl<'a> TryFrom<BytesText<'a>> for PropertyState {
     }
 }
 
-impl<'a> TryFrom<BytesText<'a>> for SwitchState {
-    type Error = DeError;
-
-    fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
+impl<'a> SwitchState {
+    fn try_from_event(value: BytesText<'a>) -> Result<Self, DeError> {
         match value.unescape()? {
             Cow::Borrowed("On") => Ok(SwitchState::On),
             Cow::Borrowed("Off") => Ok(SwitchState::Off),
@@ -538,11 +528,9 @@ impl<'a> TryFrom<BytesText<'a>> for SwitchState {
         }
     }
 }
-impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
-    type Error = DeError;
-
-    fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescape_value()? {
+impl<'a> PropertyPerm {
+    fn try_from<T: std::io::BufRead>(value: Attribute<'a>, xml_reader: &Reader<T>) -> Result<Self, DeError> {
+        match value.decode_and_unescape_value(xml_reader)? {
             Cow::Borrowed("ro") => Ok(PropertyPerm::RO),
             Cow::Borrowed("wo") => Ok(PropertyPerm::WO),
             Cow::Borrowed("rw") => Ok(PropertyPerm::RW),

@@ -118,7 +118,7 @@ fn next_one_switch<T: std::io::BufRead>(
 
                 for attr in e.attributes() {
                     let attr = attr?;
-                    let attr_value = attr.unescape_value()?.into_owned();
+                    let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
 
                     match attr.key {
                         QName(b"name") => name = Ok(attr_value),
@@ -132,7 +132,7 @@ fn next_one_switch<T: std::io::BufRead>(
                 }
 
                 let value: Result<SwitchState, DeError> = match xml_reader.read_event_into(buf) {
-                    Ok(Event::Text(e)) => SwitchState::try_from(e),
+                    Ok(Event::Text(e)) => SwitchState::try_from_event(e),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 };
 
@@ -183,7 +183,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
     }
 
     pub fn switch_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefSwitchVector, DeError> {
         let mut device: Option<String> = None;
@@ -199,15 +199,15 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"label") => label = Some(attr_value),
                 QName(b"group") => group = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
-                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr)?),
-                QName(b"rule") => rule = Some(SwitchRule::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
+                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
+                QName(b"rule") => rule = Some(SwitchRule::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
@@ -244,7 +244,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_value()?.into_owned();
+                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -260,7 +260,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
 
                     let value: Result<SwitchState, DeError> =
                         match self.xml_reader.read_event_into(self.buf) {
-                            Ok(Event::Text(e)) => SwitchState::try_from(e),
+                            Ok(Event::Text(e)) => SwitchState::try_from_event(e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
@@ -314,7 +314,7 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
     }
 
     pub fn switch_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetSwitchVector, DeError> {
         let mut device: Option<String> = None;
@@ -326,11 +326,11 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
@@ -383,7 +383,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
     }
 
     pub fn switch_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<NewSwitchVector, DeError> {
         let mut device: Option<String> = None;
@@ -392,7 +392,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),

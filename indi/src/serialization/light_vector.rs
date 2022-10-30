@@ -35,7 +35,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
     }
 
     pub fn light_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefLightVector, DeError> {
         let mut device: Option<String> = None;
@@ -48,13 +48,13 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"label") => label = Some(attr_value),
                 QName(b"group") => group = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -87,7 +87,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_value()?.into_owned();
+                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -103,7 +103,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
 
                     let value: Result<PropertyState, DeError> =
                         match self.xml_reader.read_event_into(self.buf) {
-                            Ok(Event::Text(e)) => PropertyState::try_from(e),
+                            Ok(Event::Text(e)) => PropertyState::try_from_event(e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
@@ -156,7 +156,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
     }
 
     pub fn light_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetLightVector, DeError> {
         let mut device: Option<String> = None;
@@ -167,11 +167,11 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -201,7 +201,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_value()?.into_owned();
+                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -216,7 +216,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
 
                     let value: Result<PropertyState, DeError> =
                         match self.xml_reader.read_event_into(self.buf) {
-                            Ok(Event::Text(e)) => PropertyState::try_from(e),
+                            Ok(Event::Text(e)) => PropertyState::try_from_event(e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 

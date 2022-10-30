@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-quick-xml = {version="~0.26.0", features=["async-tokio"]}
+quick-xml = {version="~0.26.0", features=["encoding", "async-tokio"]}
 chrono = "0.4"
 encoding = "0.2"
 base64 = "0.13.0"

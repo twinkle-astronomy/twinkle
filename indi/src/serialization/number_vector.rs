@@ -156,7 +156,7 @@ fn next_one_number<T: std::io::BufRead>(
 
                 for attr in e.attributes() {
                     let attr = attr?;
-                    let attr_value = attr.unescape_value()?.into_owned();
+                    let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
 
                     match attr.key {
                         QName(b"name") => name = Ok(attr_value),
@@ -227,7 +227,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
     }
 
     pub fn number_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefNumberVector, DeError> {
         let mut device: Option<String> = None;
@@ -242,14 +242,14 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"label") => label = Some(attr_value),
                 QName(b"group") => group = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
-                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
+                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
@@ -289,7 +289,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_value()?.into_owned();
+                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -365,7 +365,7 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
     }
 
     pub fn number_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetNumberVector, DeError> {
         let mut device: Option<String> = None;
@@ -377,11 +377,11 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 QName(b"message") => message = Some(attr_value),
@@ -433,7 +433,7 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
     }
 
     pub fn number_vector(
-        _xml_reader: &Reader<T>,
+        xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<NewNumberVector, DeError> {
         let mut device: Option<String> = None;
@@ -442,7 +442,7 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_value()?.into_owned();
+            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
