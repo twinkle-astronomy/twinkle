@@ -33,13 +33,15 @@ pub use get_properties::GetPropertiesIter;
 
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
+use quick_xml::name::QName;
 
 #[cfg(test)]
 mod tests;
 
+
 #[derive(Debug)]
 pub enum Command {
-    // Commands from Device to Clients
+    // Commands from Device to Connections
     DefTextVector(DefTextVector),
     SetTextVector(SetTextVector),
     NewTextVector(NewTextVector),
@@ -56,10 +58,69 @@ pub enum Command {
     Message(Message),
     DelProperty(DelProperty),
 
-    // Commands from Client to Device
+    // Commands from Connection to Device
     GetProperties(GetProperties),
 }
 
+impl Command {
+    pub fn device_name(&self) -> Option<&String> {
+        match self {
+            Command::DefTextVector(c) => Some(&c.device),
+            Command::SetTextVector(c) => Some(&c.device),
+            Command::NewTextVector(c) => Some(&c.device),
+            Command::DefNumberVector(c) => Some(&c.device),
+            Command::SetNumberVector(c) => Some(&c.device),
+            Command::NewNumberVector(c) => Some(&c.device),
+            Command::DefSwitchVector(c) => Some(&c.device),
+            Command::SetSwitchVector(c) => Some(&c.device),
+            Command::NewSwitchVector(c) => Some(&c.device),
+            Command::DefLightVector(c) => Some(&c.device),
+            Command::SetLightVector(c) => Some(&c.device),
+            Command::DefBlobVector(c) => Some(&c.device),
+            Command::SetBlobVector(c) => Some(&c.device),
+            Command::Message(c) => {
+                match &c.device {
+                    Some(device) => Some(device),
+                    None => None
+                }
+            },
+            Command::DelProperty(c) => Some(&c.device),
+            Command::GetProperties(c) => {
+                match &c.device {
+                    Some(device) => Some(device),
+                    None => None
+                }
+            },
+        }
+    }
+}
+
+impl XmlSerialization for Command {
+    fn send<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        match self {
+            Command::NewTextVector(c) => c.send(xml_writer),
+            _ => panic!("asdf")
+        }
+        // let mut creator = xml_writer
+        //     .create_element("enableBLOB")
+        //     .with_attribute(("device", &*self.device));
+
+        // if let Some(name) = &self.name {
+        //     creator = creator.with_attribute(("name", &name[..]));
+        // }
+
+        // match self.enabled {
+        //     BlobEnable::Never => creator.write_text_content(BytesText::from_plain_str("Never")),
+        //     BlobEnable::Also => creator.write_text_content(BytesText::from_plain_str("Also")),
+        //     BlobEnable::Only => creator.write_text_content(BytesText::from_plain_str("Only")),
+        // }?;
+
+        // Ok(xml_writer)
+    }
+}
 #[derive(Debug, PartialEq)]
 pub enum PropertyState {
     Idle,
@@ -368,6 +429,7 @@ pub trait XmlSerialization {
 #[derive(Debug)]
 pub enum DeError {
     XmlError(quick_xml::Error),
+    IoError(std::io::Error),
     DecodeUtf8(str::Utf8Error),
     DecodeLatin(Cow<'static, str>),
     ParseIntError(num::ParseIntError),
@@ -386,6 +448,13 @@ impl From<quick_xml::Error> for DeError {
         DeError::XmlError(err)
     }
 }
+
+impl From<std::io::Error> for DeError {
+    fn from(err: std::io::Error) -> Self {
+        DeError::IoError(err)
+    }
+}
+
 impl From<str::Utf8Error> for DeError {
     fn from(err: str::Utf8Error) -> Self {
         DeError::DecodeUtf8(err)
@@ -421,10 +490,10 @@ impl<'a> TryFrom<Attribute<'a>> for SwitchRule {
     type Error = DeError;
 
     fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped_value()? {
-            Cow::Borrowed(b"OneOfMany") => Ok(SwitchRule::OneOfMany),
-            Cow::Borrowed(b"AtMostOne") => Ok(SwitchRule::AtMostOne),
-            Cow::Borrowed(b"AnyOfMany") => Ok(SwitchRule::AnyOfMany),
+        match value.unescape_value()? {
+            Cow::Borrowed("OneOfMany") => Ok(SwitchRule::OneOfMany),
+            Cow::Borrowed("AtMostOne") => Ok(SwitchRule::AtMostOne),
+            Cow::Borrowed("AnyOfMany") => Ok(SwitchRule::AnyOfMany),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
@@ -434,11 +503,11 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyState {
     type Error = DeError;
 
     fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped_value()? {
-            Cow::Borrowed(b"Idle") => Ok(PropertyState::Idle),
-            Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
-            Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
-            Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
+        match value.unescape_value()? {
+            Cow::Borrowed("Idle") => Ok(PropertyState::Idle),
+            Cow::Borrowed("Ok") => Ok(PropertyState::Ok),
+            Cow::Borrowed("Busy") => Ok(PropertyState::Busy),
+            Cow::Borrowed("Alert") => Ok(PropertyState::Alert),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
@@ -448,11 +517,11 @@ impl<'a> TryFrom<BytesText<'a>> for PropertyState {
     type Error = DeError;
 
     fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped()? {
-            Cow::Borrowed(b"Idle") => Ok(PropertyState::Idle),
-            Cow::Borrowed(b"Ok") => Ok(PropertyState::Ok),
-            Cow::Borrowed(b"Busy") => Ok(PropertyState::Busy),
-            Cow::Borrowed(b"Alert") => Ok(PropertyState::Alert),
+        match value.unescape()? {
+            Cow::Borrowed("Idle") => Ok(PropertyState::Idle),
+            Cow::Borrowed("Ok") => Ok(PropertyState::Ok),
+            Cow::Borrowed("Busy") => Ok(PropertyState::Busy),
+            Cow::Borrowed("Alert") => Ok(PropertyState::Alert),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
@@ -462,9 +531,9 @@ impl<'a> TryFrom<BytesText<'a>> for SwitchState {
     type Error = DeError;
 
     fn try_from(value: BytesText<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped()? {
-            Cow::Borrowed(b"On") => Ok(SwitchState::On),
-            Cow::Borrowed(b"Off") => Ok(SwitchState::Off),
+        match value.unescape()? {
+            Cow::Borrowed("On") => Ok(SwitchState::On),
+            Cow::Borrowed("Off") => Ok(SwitchState::Off),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
@@ -473,10 +542,10 @@ impl<'a> TryFrom<Attribute<'a>> for PropertyPerm {
     type Error = DeError;
 
     fn try_from(value: Attribute<'a>) -> Result<Self, Self::Error> {
-        match value.unescaped_value()? {
-            Cow::Borrowed(b"ro") => Ok(PropertyPerm::RO),
-            Cow::Borrowed(b"wo") => Ok(PropertyPerm::WO),
-            Cow::Borrowed(b"rw") => Ok(PropertyPerm::RW),
+        match value.unescape_value()? {
+            Cow::Borrowed("ro") => Ok(PropertyPerm::RO),
+            Cow::Borrowed("wo") => Ok(PropertyPerm::WO),
+            Cow::Borrowed("rw") => Ok(PropertyPerm::RW),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
@@ -513,11 +582,11 @@ impl<T: std::io::BufRead> CommandIter<T> {
     }
 
     fn next_command(&mut self) -> Result<Option<Command>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
+        let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => {
                 let result = match e.name() {
-                    b"defTextVector" => {
+                    QName(b"defTextVector") => {
                         let mut text_vector = DefTextIter::text_vector(&self.xml_reader, &e)?;
 
                         for text in DefTextIter::new(self) {
@@ -527,7 +596,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::DefTextVector(text_vector)))
                     }
-                    b"setTextVector" => {
+                    QName(b"setTextVector") => {
                         let mut text_vector = SetTextIter::text_vector(&self.xml_reader, &e)?;
 
                         for text in SetTextIter::new(self) {
@@ -537,7 +606,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetTextVector(text_vector)))
                     }
-                    b"newTextVector" => {
+                    QName(b"newTextVector") => {
                         let mut text_vector = NewTextIter::text_vector(&self.xml_reader, &e)?;
 
                         for text in NewTextIter::new(self) {
@@ -547,7 +616,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::NewTextVector(text_vector)))
                     }
-                    b"defNumberVector" => {
+                    QName(b"defNumberVector") => {
                         let mut number_vector = DefNumberIter::number_vector(&self.xml_reader, &e)?;
 
                         for number in DefNumberIter::new(self) {
@@ -557,7 +626,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::DefNumberVector(number_vector)))
                     }
-                    b"setNumberVector" => {
+                    QName(b"setNumberVector") => {
                         let mut number_vector = SetNumberIter::number_vector(&self.xml_reader, &e)?;
 
                         for number in SetNumberIter::new(self) {
@@ -567,7 +636,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetNumberVector(number_vector)))
                     }
-                    b"newNumberVector" => {
+                    QName(b"newNumberVector") => {
                         let mut number_vector = NewNumberIter::number_vector(&self.xml_reader, &e)?;
 
                         for number in NewNumberIter::new(self) {
@@ -577,7 +646,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::NewNumberVector(number_vector)))
                     }
-                    b"defSwitchVector" => {
+                    QName(b"defSwitchVector") => {
                         let mut switch_vector = DefSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
                         for switch in DefSwitchIter::new(self) {
@@ -587,7 +656,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::DefSwitchVector(switch_vector)))
                     }
-                    b"setSwitchVector" => {
+                    QName(b"setSwitchVector") => {
                         let mut switch_vector = SetSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
                         for switch in SetSwitchIter::new(self) {
@@ -597,7 +666,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetSwitchVector(switch_vector)))
                     }
-                    b"newSwitchVector" => {
+                    QName(b"newSwitchVector") => {
                         let mut switch_vector = NewSwitchIter::switch_vector(&self.xml_reader, &e)?;
 
                         for switch in NewSwitchIter::new(self) {
@@ -607,7 +676,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::NewSwitchVector(switch_vector)))
                     }
-                    b"defLightVector" => {
+                    QName(b"defLightVector") => {
                         let mut light_vector = DefLightIter::light_vector(&self.xml_reader, &e)?;
 
                         for light in DefLightIter::new(self) {
@@ -617,7 +686,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::DefLightVector(light_vector)))
                     }
-                    b"setLightVector" => {
+                    QName(b"setLightVector") => {
                         let mut light_vector = SetLightIter::light_vector(&self.xml_reader, &e)?;
 
                         for light in SetLightIter::new(self) {
@@ -627,7 +696,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetLightVector(light_vector)))
                     }
-                    b"defBLOBVector" => {
+                    QName(b"defBLOBVector") => {
                         let mut blob_vector = DefBlobIter::blob_vector(&self.xml_reader, &e)?;
 
                         for blob in DefBlobIter::new(self) {
@@ -637,7 +706,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::DefBlobVector(blob_vector)))
                     }
-                    b"setBLOBVector" => {
+                    QName(b"setBLOBVector") => {
                         let mut blob_vector = SetBlobIter::blob_vector(&self.xml_reader, &e)?;
 
                         for blob in SetBlobIter::new(self) {
@@ -647,27 +716,27 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::SetBlobVector(blob_vector)))
                     }
-                    b"message" => {
+                    QName(b"message") => {
                         let message = MessageIter::message(&self.xml_reader, &e)?;
                         for _ in MessageIter::new(self) {}
 
                         Ok(Some(Command::Message(message)))
                     }
-                    b"delProperty" => {
+                    QName(b"delProperty") => {
                         let message = DelPropertyIter::del_property(&self.xml_reader, &e)?;
                         for _ in DelPropertyIter::new(self) {}
 
                         Ok(Some(Command::DelProperty(message)))
                     }
 
-                    b"getProperties" => {
+                    QName(b"getProperties") => {
                         let get_properties =
                             GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
                         for _ in GetPropertiesIter::new(self) {}
 
                         Ok(Some(Command::GetProperties(get_properties)))
                     }
-                    tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                    tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
                 };
                 result
             }

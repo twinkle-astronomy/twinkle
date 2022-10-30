@@ -1,5 +1,6 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::name::QName;
 
 use std::str;
 
@@ -68,8 +69,8 @@ impl XmlSerialization for OneSwitch {
             .with_attribute(("name", &*self.name));
 
         match self.value {
-            SwitchState::On => creator.write_text_content(BytesText::from_plain_str("On")),
-            SwitchState::Off => creator.write_text_content(BytesText::from_plain_str("Off")),
+            SwitchState::On => creator.write_text_content(BytesText::new("On")),
+            SwitchState::Off => creator.write_text_content(BytesText::new("Off")),
         }?;
 
         Ok(xml_writer)
@@ -109,33 +110,33 @@ fn next_one_switch<T: std::io::BufRead>(
     xml_reader: &mut Reader<T>,
     buf: &mut Vec<u8>,
 ) -> Result<Option<OneSwitch>, DeError> {
-    let event = xml_reader.read_event(buf)?;
+    let event = xml_reader.read_event_into(buf)?;
     match event {
         Event::Start(e) => match e.name() {
-            b"oneSwitch" => {
+            QName(b"oneSwitch") => {
                 let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
 
                 for attr in e.attributes() {
                     let attr = attr?;
-                    let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+                    let attr_value = attr.unescape_value()?.into_owned();
 
                     match attr.key {
-                        b"name" => name = Ok(attr_value),
+                        QName(b"name") => name = Ok(attr_value),
                         key => {
                             return Err(DeError::UnexpectedAttr(format!(
                                 "Unexpected attribute {}",
-                                str::from_utf8(key)?
+                                str::from_utf8(key.into_inner())?
                             )))
                         }
                     }
                 }
 
-                let value: Result<SwitchState, DeError> = match xml_reader.read_event(buf) {
+                let value: Result<SwitchState, DeError> = match xml_reader.read_event_into(buf) {
                     Ok(Event::Text(e)) => SwitchState::try_from(e),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 };
 
-                let trailing_event = xml_reader.read_event(buf)?;
+                let trailing_event = xml_reader.read_event_into(buf)?;
                 match trailing_event {
                     Event::End(_) => (),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -146,7 +147,7 @@ fn next_one_switch<T: std::io::BufRead>(
                     value: value?,
                 }))
             }
-            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
         },
         Event::End(_) => Ok(None),
         Event::Eof => Ok(None),
@@ -182,7 +183,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
     }
 
     pub fn switch_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefSwitchVector, DeError> {
         let mut device: Option<String> = None;
@@ -198,22 +199,22 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"label" => label = Some(attr_value),
-                b"group" => group = Some(attr_value),
-                b"state" => state = Some(PropertyState::try_from(attr)?),
-                b"perm" => perm = Some(PropertyPerm::try_from(attr)?),
-                b"rule" => rule = Some(SwitchRule::try_from(attr)?),
-                b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"label") => label = Some(attr_value),
+                QName(b"group") => group = Some(attr_value),
+                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr)?),
+                QName(b"rule") => rule = Some(SwitchRule::try_from(attr)?),
+                QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -234,36 +235,36 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
     }
 
     fn next_switch(&mut self) -> Result<Option<DefSwitch>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
+        let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
-                b"defSwitch" => {
+                QName(b"defSwitch") => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
                     let mut label: Option<String> = None;
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+                        let attr_value = attr.unescape_value()?.into_owned();
 
                         match attr.key {
-                            b"name" => name = Ok(attr_value),
-                            b"label" => label = Some(attr_value),
+                            QName(b"name") => name = Ok(attr_value),
+                            QName(b"label") => label = Some(attr_value),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
-                                    str::from_utf8(key)?
+                                    str::from_utf8(key.into_inner())?
                                 )))
                             }
                         }
                     }
 
                     let value: Result<SwitchState, DeError> =
-                        match self.xml_reader.read_event(self.buf) {
+                        match self.xml_reader.read_event_into(self.buf) {
                             Ok(Event::Text(e)) => SwitchState::try_from(e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -275,7 +276,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -313,7 +314,7 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
     }
 
     pub fn switch_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetSwitchVector, DeError> {
         let mut device: Option<String> = None;
@@ -325,18 +326,18 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"state" => state = Some(PropertyState::try_from(attr)?),
-                b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -382,7 +383,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
     }
 
     pub fn switch_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<NewSwitchVector, DeError> {
         let mut device: Option<String> = None;
@@ -391,15 +392,15 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }

@@ -1,5 +1,6 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::name::QName;
 
 use std::str;
 
@@ -34,7 +35,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
     }
 
     pub fn light_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefLightVector, DeError> {
         let mut device: Option<String> = None;
@@ -47,19 +48,19 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"label" => label = Some(attr_value),
-                b"group" => group = Some(attr_value),
-                b"state" => state = Some(PropertyState::try_from(attr)?),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"label") => label = Some(attr_value),
+                QName(b"group") => group = Some(attr_value),
+                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -77,36 +78,36 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
     }
 
     fn next_light(&mut self) -> Result<Option<DefLight>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
+        let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
-                b"defLight" => {
+                QName(b"defLight") => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
                     let mut label: Option<String> = None;
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+                        let attr_value = attr.unescape_value()?.into_owned();
 
                         match attr.key {
-                            b"name" => name = Ok(attr_value),
-                            b"label" => label = Some(attr_value),
+                            QName(b"name") => name = Ok(attr_value),
+                            QName(b"label") => label = Some(attr_value),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
-                                    str::from_utf8(key)?
+                                    str::from_utf8(key.into_inner())?
                                 )))
                             }
                         }
                     }
 
                     let value: Result<PropertyState, DeError> =
-                        match self.xml_reader.read_event(self.buf) {
+                        match self.xml_reader.read_event_into(self.buf) {
                             Ok(Event::Text(e)) => PropertyState::try_from(e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -118,7 +119,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -155,7 +156,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
     }
 
     pub fn light_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetLightVector, DeError> {
         let mut device: Option<String> = None;
@@ -166,17 +167,17 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"state" => state = Some(PropertyState::try_from(attr)?),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -192,34 +193,34 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
     }
 
     fn next_light(&mut self) -> Result<Option<OneLight>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
+        let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
-                b"oneLight" => {
+                QName(b"oneLight") => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+                        let attr_value = attr.unescape_value()?.into_owned();
 
                         match attr.key {
-                            b"name" => name = Ok(attr_value),
+                            QName(b"name") => name = Ok(attr_value),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
-                                    str::from_utf8(key)?
+                                    str::from_utf8(key.into_inner())?
                                 )))
                             }
                         }
                     }
 
                     let value: Result<PropertyState, DeError> =
-                        match self.xml_reader.read_event(self.buf) {
+                        match self.xml_reader.read_event_into(self.buf) {
                             Ok(Event::Text(e)) => PropertyState::try_from(e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         };
 
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -230,7 +231,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),

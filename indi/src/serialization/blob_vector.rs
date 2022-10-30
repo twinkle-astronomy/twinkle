@@ -1,5 +1,7 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::name::QName;
+
 
 use std::str;
 
@@ -20,9 +22,9 @@ impl XmlSerialization for EnableBlob {
         }
 
         match self.enabled {
-            BlobEnable::Never => creator.write_text_content(BytesText::from_plain_str("Never")),
-            BlobEnable::Also => creator.write_text_content(BytesText::from_plain_str("Also")),
-            BlobEnable::Only => creator.write_text_content(BytesText::from_plain_str("Only")),
+            BlobEnable::Never => creator.write_text_content(BytesText::new("Never")),
+            BlobEnable::Also => creator.write_text_content(BytesText::new("Also")),
+            BlobEnable::Only => creator.write_text_content(BytesText::new("Only")),
         }?;
 
         Ok(xml_writer)
@@ -57,7 +59,7 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
     }
 
     pub fn blob_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DefBlobVector, DeError> {
         let mut device: Option<String> = None;
@@ -72,21 +74,21 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"label" => label = Some(attr_value),
-                b"group" => group = Some(attr_value),
-                b"state" => state = Some(PropertyState::try_from(attr)?),
-                b"perm" => perm = Some(PropertyPerm::try_from(attr)?),
-                b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"label") => label = Some(attr_value),
+                QName(b"group") => group = Some(attr_value),
+                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr)?),
+                QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -106,30 +108,30 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
     }
 
     fn next_blob(&mut self) -> Result<Option<DefBlob>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
+        let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
-                b"defBLOB" => {
+                QName(b"defBLOB") => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
                     let mut label: Option<String> = None;
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+                        let attr_value = attr.unescape_value()?.into_owned();
 
                         match attr.key {
-                            b"name" => name = Ok(attr_value),
-                            b"label" => label = Some(attr_value),
+                            QName(b"name") => name = Ok(attr_value),
+                            QName(b"label") => label = Some(attr_value),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
-                                    str::from_utf8(key)?
+                                    str::from_utf8(key.into_inner())?
                                 )))
                             }
                         }
                     }
 
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -140,7 +142,7 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
                         label: label,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -177,7 +179,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
     }
 
     pub fn blob_vector(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<SetBlobVector, DeError> {
         let mut device: Option<String> = None;
@@ -189,18 +191,18 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
-                b"state" => state = Some(PropertyState::try_from(attr)?),
-                b"timeout" => timeout = Some(attr_value.parse::<u32>()?),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"state") => state = Some(PropertyState::try_from(attr)?),
+                QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -217,10 +219,10 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
     }
 
     fn next_blob(&mut self) -> Result<Option<OneBlob>, DeError> {
-        let event = self.xml_reader.read_event(&mut self.buf)?;
+        let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {
-                b"oneBLOB" => {
+                QName(b"oneBLOB") => {
                     let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
                     let mut size: Result<u64, DeError> = Err(DeError::MissingAttr(&"size"));
                     let mut enclen: Option<u64> = None;
@@ -228,28 +230,28 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.unescape_and_decode_value(&self.xml_reader)?;
+                        let attr_value = attr.unescape_value()?.into_owned();
 
                         match attr.key {
-                            b"name" => name = Ok(attr_value),
-                            b"format" => format = Ok(attr_value),
-                            b"size" => size = Ok(attr_value.parse::<u64>()?),
-                            b"enclen" => enclen = Some(attr_value.parse::<u64>()?),
+                            QName(b"name") => name = Ok(attr_value),
+                            QName(b"format") => format = Ok(attr_value),
+                            QName(b"size") => size = Ok(attr_value.parse::<u64>()?),
+                            QName(b"enclen") => enclen = Some(attr_value.parse::<u64>()?),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
-                                    str::from_utf8(key)?
+                                    str::from_utf8(key.into_inner())?
                                 )))
                             }
                         }
                     }
 
-                    let value: Result<Vec<u8>, DeError> = match self.xml_reader.read_event(self.buf)
+                    let value: Result<Vec<u8>, DeError> = match self.xml_reader.read_event_into(self.buf)
                     {
                         Ok(Event::Text(e)) => match size {
                             Ok(size) => {
                                 let mut result = Vec::with_capacity(size.try_into().unwrap());
-                                let esc = e.unescaped()?;
+                                let esc = e.into_inner();
 
                                 for line in esc.split(|b| *b == b'\n') {
                                     base64::decode_config_buf(line, base64::STANDARD, &mut result)
@@ -263,7 +265,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     };
 
-                    let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
                     match trailing_event {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -277,7 +279,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag)?.to_string())),
+                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),

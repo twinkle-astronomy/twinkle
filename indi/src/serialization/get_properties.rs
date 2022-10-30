@@ -1,5 +1,6 @@
 use quick_xml::events::Event;
 use quick_xml::{Reader, Writer};
+use quick_xml::name::QName;
 
 use std::str;
 
@@ -55,7 +56,7 @@ impl<'a, T: std::io::BufRead> GetPropertiesIter<'a, T> {
     }
 
     pub fn get_properties(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<GetProperties, DeError> {
         let mut version: Result<String, DeError> = Err(DeError::MissingAttr(&"version"));
@@ -64,15 +65,15 @@ impl<'a, T: std::io::BufRead> GetPropertiesIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"version" => version = Ok(attr_value),
-                b"device" => device = Some(attr_value),
-                b"name" => name = Some(attr_value),
+                QName(b"version") => version = Ok(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"name") => name = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -85,7 +86,7 @@ impl<'a, T: std::io::BufRead> GetPropertiesIter<'a, T> {
     }
 
     fn next_get_properties(&mut self) -> Result<Option<()>, DeError> {
-        let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+        let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
         match trailing_event {
             Event::End(_) => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),

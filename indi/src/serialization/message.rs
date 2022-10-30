@@ -1,5 +1,6 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::name::QName;
 
 use std::str;
 
@@ -34,7 +35,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
     }
 
     pub fn message(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<Message, DeError> {
         let mut device: Option<String> = None;
@@ -43,15 +44,15 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Some(attr_value),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Some(attr_value),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -64,7 +65,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
     }
 
     fn next_message(&mut self) -> Result<Option<()>, DeError> {
-        let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+        let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
         match trailing_event {
             Event::End(_) => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),

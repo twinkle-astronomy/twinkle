@@ -1,5 +1,6 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::name::QName;
 
 use std::str;
 
@@ -34,7 +35,7 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
     }
 
     pub fn del_property(
-        xml_reader: &Reader<T>,
+        _xml_reader: &Reader<T>,
         start_event: &events::BytesStart,
     ) -> Result<DelProperty, DeError> {
         let mut device: Result<String, DeError> = Err(DeError::MissingAttr(&"device"));
@@ -44,16 +45,16 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
 
         for attr in start_event.attributes() {
             let attr = attr?;
-            let attr_value = attr.unescape_and_decode_value(&xml_reader)?;
+            let attr_value = attr.unescape_value()?.into_owned();
             match attr.key {
-                b"device" => device = Ok(attr_value),
-                b"name" => name = Some(attr_value),
-                b"timestamp" => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
-                b"message" => message = Some(attr_value),
+                QName(b"device") => device = Ok(attr_value),
+                QName(b"name") => name = Some(attr_value),
+                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
-                        str::from_utf8(key)?
+                        str::from_utf8(key.into_inner())?
                     )))
                 }
             }
@@ -67,7 +68,7 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
     }
 
     fn next_del(&mut self) -> Result<Option<()>, DeError> {
-        let trailing_event = self.xml_reader.read_event(&mut self.buf)?;
+        let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
         match trailing_event {
             Event::End(_) => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),

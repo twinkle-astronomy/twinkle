@@ -6,9 +6,10 @@ use quick_xml::events::Event;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
-use std::borrow::Cow;
-use std::net::TcpStream;
+use derivative::Derivative;
 
+use std::borrow::Cow;
+use std::net::{Shutdown, TcpStream};
 use std::io::{BufReader, BufWriter};
 
 use std::num;
@@ -121,6 +122,7 @@ pub enum UpdateError {
     ParameterTypeMismatch(String),
 }
 
+#[derive(Debug)]
 pub struct Device {
     parameters: HashMap<String, Parameter>,
 }
@@ -146,6 +148,20 @@ impl Device {
             Command::DefTextVector(def_command) => self.new_param(def_command),
             Command::SetTextVector(_) => Ok(None),
             Command::NewTextVector(new_command) => self.update_param(new_command),
+            Command::DelProperty(del_command) => {
+                match del_command.name {
+                    Some(name) => {
+                        self.parameters.remove(&name);
+                        ()
+                    },
+                    None => {
+                        self.parameters.drain();
+                        ()
+                    }
+
+                }
+                Ok(None)
+            }
             unhandled => panic!("Unhandled: {:?}", unhandled),
         }
     }
@@ -187,20 +203,61 @@ trait CommandToUpdate {
     fn update(self, switch_vector: &mut Parameter) -> Result<String, UpdateError>;
 }
 
+#[derive(Debug)]
 pub struct Client {
-    connection: TcpStream,
-    xml_writer: Writer<BufWriter<TcpStream>>,
+    devices: HashMap<String, Device>,
 }
 
 impl Client {
-    pub fn new(addr: &str) -> std::io::Result<Client> {
+    pub fn new() -> Client {
+        Client {
+            devices: HashMap::new(),
+        }
+    }
+
+    pub fn update(&mut self,
+        command: serialization::Command,
+    ) -> Result<Option<&Parameter>, UpdateError> {
+        let name = command.device_name();
+        match name {
+            Some(name) => {
+                let device = self.devices.entry(name.clone()).or_insert(Device::new());
+                device.update(command)
+            },
+            None => Ok(None)
+        }
+    }
+
+    pub fn get_devices(&self) -> &HashMap<String, Device> {
+        return &self.devices;
+    }
+
+    pub fn clear(&mut self) {
+        self.devices.clear();
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct Connection {
+    connection: TcpStream,
+    #[derivative(Debug="ignore")]
+    xml_writer: Writer<BufWriter<TcpStream>>,
+}
+
+impl Connection {
+    pub fn new(addr: &str) -> std::io::Result<Connection> {
         let connection = TcpStream::connect(addr)?;
         let xml_writer = Writer::new_with_indent(BufWriter::new(connection.try_clone()?), b' ', 2);
 
-        Ok(Client {
+        Ok(Connection {
             connection,
             xml_writer,
         })
+    }
+
+    pub fn disconnect(&self) -> Result<(), std::io::Error> {
+        self.connection.shutdown(Shutdown::Both)
     }
 
     pub fn command_iter(
@@ -212,7 +269,7 @@ impl Client {
         Ok(serialization::CommandIter::new(xml_reader))
     }
 
-    pub fn send<T: XmlSerialization>(&mut self, command: &T) -> Result<(), quick_xml::Error> {
+    pub fn send<T: XmlSerialization>(&mut self, command: &T) -> Result<(), DeError> {
         command.send(&mut self.xml_writer)?;
         self.xml_writer.inner().flush()?;
         Ok(())

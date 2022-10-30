@@ -17,6 +17,7 @@ fn test_def_number_vector() {
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -48,6 +49,7 @@ fn test_set_number_vector() {
 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -79,6 +81,7 @@ fn test_new_number_vector() {
 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -116,6 +119,7 @@ SQM
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -153,6 +157,7 @@ SQM
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -190,6 +195,7 @@ SQM
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -218,6 +224,7 @@ On
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -246,6 +253,7 @@ Off
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -274,6 +282,7 @@ Off
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -302,6 +311,7 @@ Ok
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
@@ -330,6 +340,7 @@ Ok
                 "#;
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
+    reader.expand_empty_elements(true);
     let mut command_iter = CommandIter::new(reader);
 
     match command_iter.next().unwrap().unwrap() {
