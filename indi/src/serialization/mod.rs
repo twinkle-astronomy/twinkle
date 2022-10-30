@@ -31,13 +31,12 @@ pub mod get_properties;
 use super::*;
 pub use get_properties::GetPropertiesIter;
 
+use quick_xml::name::QName;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
-use quick_xml::name::QName;
 
 #[cfg(test)]
 mod tests;
-
 
 #[derive(Debug)]
 pub enum Command {
@@ -78,18 +77,14 @@ impl Command {
             Command::SetLightVector(c) => Some(&c.device),
             Command::DefBlobVector(c) => Some(&c.device),
             Command::SetBlobVector(c) => Some(&c.device),
-            Command::Message(c) => {
-                match &c.device {
-                    Some(device) => Some(device),
-                    None => None
-                }
+            Command::Message(c) => match &c.device {
+                Some(device) => Some(device),
+                None => None,
             },
             Command::DelProperty(c) => Some(&c.device),
-            Command::GetProperties(c) => {
-                match &c.device {
-                    Some(device) => Some(device),
-                    None => None
-                }
+            Command::GetProperties(c) => match &c.device {
+                Some(device) => Some(device),
+                None => None,
             },
         }
     }
@@ -102,7 +97,7 @@ impl XmlSerialization for Command {
     ) -> XmlResult<&'a mut Writer<T>> {
         match self {
             Command::NewTextVector(c) => c.send(xml_writer),
-            _ => panic!("asdf")
+            _ => panic!("asdf"),
         }
         // let mut creator = xml_writer
         //     .create_element("enableBLOB")
@@ -487,7 +482,10 @@ impl From<AttrError> for DeError {
 }
 
 impl<'a> SwitchRule {
-    fn try_from<T: std::io::BufRead>(value: Attribute<'a>, xml_reader: &Reader<T>) -> Result<Self, DeError> {
+    fn try_from<T: std::io::BufRead>(
+        value: Attribute<'a>,
+        xml_reader: &Reader<T>,
+    ) -> Result<Self, DeError> {
         match value.decode_and_unescape_value(xml_reader)? {
             Cow::Borrowed("OneOfMany") => Ok(SwitchRule::OneOfMany),
             Cow::Borrowed("AtMostOne") => Ok(SwitchRule::AtMostOne),
@@ -497,8 +495,11 @@ impl<'a> SwitchRule {
     }
 }
 
-impl<'a>  PropertyState {
-    fn try_from<T: std::io::BufRead>(value: Attribute<'a>, xml_reader: &Reader<T>) -> Result<Self, DeError> {
+impl<'a> PropertyState {
+    fn try_from<T: std::io::BufRead>(
+        value: Attribute<'a>,
+        xml_reader: &Reader<T>,
+    ) -> Result<Self, DeError> {
         match value.decode_and_unescape_value(xml_reader)? {
             Cow::Borrowed("Idle") => Ok(PropertyState::Idle),
             Cow::Borrowed("Ok") => Ok(PropertyState::Ok),
@@ -529,7 +530,10 @@ impl<'a> SwitchState {
     }
 }
 impl<'a> PropertyPerm {
-    fn try_from<T: std::io::BufRead>(value: Attribute<'a>, xml_reader: &Reader<T>) -> Result<Self, DeError> {
+    fn try_from<T: std::io::BufRead>(
+        value: Attribute<'a>,
+        xml_reader: &Reader<T>,
+    ) -> Result<Self, DeError> {
         match value.decode_and_unescape_value(xml_reader)? {
             Cow::Borrowed("ro") => Ok(PropertyPerm::RO),
             Cow::Borrowed("wo") => Ok(PropertyPerm::WO),
@@ -724,7 +728,9 @@ impl<T: std::io::BufRead> CommandIter<T> {
 
                         Ok(Some(Command::GetProperties(get_properties)))
                     }
-                    tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                    tag => Err(DeError::UnexpectedTag(
+                        str::from_utf8(tag.into_inner())?.to_string(),
+                    )),
                 };
                 result
             }

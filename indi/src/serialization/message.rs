@@ -1,6 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
+use quick_xml::Reader;
 
 use std::str;
 
@@ -47,7 +47,9 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
             let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(

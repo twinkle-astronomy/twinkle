@@ -1,7 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
-
+use quick_xml::Reader;
 
 use std::str;
 
@@ -83,7 +82,9 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -117,7 +118,9 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -142,7 +145,9 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
                         label: label,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -197,7 +202,9 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                 QName(b"name") => name = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -230,7 +237,9 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -246,7 +255,9 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         }
                     }
 
-                    let value: Result<Vec<u8>, DeError> = match self.xml_reader.read_event_into(self.buf)
+                    let value: Result<Vec<u8>, DeError> = match self
+                        .xml_reader
+                        .read_event_into(self.buf)
                     {
                         Ok(Event::Text(e)) => match size {
                             Ok(size) => {
@@ -279,7 +290,9 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),

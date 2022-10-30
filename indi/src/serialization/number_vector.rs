@@ -1,6 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
+use quick_xml::Reader;
 
 use std::str;
 
@@ -191,7 +191,9 @@ fn next_one_number<T: std::io::BufRead>(
                     value: value?,
                 }))
             }
-            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+            tag => Err(DeError::UnexpectedTag(
+                str::from_utf8(tag.into_inner())?.to_string(),
+            )),
         },
         Event::End(_) => Ok(None),
         Event::Eof => Ok(None),
@@ -251,7 +253,9 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -289,7 +293,9 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -307,10 +313,11 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                         }
                     }
 
-                    let value: Result<f64, DeError> = match self.xml_reader.read_event_into(self.buf) {
-                        Ok(Event::Text(e)) => parse_number(&e),
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    };
+                    let value: Result<f64, DeError> =
+                        match self.xml_reader.read_event_into(self.buf) {
+                            Ok(Event::Text(e)) => parse_number(&e),
+                            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                        };
 
                     let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
                     match trailing_event {
@@ -328,7 +335,9 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -383,7 +392,9 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
                 QName(b"name") => name = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -446,7 +457,9 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",

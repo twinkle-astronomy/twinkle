@@ -1,6 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
+use quick_xml::Reader;
 
 use std::str;
 
@@ -49,7 +49,9 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
             match attr.key {
                 QName(b"device") => device = Ok(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(

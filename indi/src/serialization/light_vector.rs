@@ -1,6 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
+use quick_xml::Reader;
 
 use std::str;
 
@@ -55,7 +55,9 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
                 QName(b"label") => label = Some(attr_value),
                 QName(b"group") => group = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -87,7 +89,9 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -119,7 +123,9 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -172,7 +178,9 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -201,7 +209,9 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -231,7 +241,9 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),

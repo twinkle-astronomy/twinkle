@@ -9,8 +9,8 @@ use quick_xml::{Reader, Writer};
 use derivative::Derivative;
 
 use std::borrow::Cow;
-use std::net::{Shutdown, TcpStream};
 use std::io::{BufReader, BufWriter};
+use std::net::{Shutdown, TcpStream};
 
 use std::num;
 use std::str;
@@ -153,12 +153,11 @@ impl Device {
                     Some(name) => {
                         self.parameters.remove(&name);
                         ()
-                    },
+                    }
                     None => {
                         self.parameters.drain();
                         ()
                     }
-
                 }
                 Ok(None)
             }
@@ -215,7 +214,8 @@ impl Client {
         }
     }
 
-    pub fn update(&mut self,
+    pub fn update(
+        &mut self,
         command: serialization::Command,
     ) -> Result<Option<&Parameter>, UpdateError> {
         let name = command.device_name();
@@ -223,8 +223,8 @@ impl Client {
             Some(name) => {
                 let device = self.devices.entry(name.clone()).or_insert(Device::new());
                 device.update(command)
-            },
-            None => Ok(None)
+            }
+            None => Ok(None),
         }
     }
 
@@ -241,7 +241,7 @@ impl Client {
 #[derivative(Debug)]
 pub struct Connection {
     connection: TcpStream,
-    #[derivative(Debug="ignore")]
+    #[derivative(Debug = "ignore")]
     xml_writer: Writer<BufWriter<TcpStream>>,
 }
 

@@ -1,6 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
+use quick_xml::Reader;
 use std::str;
 
 // use log::warn;
@@ -68,9 +68,8 @@ impl XmlSerialization for OneText {
             .create_element("oneText")
             .with_attribute(("name", &*self.name));
 
-        
         creator.write_text_content(BytesText::new(self.value.as_str()))?;
-        
+
         Ok(xml_writer)
     }
 }
@@ -129,7 +128,6 @@ fn next_one_text<T: std::io::BufRead>(
                     }
                 }
 
-
                 let value: Result<String, DeError> = match xml_reader.read_event_into(buf) {
                     Ok(Event::Text(e)) => {
                         let val = Ok(e.unescape()?.into_owned());
@@ -139,10 +137,8 @@ fn next_one_text<T: std::io::BufRead>(
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                         }
                         val
-                    },
-                    Ok(Event::End(_)) => {
-                        Ok("".to_string())
                     }
+                    Ok(Event::End(_)) => Ok("".to_string()),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 };
 
@@ -151,7 +147,9 @@ fn next_one_text<T: std::io::BufRead>(
                     value: value?,
                 }))
             }
-            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+            tag => Err(DeError::UnexpectedTag(
+                str::from_utf8(tag.into_inner())?.to_string(),
+            )),
         },
         Event::End(_) => Ok(None),
         Event::Eof => Ok(None),
@@ -201,7 +199,9 @@ impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
@@ -266,7 +266,9 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
                 QName(b"name") => name = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -341,7 +343,9 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -375,7 +379,9 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -389,22 +395,21 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
                         }
                     }
 
-                    let value: Result<String, DeError> = match self.xml_reader.read_event_into(self.buf) {
-                        Ok(Event::Text(e)) => {
-                            let val = Ok(e.unescape()?.into_owned());
-                            let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
-                            match trailing_event {
-                                Event::End(_) => (),
-                                e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                    let value: Result<String, DeError> =
+                        match self.xml_reader.read_event_into(self.buf) {
+                            Ok(Event::Text(e)) => {
+                                let val = Ok(e.unescape()?.into_owned());
+                                let trailing_event =
+                                    self.xml_reader.read_event_into(&mut self.buf)?;
+                                match trailing_event {
+                                    Event::End(_) => (),
+                                    e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                                }
+                                val
                             }
-                            val
-                        },
-                        Ok(Event::End(_)) => {
-                            Ok("".to_string())
-                        }
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    };
-
+                            Ok(Event::End(_)) => Ok("".to_string()),
+                            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                        };
 
                     Ok(Some(DefText {
                         name: name?,
@@ -412,7 +417,9 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -424,10 +431,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-use bytes::{BytesMut, BufMut};
-use bytes::Buf;
-use std::io::Cursor;
-use std::io::Read;
+
     #[test]
     fn test_def_text() {
         let xml = r#"
@@ -455,60 +459,60 @@ Telescope Simulator
         );
     }
 
-//     #[test]
-//     fn test_one_text() {
-//         let xml = b"\
-//     <oneText name=\"ACTIVE_TELESCOPE\">
-// Simulator \xFF changed
-//     </oneText>
-// ";
-//         // let mut preamble : BytesMut = BytesMut::with_capacity(1024);
-//         // preamble.put(&b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"[..]);
-//         let preamble_read = Cursor::new(b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\"><xml/>");
+    //     #[test]
+    //     fn test_one_text() {
+    //         let xml = b"\
+    //     <oneText name=\"ACTIVE_TELESCOPE\">
+    // Simulator \xFF changed
+    //     </oneText>
+    // ";
+    //         // let mut preamble : BytesMut = BytesMut::with_capacity(1024);
+    //         // preamble.put(&b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"[..]);
+    //         let preamble_read = Cursor::new(b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\"><xml/>");
 
-//         // let mut buf : BytesMut = BytesMut::with_capacity(1024);
-//         // buf.put(&xml[..]);
-//         let buf_read = Cursor::new(xml);
+    //         // let mut buf : BytesMut = BytesMut::with_capacity(1024);
+    //         // buf.put(&xml[..]);
+    //         let buf_read = Cursor::new(xml);
 
-//         let mut reader = Reader::from_reader(std::io::Read::chain(preamble_read, buf_read));
+    //         let mut reader = Reader::from_reader(std::io::Read::chain(preamble_read, buf_read));
 
-//         reader.trim_text(true);
-//         reader.expand_empty_elements(true);
-//         let mut command_iter = CommandIter::new(reader);
-//         let mut number_iter = SetTextIter::new(&mut command_iter);
+    //         reader.trim_text(true);
+    //         reader.expand_empty_elements(true);
+    //         let mut command_iter = CommandIter::new(reader);
+    //         let mut number_iter = SetTextIter::new(&mut command_iter);
 
-//         let result = number_iter.next().unwrap().unwrap();
+    //         let result = number_iter.next().unwrap().unwrap();
 
-//         assert_eq!(
-//             result,
-//             OneText {
-//                 name: "ACTIVE_TELESCOPE".to_string(),
-//                 value: "Simulator ÿ changed".to_string()
-//             }
-//         );
-//     }
+    //         assert_eq!(
+    //             result,
+    //             OneText {
+    //                 name: "ACTIVE_TELESCOPE".to_string(),
+    //                 value: "Simulator ÿ changed".to_string()
+    //             }
+    //         );
+    //     }
 
-//     #[test]
-//     fn test_send_new_text_vector() {
-//         let mut writer = Writer::new(Cursor::new(Vec::new()));
-//         let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+    //     #[test]
+    //     fn test_send_new_text_vector() {
+    //         let mut writer = Writer::new(Cursor::new(Vec::new()));
+    //         let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
 
-//         let command = NewTextVector {
-//             device: String::from_str("CCD Simulator").unwrap(),
-//             name: String::from_str("Exposure").unwrap(),
-//             timestamp: Some(timestamp),
-//             texts: vec![OneText {
-//                 name: String::from_str("seconds").unwrap(),
-//                 value: String::from_str("Long ÿ enough").unwrap(),
-//             }],
-//         };
+    //         let command = NewTextVector {
+    //             device: String::from_str("CCD Simulator").unwrap(),
+    //             name: String::from_str("Exposure").unwrap(),
+    //             timestamp: Some(timestamp),
+    //             texts: vec![OneText {
+    //                 name: String::from_str("seconds").unwrap(),
+    //                 value: String::from_str("Long ÿ enough").unwrap(),
+    //             }],
+    //         };
 
-//         command.send(&mut writer).unwrap();
+    //         command.send(&mut writer).unwrap();
 
-//         let result = writer.into_inner().into_inner();
-//         assert_eq!(
-//             result,
-//             b"<newTextVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneText name=\"seconds\">Long \xFF enough</oneText></newTextVector>"
-//         );
-//     }
+    //         let result = writer.into_inner().into_inner();
+    //         assert_eq!(
+    //             result,
+    //             b"<newTextVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneText name=\"seconds\">Long \xFF enough</oneText></newTextVector>"
+    //         );
+    //     }
 }

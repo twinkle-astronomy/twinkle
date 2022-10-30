@@ -1,6 +1,6 @@
 use quick_xml::events::Event;
-use quick_xml::Reader;
 use quick_xml::name::QName;
+use quick_xml::Reader;
 
 use std::str;
 
@@ -147,7 +147,9 @@ fn next_one_switch<T: std::io::BufRead>(
                     value: value?,
                 }))
             }
-            tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+            tag => Err(DeError::UnexpectedTag(
+                str::from_utf8(tag.into_inner())?.to_string(),
+            )),
         },
         Event::End(_) => Ok(None),
         Event::Eof => Ok(None),
@@ -209,7 +211,9 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"rule") => rule = Some(SwitchRule::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -244,7 +248,9 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
 
                     for attr in e.attributes() {
                         let attr = attr?;
-                        let attr_value = attr.decode_and_unescape_value(self.xml_reader)?.into_owned();
+                        let attr_value = attr
+                            .decode_and_unescape_value(self.xml_reader)?
+                            .into_owned();
 
                         match attr.key {
                             QName(b"name") => name = Ok(attr_value),
@@ -276,7 +282,9 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
                         value: value?,
                     }))
                 }
-                tag => Err(DeError::UnexpectedTag(str::from_utf8(tag.into_inner())?.to_string())),
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
             },
             Event::End(_) => Ok(None),
             Event::Eof => Ok(None),
@@ -332,7 +340,9 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
                 QName(b"name") => name = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 QName(b"message") => message = Some(attr_value),
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -396,7 +406,9 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
-                QName(b"timestamp") => timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?),
+                QName(b"timestamp") => {
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                }
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
                         "Unexpected attribute {}",
