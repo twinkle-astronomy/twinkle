@@ -1,0 +1,16 @@
+[package]
+name = "twinkle"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+eframe = { version = "0.19.0", features = ["persistence"] }
+egui = "0.19.0"
+serde = { version = "1", features = ["derive"] } # You only need this if you want app persistence
+indi = { path = "../indi" }
+
+tracing-subscriber = "0.3.16"
+tracing = "0.1.37"
+tokio = {version = "1.21.2", features = ["full"]}
