@@ -1,213 +1,21 @@
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-use std::sync::{Arc, Mutex};
-// use std::sync::mpsc;
-// use std::thread;
-// use std::thread::JoinHandle;
+mod backend;
+use backend::*;
 
-use tracing::{event, instrument, Level};
+mod fits_viewer;
 
-use indi::DeError;
+use tracing::{event, Level};
 
-use tokio::task;
+use indi::Parameter;
 
-// #[derive(Debug)]
-// struct ConnectionWorker {
-//     connection: Arc<Mutex<indi::Connection>>,
-//     thread_handle: JoinHandle<Result<(), DeError>>
-// }
-
-// impl ConnectionWorker {
-//     pub fn new(sender: mpsc::Sender<Option<Result<Command, DeError>>>, address: &str) -> std::io::Result<ConnectionWorker> {
-//         let connection = Arc::new(Mutex::new(indi::Connection::new(address)?));
-//         let thread_connection = Arc::clone(&connection);
-
-//         let thread_handle = thread::spawn(move || -> Result<(), indi::DeError> {
-//             event!(Level::TRACE, "Starting connection Thread");
-
-
-//             let iter = {
-//                 let connection = thread_connection.lock().expect("Mutex");
-//                 connection.command_iter()?
-//             };
-
-//             for command in iter {
-//                 sender.send(Some(command)).unwrap();
-//             }
-//             sender.send(None).unwrap();
-//             event!(Level::TRACE, "Finishing connection Thread");
-//             Ok(())
-//         });
-
-//         Ok(ConnectionWorker {
-//             connection,
-//             thread_handle
-//         })
-//     }
-
-//     pub fn send(&self, command: &indi::Command) -> Result<(), DeError>{
-//         let mut connection = self.connection.lock().expect("Mutex");
-//         connection.send(command)
-//     }
-
-//     pub fn stop(self) -> Result<(), DeError> {
-//         {
-//             let connection = self.connection.lock().expect("Mutex");
-//             connection.disconnect()?;
-//         }
-//         self.thread_handle.join().unwrap()?;
-//         Ok(())
-//     }
-// }
-#[derive(Clone)]
-pub enum ConnectionStatus {
-    Disconnected,
-    Connecting,
-    Initializing,
-    Connected,
-    
-}
-
-struct Disconnector {
-    status: Arc<Mutex<ConnectionStatus>>
-}
-
-impl Drop for Disconnector {
-    fn drop (&mut self) {
-       let mut l = self.status.lock().unwrap();
-       *l = ConnectionStatus::Disconnected;
-        event!(Level::INFO, "Done with connection");
-    }
-}
-
-struct Backend {
-    client: Arc<Mutex<indi::Client>>,
-    connection: Arc<Mutex<Option<indi::Connection>>>,
-    connection_status: Arc<Mutex<ConnectionStatus>>
-}
-
-impl Default for Backend {
-    fn default() -> Self {
-        Self {
-            client: Arc::new(Mutex::new(indi::Client::new())),
-            connection: Arc::new(Mutex::new(None)),
-            connection_status: Arc::new(Mutex::new(ConnectionStatus::Disconnected))
-        }
-    }
-}
-
-impl Drop for Backend {
-    fn drop (&mut self) {
-        let mut locked_connection = self.connection.lock().unwrap();
-        if let Some(connection) = &mut *locked_connection {
-            _ = connection.disconnect();
-        }
-    }
-}
-impl Backend {
-    #[instrument(skip(self))]
-    fn connect(&mut self, address: String) -> Result<(), indi::DeError> {
-        let runtime_client = Arc::clone(&self.client);
-        let runtime_connection = Arc::clone(&self.connection);
-        let runtime_connection_status = Arc::clone(&self.connection_status);
-        self.disconnect()?;
-
-        // let address = address.clone();
-        task::spawn_blocking( move || -> Result<(), DeError> {
-            let _guard = Disconnector{ status: Arc::clone(&runtime_connection_status) };
-
-            let iter = {
-                let mut locked_connection = runtime_connection.lock().unwrap();
-                if let Some(connection) = &mut *locked_connection {
-                    _ = connection.disconnect();
-                }
-
-                event!(Level::INFO, "Connecting to {}", address);
-                {
-                    let mut l = runtime_connection_status.lock().unwrap();
-                    *l = ConnectionStatus::Connecting;
-                }
-
-                let mut connection = indi::Connection::new("localhost:7624")?;
-                event!(Level::INFO, "Connected, requesting properties");
-                {
-                    let mut l = runtime_connection_status.lock().unwrap();
-                    *l = ConnectionStatus::Connecting;
-                }
-
-                connection.send(&indi::GetProperties {
-                    version: indi::INDI_PROTOCOL_VERSION.to_string(),
-                    device: None,
-                    name: None,
-                })?;
-
-                {
-                    let mut l = runtime_connection_status.lock().unwrap();
-                    *l = ConnectionStatus::Connected;
-                }
-                let iter = connection.command_iter()?;
-                *locked_connection = Some(connection);                
-                iter
-            };
-
-            for command in iter {
-                // event!(Level::INFO, "Command: {:?}", command);
-                match command {
-                    Ok(command) => {
-                        let mut client = runtime_client.lock().unwrap();
-                        if let Err(e) = client.update(command) {
-                            println!("error: {:?}", e)
-                        }
-                    }
-                    Err(e) => match e {
-                        e => println!("error: {:?}", e),
-                    },
-                }
-            }
-            
-            Ok(())
-        });
-
-        Ok(())
-    }
-
-    fn get_status(&self) -> ConnectionStatus{
-        let l = self.connection_status.lock().unwrap();
-        l.clone()
-    }
-
-
-    #[instrument(skip(self))]
-    fn disconnect(&mut self) -> Result<(), DeError> {
-        let connection = self.connection.lock();
-        match connection {
-            Ok(mut connection) => {
-                if let Some(connection) = &mut *connection {
-                    connection.disconnect()?;
-                    
-                }   
-                *connection = None;             
-            }
-            Err(e) => {
-                event!(Level::ERROR, "Error disconnecting: {:?}", e);
-            }
-        }
-
-        Ok(())
-    }
-
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TwinkleApp {
 
-    #[serde(skip)]
     backend: Backend,
 
     address: String,
 
-
-    value: f32,
+    selected_device: Option<String>,
+    fits_viewer: Option<fits_viewer::Custom3d>
 }
 
 
@@ -217,7 +25,9 @@ impl Default for TwinkleApp {
             // Example stuff:
             address: "localhost:7624".to_owned(),
             backend: Default::default(),
-            value: 2.7,
+
+            selected_device: None,
+            fits_viewer: None
         }
     }
 }
@@ -225,29 +35,24 @@ impl Default for TwinkleApp {
 impl TwinkleApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        match cc.storage {
-            Some(storage) => eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default(),
-            None => Default::default()
-        }
+        let mut newed : TwinkleApp = Default::default();
+        newed.fits_viewer = fits_viewer::Custom3d::new(cc);
+        newed
     }
 }
 
 impl eframe::App for TwinkleApp {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
-
+ 
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { address, backend, value } = self;
+        let Self { address, backend, selected_device, fits_viewer } = self;
+
+        let client_lock = backend.get_client();//.lock().unwrap();
+        let client = client_lock.lock().unwrap();
+        let devices = client.get_devices();
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
-
             ui.horizontal(|ui| {
                 ui.label("Indi: ");
                 ui.text_edit_singleline(address);
@@ -256,7 +61,7 @@ impl eframe::App for TwinkleApp {
             match backend.get_status() {
                 ConnectionStatus::Disconnected => {
                     if ui.button("Connect").clicked() {
-                        if let Err(e) = backend.connect(address.to_string()) {
+                        if let Err(e) = backend.connect(ctx.clone(), address.to_string()) {
                             event!(Level::ERROR, "Connection error: {:?}", e);
                         }
 
@@ -278,36 +83,85 @@ impl eframe::App for TwinkleApp {
                 }
             }
 
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
+            ui.separator();
+
+            {
+                for (name, _device) in devices {
+                    if ui.selectable_value(&mut Some(name), selected_device.as_ref(), name).clicked() {
+                        *selected_device = Some(name.to_string());
+                    }
+                }
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
-                    );
-                    ui.label(".");
+                    egui::warn_if_debug_build(ui);
                 });
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
 
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            if let Some(fits_viewer) = fits_viewer {
+                fits_viewer.update(ctx, _frame);
+            }
+            egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .show_viewport(ui, |ui, viewport| {
+                if let Some(device_name) = selected_device {
+                    if let Some(device) = devices.get(device_name) {
+                        ui.heading(device_name.clone());
+                        ui.separator();
+                        for (name, param) in device.get_parameters() {
+                            ui.label(name);
+                            ui.separator();
+
+                            match param {
+                                Parameter::TextVector(tv) => {
+                                    egui::Grid::new(format!("{}", name)).num_columns(2).show(ui, |ui| {
+                                        for (text_name, text_value) in &tv.values {                                    
+                                            ui.label(text_name.clone());
+                                            ui.label(text_value.value.clone());
+                                            ui.end_row();
+                                        }
+                                    });
+                                },
+                                Parameter::NumberVector(nv) => {
+                                    egui::Grid::new(format!("{}", name)).num_columns(2).show(ui, |ui| {
+                                        for (number_name, number_value) in &nv.values {                                    
+                                            ui.label(number_name.clone());
+                                            ui.label(format!("{}", number_value.value));
+                                            ui.end_row();
+                                        }
+                                    });
+                                },
+                                Parameter::SwitchVector(sv) => {
+                                    ui.horizontal(|ui| {
+                                        for (button_name, button_value) in &sv.values {                                    
+                                            if ui.add(egui::SelectableLabel::new(button_value.value == indi::SwitchState::On, button_name.clone())).clicked() {
+                                                backend.send_command(&indi::Command::NewSwitchVector(
+                                                    indi::NewSwitchVector {
+                                                        device: device_name.to_string(),
+                                                        name: name.to_string(),
+                                                        timestamp: None,
+                                                        switches: vec![indi::OneSwitch {
+                                                            name: button_name.to_string(),
+                                                            value: indi::SwitchState::On,
+                                                        }],
+                                                    }));
+                                            }
+                                        }
+                                    });  
+                                }
+                                _ => {}
+                            }
+                        
+                            ui.end_row();
+                        }
+
+                    }
+                }
+            });
         });
         // self.backend.tick();
     }

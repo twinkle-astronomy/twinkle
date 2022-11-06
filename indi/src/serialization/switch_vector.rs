@@ -38,7 +38,7 @@ impl CommandtoParam for DefSwitchVector {
     }
 }
 
-impl CommandToUpdate for NewSwitchVector {
+impl CommandToUpdate for SetSwitchVector {
     fn get_name(&self) -> &String {
         &self.name
     }

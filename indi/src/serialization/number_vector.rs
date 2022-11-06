@@ -44,7 +44,7 @@ impl CommandtoParam for DefNumberVector {
     }
 }
 
-impl CommandToUpdate for NewNumberVector {
+impl CommandToUpdate for SetNumberVector {
     fn get_name(&self) -> &String {
         &self.name
     }
@@ -52,6 +52,8 @@ impl CommandToUpdate for NewNumberVector {
     fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::NumberVector(number_vector) => {
+                number_vector.state = self.state;
+                number_vector.timeout = self.timeout;
                 number_vector.timestamp = self.timestamp;
                 for number in self.numbers {
                     if let Some(existing) = number_vector.values.get_mut(&number.name) {

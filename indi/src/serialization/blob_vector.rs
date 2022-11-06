@@ -7,6 +7,61 @@ use std::str;
 use super::super::*;
 use super::*;
 
+impl CommandtoParam for DefBlobVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+    fn to_param(self) -> Parameter {
+        Parameter::BlobVector(BlobVector {
+            name: self.name,
+            group: self.group,
+            label: self.label,
+            state: self.state,
+            perm: self.perm,
+            timeout: self.timeout,
+            timestamp: self.timestamp,
+            values: self
+                .blobs
+                .into_iter()
+                .map(|i| {
+                    (
+                        i.name,
+                        Blob {
+                            label: i.label,
+                            format: None,
+                            value: None,
+                        },
+                    )
+                })
+                .collect(),
+        })
+    }
+}
+
+impl CommandToUpdate for SetBlobVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
+    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+        match param {
+            Parameter::BlobVector(blob_vector) => {
+                blob_vector.state = self.state;
+                blob_vector.timeout = self.timeout;
+                blob_vector.timestamp = self.timestamp;
+                for blob in self.blobs {
+                    if let Some(existing) = blob_vector.values.get_mut(&blob.name) {
+                        existing.format = Some(blob.format);
+                        existing.value = Some(blob.value);
+                    }
+                }
+                Ok(self.name)
+            }
+            _ => Err(UpdateError::ParameterTypeMismatch(self.name.clone())),
+        }
+    }
+}
+
 impl XmlSerialization for EnableBlob {
     fn send<'a, T: std::io::Write>(
         &self,

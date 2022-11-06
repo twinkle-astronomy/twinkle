@@ -38,7 +38,7 @@ impl CommandtoParam for DefTextVector {
     }
 }
 
-impl CommandToUpdate for NewTextVector {
+impl CommandToUpdate for SetTextVector {
     fn get_name(&self) -> &String {
         &self.name
     }
@@ -46,6 +46,8 @@ impl CommandToUpdate for NewTextVector {
     fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::TextVector(text_vector) => {
+                text_vector.state = self.state;
+                text_vector.timeout = self.timeout;
                 text_vector.timestamp = self.timestamp;
                 for text in self.texts {
                     if let Some(existing) = text_vector.values.get_mut(&text.name) {

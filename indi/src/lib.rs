@@ -26,6 +26,40 @@ pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 
 pub mod serialization;
 pub use serialization::*;
+#[derive(Debug, PartialEq)]
+pub enum PropertyState {
+    Idle,
+    Ok,
+    Busy,
+    Alert,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SwitchState {
+    On,
+    Off,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SwitchRule {
+    OneOfMany,
+    AtMostOne,
+    AnyOfMany,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PropertyPerm {
+    RO,
+    WO,
+    RW,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BlobEnable {
+    Never,
+    Also,
+    Only,
+}
 
 #[derive(Debug, PartialEq)]
 pub struct Switch {
@@ -92,7 +126,7 @@ pub struct TextVector {
 #[derive(Debug, PartialEq)]
 pub struct Blob {
     pub label: Option<String>,
-    pub format: String,
+    pub format: Option<String>,
     pub value: Option<Vec<u8>>,
 }
 
@@ -104,6 +138,7 @@ pub struct BlobVector {
     pub state: PropertyState,
     pub perm: PropertyPerm,
     pub timeout: Option<u32>,
+    pub timestamp: Option<DateTime<Utc>>,
 
     pub values: HashMap<String, Blob>,
 }
@@ -139,15 +174,20 @@ impl Device {
         command: serialization::Command,
     ) -> Result<Option<&Parameter>, UpdateError> {
         match command {
+            Command::Message(_) => Ok(None),
+            Command::GetProperties(_) => Ok(None),
             Command::DefSwitchVector(def_command) => self.new_param(def_command),
-            Command::SetSwitchVector(_) => Ok(None),
-            Command::NewSwitchVector(new_command) => self.update_param(new_command),
+            Command::SetSwitchVector(set_command) => self.update_param(set_command),
+            Command::NewSwitchVector(_) => Ok(None),
             Command::DefNumberVector(def_command) => self.new_param(def_command),
-            Command::SetNumberVector(_) => Ok(None),
-            Command::NewNumberVector(new_command) => self.update_param(new_command),
+            Command::SetNumberVector(set_command) => self.update_param(set_command),
+            Command::NewNumberVector(_) => Ok(None),
             Command::DefTextVector(def_command) => self.new_param(def_command),
-            Command::SetTextVector(_) => Ok(None),
-            Command::NewTextVector(new_command) => self.update_param(new_command),
+            Command::SetTextVector(set_command) => self.update_param(set_command),
+            Command::NewTextVector(_) => Ok(None),
+            Command::DefBlobVector(def_command) => self.new_param(def_command),
+            Command::SetBlobVector(set_command) => self.update_param(set_command),
+
             Command::DelProperty(del_command) => {
                 match del_command.name {
                     Some(name) => {
@@ -161,7 +201,7 @@ impl Device {
                 }
                 Ok(None)
             }
-            unhandled => panic!("Unhandled: {:?}", unhandled),
+            Command::DefLightVector(_) | Command::SetLightVector(_) => todo!()
         }
     }
 
@@ -334,10 +374,13 @@ mod device_tests {
         }
 
         let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
-        let new_switch = NewSwitchVector {
+        let set_switch = SetSwitchVector {
             device: String::from_str("CCD Simulator").unwrap(),
             name: String::from_str("Exposure").unwrap(),
+            state: PropertyState::Ok,
+            timeout: Some(60),
             timestamp: Some(timestamp),
+            message: None,
             switches: vec![OneSwitch {
                 name: String::from_str("seconds").unwrap(),
                 value: SwitchState::Off,
@@ -345,7 +388,7 @@ mod device_tests {
         };
         assert_eq!(device.get_parameters().len(), 1);
         device
-            .update(serialization::Command::NewSwitchVector(new_switch))
+            .update(serialization::Command::SetSwitchVector(set_switch))
             .unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
@@ -435,10 +478,13 @@ mod device_tests {
         }
 
         let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
-        let new_number = NewNumberVector {
+        let set_number = SetNumberVector {
             device: String::from_str("CCD Simulator").unwrap(),
             name: String::from_str("Exposure").unwrap(),
+            state: PropertyState::Ok,
+            timeout: Some(60),
             timestamp: Some(timestamp),
+            message: None,
             numbers: vec![OneNumber {
                 name: String::from_str("seconds").unwrap(),
                 min: None,
@@ -449,7 +495,7 @@ mod device_tests {
         };
         assert_eq!(device.get_parameters().len(), 1);
         device
-            .update(serialization::Command::NewNumberVector(new_number))
+            .update(serialization::Command::SetNumberVector(set_number))
             .unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
@@ -534,10 +580,13 @@ mod device_tests {
         }
 
         let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
-        let new_number = NewTextVector {
+        let set_number = SetTextVector {
             device: String::from_str("CCD Simulator").unwrap(),
             name: String::from_str("Exposure").unwrap(),
+            state: PropertyState::Ok,
+            timeout: Some(60),
             timestamp: Some(timestamp),
+            message: None,
             texts: vec![OneText {
                 name: String::from_str("seconds").unwrap(),
                 value: String::from_str("something else").unwrap(),
@@ -545,7 +594,7 @@ mod device_tests {
         };
         assert_eq!(device.get_parameters().len(), 1);
         device
-            .update(serialization::Command::NewTextVector(new_number))
+            .update(serialization::Command::SetTextVector(set_number))
             .unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 

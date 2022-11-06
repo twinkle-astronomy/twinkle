@@ -97,59 +97,14 @@ impl XmlSerialization for Command {
     ) -> XmlResult<&'a mut Writer<T>> {
         match self {
             Command::NewTextVector(c) => c.send(xml_writer),
+            Command::NewNumberVector(c) => c.send(xml_writer),
+            Command::NewSwitchVector(c) => c.send(xml_writer),
+
             _ => panic!("asdf"),
         }
-        // let mut creator = xml_writer
-        //     .create_element("enableBLOB")
-        //     .with_attribute(("device", &*self.device));
-
-        // if let Some(name) = &self.name {
-        //     creator = creator.with_attribute(("name", &name[..]));
-        // }
-
-        // match self.enabled {
-        //     BlobEnable::Never => creator.write_text_content(BytesText::from_plain_str("Never")),
-        //     BlobEnable::Also => creator.write_text_content(BytesText::from_plain_str("Also")),
-        //     BlobEnable::Only => creator.write_text_content(BytesText::from_plain_str("Only")),
-        // }?;
-
-        // Ok(xml_writer)
     }
 }
-#[derive(Debug, PartialEq)]
-pub enum PropertyState {
-    Idle,
-    Ok,
-    Busy,
-    Alert,
-}
 
-#[derive(Debug, PartialEq)]
-pub enum SwitchState {
-    On,
-    Off,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum SwitchRule {
-    OneOfMany,
-    AtMostOne,
-    AnyOfMany,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum PropertyPerm {
-    RO,
-    WO,
-    RW,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum BlobEnable {
-    Never,
-    Also,
-    Only,
-}
 
 #[derive(Debug)]
 pub struct DefTextVector {
