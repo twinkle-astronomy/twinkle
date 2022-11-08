@@ -1,9 +1,8 @@
-use tracing::{instrument, event, Level};
-use std::sync::Mutex;
-use std::sync::Arc;
 use indi::DeError;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
-
+use tracing::{event, instrument, Level};
 
 #[derive(Clone)]
 pub enum ConnectionStatus {
@@ -11,11 +10,10 @@ pub enum ConnectionStatus {
     Connecting,
     Initializing,
     Connected,
-    
 }
 
 struct DropFn {
-    func: Box<dyn Fn() -> ()>
+    func: Box<dyn Fn() -> ()>,
 }
 
 impl Drop for DropFn {
@@ -41,7 +39,7 @@ impl Default for Backend {
 }
 
 impl Drop for Backend {
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         let mut locked_connection = self.connection.lock().unwrap();
         if let Some(connection) = &mut *locked_connection {
             _ = connection.disconnect();
@@ -49,13 +47,11 @@ impl Drop for Backend {
     }
 }
 impl Backend {
-
     pub fn send_command(&self, command: &indi::Command) {
         let mut locked_connection = self.connection.lock().unwrap();
         if let Some(connection) = &mut *locked_connection {
             connection.send(command);
         }
-
     }
 
     #[instrument(skip(self, ctx))]
@@ -65,22 +61,24 @@ impl Backend {
         let runtime_connection_status = Arc::clone(&self.connection_status);
         self.disconnect()?;
 
-        thread::spawn( move || -> Result<(), DeError> {
-        	let guard_client = Arc::clone(&runtime_client);
+        thread::spawn(move || -> Result<(), DeError> {
+            let guard_client = Arc::clone(&runtime_client);
             let guard_ctx = ctx.clone();
             let guard_status = Arc::clone(&runtime_connection_status);
-            let _guard = DropFn {func:  Box::new(move || {
-               {
-	               	let mut l = guard_status.lock().unwrap();
-	               *l = ConnectionStatus::Disconnected;
-	                event!(Level::INFO, "Done with connection");
-				}
-				{
-					let mut l = guard_client.lock().unwrap();
-					l.clear();
-				}
-                guard_ctx.request_repaint();
-            })};
+            let _guard = DropFn {
+                func: Box::new(move || {
+                    {
+                        let mut l = guard_status.lock().unwrap();
+                        *l = ConnectionStatus::Disconnected;
+                        event!(Level::INFO, "Done with connection");
+                    }
+                    {
+                        let mut l = guard_client.lock().unwrap();
+                        l.clear();
+                    }
+                    guard_ctx.request_repaint();
+                }),
+            };
 
             let iter = {
                 let mut locked_connection = runtime_connection.lock().unwrap();
@@ -115,7 +113,7 @@ impl Backend {
                     ctx.request_repaint();
                 }
                 let iter = connection.command_iter()?;
-                *locked_connection = Some(connection);                
+                *locked_connection = Some(connection);
                 iter
             };
 
@@ -134,22 +132,21 @@ impl Backend {
                     },
                 }
             }
-            
+
             Ok(())
         });
 
         Ok(())
     }
 
-    pub fn get_status(&self) -> ConnectionStatus{
+    pub fn get_status(&self) -> ConnectionStatus {
         let l = self.connection_status.lock().unwrap();
         l.clone()
     }
 
     pub fn get_client(&self) -> Arc<Mutex<indi::Client>> {
-    	self.client.clone()
+        self.client.clone()
     }
-
 
     #[instrument(skip(self))]
     pub fn disconnect(&mut self) -> Result<(), DeError> {
@@ -158,9 +155,8 @@ impl Backend {
             Ok(mut connection) => {
                 if let Some(connection) = &mut *connection {
                     connection.disconnect()?;
-                    
-                }   
-                *connection = None;             
+                }
+                *connection = None;
             }
             Err(e) => {
                 event!(Level::ERROR, "Error disconnecting: {:?}", e);
@@ -169,5 +165,4 @@ impl Backend {
 
         Ok(())
     }
-
 }

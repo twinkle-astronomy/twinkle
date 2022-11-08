@@ -9,15 +9,13 @@ use tracing::{event, Level};
 use indi::Parameter;
 
 pub struct TwinkleApp {
-
     backend: Backend,
 
     address: String,
 
     selected_device: Option<String>,
-    fits_viewer: Option<fits_viewer::Custom3d>
+    fits_viewer: Option<fits_viewer::Custom3d>,
 }
-
 
 impl Default for TwinkleApp {
     fn default() -> Self {
@@ -27,7 +25,7 @@ impl Default for TwinkleApp {
             backend: Default::default(),
 
             selected_device: None,
-            fits_viewer: None
+            fits_viewer: None,
         }
     }
 }
@@ -35,20 +33,24 @@ impl Default for TwinkleApp {
 impl TwinkleApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let mut newed : TwinkleApp = Default::default();
+        let mut newed: TwinkleApp = Default::default();
         newed.fits_viewer = fits_viewer::Custom3d::new(cc);
         newed
     }
 }
 
 impl eframe::App for TwinkleApp {
- 
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { address, backend, selected_device, fits_viewer } = self;
+        let Self {
+            address,
+            backend,
+            selected_device,
+            fits_viewer,
+        } = self;
 
-        let client_lock = backend.get_client();//.lock().unwrap();
+        let client_lock = backend.get_client(); //.lock().unwrap();
         let client = client_lock.lock().unwrap();
         let devices = client.get_devices();
 
@@ -64,22 +66,20 @@ impl eframe::App for TwinkleApp {
                         if let Err(e) = backend.connect(ctx.clone(), address.to_string()) {
                             event!(Level::ERROR, "Connection error: {:?}", e);
                         }
-
                     }
-                },
+                }
                 ConnectionStatus::Connecting => {
                     ui.label(format!("Connecting to {}", address));
                 }
                 ConnectionStatus::Initializing => {
                     ui.label(format!("Initializing connection"));
-                },
+                }
                 ConnectionStatus::Connected => {
                     if ui.button("Disconnect").clicked() {
                         if let Err(e) = backend.disconnect() {
                             event!(Level::ERROR, "Disconnection error: {:?}", e);
                         }
                     }
-
                 }
             }
 
@@ -87,7 +87,10 @@ impl eframe::App for TwinkleApp {
 
             {
                 for (name, _device) in devices {
-                    if ui.selectable_value(&mut Some(name), selected_device.as_ref(), name).clicked() {
+                    if ui
+                        .selectable_value(&mut Some(name), selected_device.as_ref(), name)
+                        .clicked()
+                    {
                         *selected_device = Some(name.to_string());
                     }
                 }
@@ -100,68 +103,81 @@ impl eframe::App for TwinkleApp {
             });
         });
 
-
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(fits_viewer) = fits_viewer {
                 fits_viewer.update(ctx, _frame);
             }
             egui::ScrollArea::vertical()
-                    .auto_shrink([false; 2])
-                    .show_viewport(ui, |ui, viewport| {
-                if let Some(device_name) = selected_device {
-                    if let Some(device) = devices.get(device_name) {
-                        ui.heading(device_name.clone());
-                        ui.separator();
-                        for (name, param) in device.get_parameters() {
-                            ui.label(name);
+                .auto_shrink([false; 2])
+                .show_viewport(ui, |ui, viewport| {
+                    if let Some(device_name) = selected_device {
+                        if let Some(device) = devices.get(device_name) {
+                            ui.heading(device_name.clone());
                             ui.separator();
+                            for (name, param) in device.get_parameters() {
+                                ui.label(name);
+                                ui.separator();
 
-                            match param {
-                                Parameter::TextVector(tv) => {
-                                    egui::Grid::new(format!("{}", name)).num_columns(2).show(ui, |ui| {
-                                        for (text_name, text_value) in &tv.values {                                    
-                                            ui.label(text_name.clone());
-                                            ui.label(text_value.value.clone());
-                                            ui.end_row();
-                                        }
-                                    });
-                                },
-                                Parameter::NumberVector(nv) => {
-                                    egui::Grid::new(format!("{}", name)).num_columns(2).show(ui, |ui| {
-                                        for (number_name, number_value) in &nv.values {                                    
-                                            ui.label(number_name.clone());
-                                            ui.label(format!("{}", number_value.value));
-                                            ui.end_row();
-                                        }
-                                    });
-                                },
-                                Parameter::SwitchVector(sv) => {
-                                    ui.horizontal(|ui| {
-                                        for (button_name, button_value) in &sv.values {                                    
-                                            if ui.add(egui::SelectableLabel::new(button_value.value == indi::SwitchState::On, button_name.clone())).clicked() {
-                                                backend.send_command(&indi::Command::NewSwitchVector(
-                                                    indi::NewSwitchVector {
-                                                        device: device_name.to_string(),
-                                                        name: name.to_string(),
-                                                        timestamp: None,
-                                                        switches: vec![indi::OneSwitch {
-                                                            name: button_name.to_string(),
-                                                            value: indi::SwitchState::On,
-                                                        }],
-                                                    }));
+                                match param {
+                                    Parameter::TextVector(tv) => {
+                                        egui::Grid::new(format!("{}", name)).num_columns(2).show(
+                                            ui,
+                                            |ui| {
+                                                for (text_name, text_value) in &tv.values {
+                                                    ui.label(text_name.clone());
+                                                    ui.label(text_value.value.clone());
+                                                    ui.end_row();
+                                                }
+                                            },
+                                        );
+                                    }
+                                    Parameter::NumberVector(nv) => {
+                                        egui::Grid::new(format!("{}", name)).num_columns(2).show(
+                                            ui,
+                                            |ui| {
+                                                for (number_name, number_value) in &nv.values {
+                                                    ui.label(number_name.clone());
+                                                    ui.label(format!("{}", number_value.value));
+                                                    ui.end_row();
+                                                }
+                                            },
+                                        );
+                                    }
+                                    Parameter::SwitchVector(sv) => {
+                                        ui.horizontal(|ui| {
+                                            for (button_name, button_value) in &sv.values {
+                                                if ui
+                                                    .add(egui::SelectableLabel::new(
+                                                        button_value.value == indi::SwitchState::On,
+                                                        button_name.clone(),
+                                                    ))
+                                                    .clicked()
+                                                {
+                                                    backend.send_command(
+                                                        &indi::Command::NewSwitchVector(
+                                                            indi::NewSwitchVector {
+                                                                device: device_name.to_string(),
+                                                                name: name.to_string(),
+                                                                timestamp: None,
+                                                                switches: vec![indi::OneSwitch {
+                                                                    name: button_name.to_string(),
+                                                                    value: indi::SwitchState::On,
+                                                                }],
+                                                            },
+                                                        ),
+                                                    );
+                                                }
                                             }
-                                        }
-                                    });  
+                                        });
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
-                            }
-                        
-                            ui.end_row();
-                        }
 
+                                ui.end_row();
+                            }
+                        }
                     }
-                }
-            });
+                });
         });
         // self.backend.tick();
     }
