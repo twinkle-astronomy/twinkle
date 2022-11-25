@@ -11,6 +11,9 @@ impl CommandtoParam for DefBlobVector {
     fn get_name(&self) -> &String {
         &self.name
     }
+    fn get_group(&self) -> &Option<String> {
+        &self.group
+    }
     fn to_param(self) -> Parameter {
         Parameter::BlobVector(BlobVector {
             name: self.name,
@@ -20,6 +23,7 @@ impl CommandtoParam for DefBlobVector {
             perm: self.perm,
             timeout: self.timeout,
             timestamp: self.timestamp,
+            enable_status: BlobEnable::Never,
             values: self
                 .blobs
                 .into_iter()

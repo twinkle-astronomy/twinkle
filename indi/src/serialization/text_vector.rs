@@ -12,6 +12,9 @@ impl CommandtoParam for DefTextVector {
     fn get_name(&self) -> &String {
         &self.name
     }
+    fn get_group(&self) -> &Option<String> {
+        &self.group
+    }
     fn to_param(self) -> Parameter {
         Parameter::TextVector(TextVector {
             name: self.name,

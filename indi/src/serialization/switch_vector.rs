@@ -11,6 +11,9 @@ impl CommandtoParam for DefSwitchVector {
     fn get_name(&self) -> &String {
         &self.name
     }
+    fn get_group(&self) -> &Option<String> {
+        &self.group
+    }
     fn to_param(self) -> Parameter {
         Parameter::SwitchVector(SwitchVector {
             name: self.name,

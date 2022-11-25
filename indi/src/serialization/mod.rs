@@ -56,6 +56,7 @@ pub enum Command {
     SetBlobVector(SetBlobVector),
     Message(Message),
     DelProperty(DelProperty),
+    EnableBlob(EnableBlob),
 
     // Commands from Connection to Device
     GetProperties(GetProperties),
@@ -86,6 +87,7 @@ impl Command {
                 Some(device) => Some(device),
                 None => None,
             },
+            Command::EnableBlob(c) => Some(&c.device),
         }
     }
 }
@@ -99,12 +101,12 @@ impl XmlSerialization for Command {
             Command::NewTextVector(c) => c.send(xml_writer),
             Command::NewNumberVector(c) => c.send(xml_writer),
             Command::NewSwitchVector(c) => c.send(xml_writer),
+            Command::EnableBlob(c) => c.send(xml_writer),
 
             _ => panic!("asdf"),
         }
     }
 }
-
 
 #[derive(Debug)]
 pub struct DefTextVector {

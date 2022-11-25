@@ -7,6 +7,60 @@ use std::str;
 use super::super::*;
 use super::*;
 
+impl CommandtoParam for DefLightVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+    fn get_group(&self) -> &Option<String> {
+        &self.group
+    }
+    fn to_param(self) -> Parameter {
+        Parameter::LightVector(LightVector {
+            name: self.name,
+            device: self.device,
+            group: self.group,
+            label: self.label,
+            state: self.state,
+            timestamp: self.timestamp,
+            values: self
+                .lights
+                .into_iter()
+                .map(|i| {
+                    (
+                        i.name,
+                        Light {
+                            label: i.label,
+                            value: i.value,
+                        },
+                    )
+                })
+                .collect(),
+        })
+    }
+}
+
+impl CommandToUpdate for SetLightVector {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
+    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+        match param {
+            Parameter::LightVector(light_vector) => {
+                light_vector.state = self.state;
+                light_vector.timestamp = self.timestamp;
+                for light in self.lights {
+                    if let Some(existing) = light_vector.values.get_mut(&light.name) {
+                        existing.value = light.value;
+                    }
+                }
+                Ok(self.name)
+            }
+            _ => Err(UpdateError::ParameterTypeMismatch(self.name.clone())),
+        }
+    }
+}
+
 pub struct DefLightIter<'a, T: std::io::BufRead> {
     xml_reader: &'a mut Reader<T>,
     buf: &'a mut Vec<u8>,

@@ -90,6 +90,7 @@ pub struct Number {
     pub step: f64,
     pub value: f64,
 }
+
 #[derive(Debug, PartialEq)]
 pub struct NumberVector {
     pub name: String,
@@ -101,6 +102,24 @@ pub struct NumberVector {
     pub timestamp: Option<DateTime<Utc>>,
 
     pub values: HashMap<String, Number>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Light {
+    label: Option<String>,
+    value: PropertyState,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct LightVector {
+    pub device: String,
+    pub name: String,
+    pub label: Option<String>,
+    pub group: Option<String>,
+    pub state: PropertyState,
+    pub timestamp: Option<DateTime<Utc>>,
+
+    pub values: HashMap<String, Light>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -139,6 +158,7 @@ pub struct BlobVector {
     pub perm: PropertyPerm,
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
+    pub enable_status: BlobEnable,
 
     pub values: HashMap<String, Blob>,
 }
@@ -148,7 +168,20 @@ pub enum Parameter {
     TextVector(TextVector),
     NumberVector(NumberVector),
     SwitchVector(SwitchVector),
+    LightVector(LightVector),
     BlobVector(BlobVector),
+}
+
+impl Parameter {
+    pub fn get_group(&self) -> &Option<String> {
+        match self {
+            Parameter::TextVector(p) => &p.group,
+            Parameter::NumberVector(p) => &p.group,
+            Parameter::SwitchVector(p) => &p.group,
+            Parameter::LightVector(p) => &p.group,
+            Parameter::BlobVector(p) => &p.group,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -157,15 +190,25 @@ pub enum UpdateError {
     ParameterTypeMismatch(String),
 }
 
+pub enum Action {
+    Define,
+    Update,
+    Delete,
+}
+
 #[derive(Debug)]
 pub struct Device {
     parameters: HashMap<String, Parameter>,
+    names: Vec<String>,
+    groups: Vec<Option<String>>,
 }
 
 impl Device {
     pub fn new() -> Device {
         Device {
             parameters: HashMap::new(),
+            names: vec![],
+            groups: vec![],
         }
     }
 
@@ -187,10 +230,13 @@ impl Device {
             Command::NewTextVector(_) => Ok(None),
             Command::DefBlobVector(def_command) => self.new_param(def_command),
             Command::SetBlobVector(set_command) => self.update_param(set_command),
+            Command::DefLightVector(def_command) => self.new_param(def_command),
+            Command::SetLightVector(set_command) => self.update_param(set_command),
 
             Command::DelProperty(del_command) => {
                 match del_command.name {
                     Some(name) => {
+                        self.names.retain(|n| *n != name);
                         self.parameters.remove(&name);
                         ()
                     }
@@ -201,8 +247,16 @@ impl Device {
                 }
                 Ok(None)
             }
-            Command::DefLightVector(_) | Command::SetLightVector(_) => todo!()
+            Command::EnableBlob(_) => Ok(None),
         }
+    }
+
+    pub fn parameter_names(&self) -> &Vec<String> {
+        return &self.names;
+    }
+
+    pub fn parameter_groups(&self) -> &Vec<Option<String>> {
+        return &self.groups;
     }
 
     pub fn get_parameters(&self) -> &HashMap<String, Parameter> {
@@ -211,6 +265,12 @@ impl Device {
 
     fn new_param<T: CommandtoParam>(&mut self, def: T) -> Result<Option<&Parameter>, UpdateError> {
         let name = def.get_name().clone();
+
+        self.names.push(name.clone());
+        if let None = self.groups.iter().find(|&x| x == def.get_group()) {
+            self.groups.push(def.get_group().clone());
+        }
+
         let param = def.to_param();
         self.parameters.insert(name.clone(), param);
         Ok(self.parameters.get(&name))
@@ -234,6 +294,7 @@ impl Device {
 
 trait CommandtoParam {
     fn get_name(&self) -> &String;
+    fn get_group(&self) -> &Option<String>;
     fn to_param(self) -> Parameter;
 }
 
