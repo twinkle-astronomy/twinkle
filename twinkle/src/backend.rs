@@ -106,6 +106,7 @@ impl Backend {
                     device: None,
                     name: None,
                 })?;
+                
 
                 {
                     let mut l = runtime_connection_status.lock().unwrap();

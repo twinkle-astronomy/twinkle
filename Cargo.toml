@@ -2,6 +2,7 @@
 
 members = [
 	"indi",
+	"indi_exporter",
 	"twinkle",
 	"lucky"
 ]

@@ -14,6 +14,7 @@ pub struct TwinkleApp {
     address: String,
 
     selected_device: Option<String>,
+    selected_group: Option<String>,
     fits_viewer: Option<fits_viewer::Custom3d>,
 }
 
@@ -25,6 +26,7 @@ impl Default for TwinkleApp {
             backend: Default::default(),
 
             selected_device: None,
+            selected_group: None,
             fits_viewer: None,
         }
     }
@@ -47,6 +49,7 @@ impl eframe::App for TwinkleApp {
             address,
             backend,
             selected_device,
+            selected_group,
             fits_viewer,
         } = self;
 
@@ -86,12 +89,17 @@ impl eframe::App for TwinkleApp {
             ui.separator();
 
             {
-                for (name, _device) in devices {
+                for (name, device) in devices {
                     if ui
                         .selectable_value(&mut Some(name), selected_device.as_ref(), name)
                         .clicked()
                     {
                         *selected_device = Some(name.to_string());
+                        if device.parameter_groups().len() > 0 {
+                            *selected_group = device.parameter_groups()[0].clone();
+                        } else {
+                            *selected_group = None;
+                        }
                     }
                 }
             }
@@ -104,9 +112,9 @@ impl eframe::App for TwinkleApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(fits_viewer) = fits_viewer {
-                fits_viewer.update(ctx, _frame);
-            }
+            // if let Some(fits_viewer) = fits_viewer {
+            //     fits_viewer.update(ctx, _frame);
+            // }
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .show_viewport(ui, |ui, viewport| {
@@ -114,7 +122,18 @@ impl eframe::App for TwinkleApp {
                         if let Some(device) = devices.get(device_name) {
                             ui.heading(device_name.clone());
                             ui.separator();
-                            for (name, param) in device.get_parameters() {
+                            ui.horizontal(|ui| {
+                                for group in device.parameter_groups() {
+                                    if ui
+                                        .add(egui::SelectableLabel::new(group == selected_group, group.clone().unwrap_or("".to_string())))
+                                        .clicked()
+                                    {
+                                        *selected_group = group.clone();
+                                    }
+                                }
+                            });
+                            ui.separator();
+                            for (name, param) in device.get_parameters().iter().filter(|(_,p)| p.get_group() == selected_group ) {
                                 ui.label(name);
                                 ui.separator();
 
@@ -169,6 +188,19 @@ impl eframe::App for TwinkleApp {
                                                 }
                                             }
                                         });
+                                    }
+                                    Parameter::BlobVector(bv) => {
+                                        for (name, blob) in &bv.values {
+                                            ui.label(format!("BLOB {}", name));
+                                            if ui.button("Images").clicked() {
+                                                let enable_blob = indi::EnableBlob {
+                                                    device: device_name.clone(),
+                                                    name: None,
+                                                    enabled: indi::BlobEnable::Also,
+                                                };
+                                                backend.send_command(&indi::Command::EnableBlob(enable_blob));
+                                            }
+                                        }
                                     }
                                     _ => {}
                                 }
