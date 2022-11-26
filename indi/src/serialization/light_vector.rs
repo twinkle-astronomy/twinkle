@@ -17,7 +17,6 @@ impl CommandtoParam for DefLightVector {
     fn to_param(self) -> Parameter {
         Parameter::LightVector(LightVector {
             name: self.name,
-            device: self.device,
             group: self.group,
             label: self.label,
             state: self.state,

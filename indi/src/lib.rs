@@ -112,7 +112,6 @@ pub struct Light {
 
 #[derive(Debug, PartialEq)]
 pub struct LightVector {
-    pub device: String,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -180,6 +179,34 @@ impl Parameter {
             Parameter::SwitchVector(p) => &p.group,
             Parameter::LightVector(p) => &p.group,
             Parameter::BlobVector(p) => &p.group,
+        }
+    }
+
+    pub fn get_name(&self) -> &String {
+        match self {
+            Parameter::TextVector(p) => &p.name,
+            Parameter::NumberVector(p) => &p.name,
+            Parameter::SwitchVector(p) => &p.name,
+            Parameter::LightVector(p) => &p.name,
+            Parameter::BlobVector(p) => &p.name,
+        }
+    }
+    pub fn get_label(&self) -> &Option<String> {
+        match self {
+            Parameter::TextVector(p) => &p.label,
+            Parameter::NumberVector(p) => &p.label,
+            Parameter::SwitchVector(p) => &p.label,
+            Parameter::LightVector(p) => &p.label,
+            Parameter::BlobVector(p) => &p.label,
+        }
+    }
+    pub fn get_state(&self) -> &PropertyState {
+        match self {
+            Parameter::TextVector(p) => &p.state,
+            Parameter::NumberVector(p) => &p.state,
+            Parameter::SwitchVector(p) => &p.state,
+            Parameter::LightVector(p) => &p.state,
+            Parameter::BlobVector(p) => &p.state,
         }
     }
 }
@@ -300,7 +327,7 @@ trait CommandtoParam {
 
 trait CommandToUpdate {
     fn get_name(&self) -> &String;
-    fn update(self, switch_vector: &mut Parameter) -> Result<String, UpdateError>;
+    fn update(self, param: &mut Parameter) -> Result<String, UpdateError>;
 }
 
 #[derive(Debug)]
