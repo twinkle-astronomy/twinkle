@@ -463,61 +463,61 @@ Telescope Simulator
             }
         );
     }
+    
+//     use std::io::Cursor;
+//     #[test]
+//     fn test_one_text() {
+//         let xml = b"\
+//     <oneText name=\"ACTIVE_TELESCOPE\">
+// Simulator \xFF changed
+//     </oneText>
+// ";
+//         // Attempt to force quick_xml to use ISO-8859-1 encoding by injecting an encoding specifier at the beginning
+//         //  of the xml stream.
+//         // let preamble_read = Cursor::new(b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\"><xml/>");
+//         let buf_read = Cursor::new(xml);
 
-    //     #[test]
-    //     fn test_one_text() {
-    //         let xml = b"\
-    //     <oneText name=\"ACTIVE_TELESCOPE\">
-    // Simulator \xFF changed
-    //     </oneText>
-    // ";
-    //         // let mut preamble : BytesMut = BytesMut::with_capacity(1024);
-    //         // preamble.put(&b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"[..]);
-    //         let preamble_read = Cursor::new(b"<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\"><xml/>");
+//         // // To use the preamble swap the commenting on the next two lines.
+//         // let mut reader = Reader::from_reader(std::io::Read::chain(preamble_read, buf_read));
+//         let mut reader = Reader::from_reader(buf_read);
 
-    //         // let mut buf : BytesMut = BytesMut::with_capacity(1024);
-    //         // buf.put(&xml[..]);
-    //         let buf_read = Cursor::new(xml);
+//         reader.trim_text(true);
+//         reader.expand_empty_elements(true);
+//         let mut command_iter = CommandIter::new(reader);
+//         let mut number_iter = SetTextIter::new(&mut command_iter);
 
-    //         let mut reader = Reader::from_reader(std::io::Read::chain(preamble_read, buf_read));
+//         let result = number_iter.next().unwrap().unwrap();
 
-    //         reader.trim_text(true);
-    //         reader.expand_empty_elements(true);
-    //         let mut command_iter = CommandIter::new(reader);
-    //         let mut number_iter = SetTextIter::new(&mut command_iter);
+//         assert_eq!(
+//             result,
+//             OneText {
+//                 name: "ACTIVE_TELESCOPE".to_string(),
+//                 value: "Simulator ÿ changed".to_string()
+//             }
+//         );
+//     }
 
-    //         let result = number_iter.next().unwrap().unwrap();
+//     #[test]
+//     fn test_send_new_text_vector() {
+//         let mut writer = Writer::new(Cursor::new(Vec::new()));
+//         let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
 
-    //         assert_eq!(
-    //             result,
-    //             OneText {
-    //                 name: "ACTIVE_TELESCOPE".to_string(),
-    //                 value: "Simulator ÿ changed".to_string()
-    //             }
-    //         );
-    //     }
+//         let command = NewTextVector {
+//             device: String::from_str("CCD Simulator").unwrap(),
+//             name: String::from_str("Exposure").unwrap(),
+//             timestamp: Some(timestamp),
+//             texts: vec![OneText {
+//                 name: String::from_str("seconds").unwrap(),
+//                 value: String::from_str("Long ÿ enough").unwrap(),
+//             }],
+//         };
 
-    //     #[test]
-    //     fn test_send_new_text_vector() {
-    //         let mut writer = Writer::new(Cursor::new(Vec::new()));
-    //         let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+//         command.send(&mut writer).unwrap();
 
-    //         let command = NewTextVector {
-    //             device: String::from_str("CCD Simulator").unwrap(),
-    //             name: String::from_str("Exposure").unwrap(),
-    //             timestamp: Some(timestamp),
-    //             texts: vec![OneText {
-    //                 name: String::from_str("seconds").unwrap(),
-    //                 value: String::from_str("Long ÿ enough").unwrap(),
-    //             }],
-    //         };
-
-    //         command.send(&mut writer).unwrap();
-
-    //         let result = writer.into_inner().into_inner();
-    //         assert_eq!(
-    //             result,
-    //             b"<newTextVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneText name=\"seconds\">Long \xFF enough</oneText></newTextVector>"
-    //         );
-    //     }
+//         let result = writer.into_inner().into_inner();
+//         assert_eq!(
+//             result,
+//             b"<newTextVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneText name=\"seconds\">Long \xFF enough</oneText></newTextVector>"
+//         );
+//     }
 }
