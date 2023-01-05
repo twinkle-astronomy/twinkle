@@ -3,7 +3,7 @@ use indi;
 fn main() {
     let mut connection = indi::Connection::new("localhost:7624").unwrap();
     connection
-        .send(&indi::GetProperties {
+        .write(&indi::GetProperties {
             version: indi::INDI_PROTOCOL_VERSION.to_string(),
             device: None,
             name: None,
@@ -12,7 +12,7 @@ fn main() {
 
     let mut client = indi::Client::new();
 
-    for command in connection.command_iter().unwrap() {
+    for command in connection.iter().unwrap() {
         match command {
             Ok(command) => {
                 if let Err(e) = client.update(command) {

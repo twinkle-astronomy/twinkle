@@ -46,7 +46,7 @@ impl CommandToUpdate for SetSwitchVector {
         &self.name
     }
 
-    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::SwitchVector(switch_vector) => {
                 switch_vector.timestamp = self.timestamp;
@@ -63,7 +63,7 @@ impl CommandToUpdate for SetSwitchVector {
 }
 
 impl XmlSerialization for OneSwitch {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
@@ -81,7 +81,7 @@ impl XmlSerialization for OneSwitch {
 }
 
 impl XmlSerialization for NewSwitchVector {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         mut xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
@@ -99,7 +99,7 @@ impl XmlSerialization for NewSwitchVector {
             }
             xml_writer = creator.write_inner_content(|xml_writer| {
                 for number in self.switches.iter() {
-                    number.send(xml_writer)?;
+                    number.write(xml_writer)?;
                 }
                 Ok(())
             })?;
@@ -517,7 +517,7 @@ On
             }],
         };
 
-        command.send(&mut writer).unwrap();
+        command.write(&mut writer).unwrap();
 
         let result = writer.into_inner().into_inner();
         assert_eq!(

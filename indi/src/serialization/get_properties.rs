@@ -8,7 +8,7 @@ use super::super::*;
 use super::*;
 
 impl XmlSerialization for GetProperties {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
@@ -109,7 +109,7 @@ mod tests {
             name: None,
         };
 
-        command.send(&mut writer).unwrap();
+        command.write(&mut writer).unwrap();
 
         let result = writer.into_inner().into_inner();
         assert_eq!(

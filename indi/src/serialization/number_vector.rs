@@ -52,7 +52,7 @@ impl CommandToUpdate for SetNumberVector {
         &self.name
     }
 
-    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::NumberVector(number_vector) => {
                 number_vector.state = self.state;
@@ -74,7 +74,7 @@ impl CommandToUpdate for SetNumberVector {
 }
 
 impl XmlSerialization for OneNumber {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
@@ -98,7 +98,7 @@ impl XmlSerialization for OneNumber {
 }
 
 impl XmlSerialization for NewNumberVector {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         mut xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
@@ -116,7 +116,7 @@ impl XmlSerialization for NewNumberVector {
             }
             xml_writer = creator.write_inner_content(|xml_writer| {
                 for number in self.numbers.iter() {
-                    number.send(xml_writer)?;
+                    number.write(xml_writer)?;
                 }
                 Ok(())
             })?;
@@ -633,7 +633,7 @@ mod tests {
             }],
         };
 
-        command.send(&mut writer).unwrap();
+        command.write(&mut writer).unwrap();
 
         let result = writer.into_inner().into_inner();
         assert_eq!(

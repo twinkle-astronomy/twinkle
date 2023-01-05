@@ -43,7 +43,7 @@ impl CommandToUpdate for SetLightVector {
         &self.name
     }
 
-    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::LightVector(light_vector) => {
                 light_vector.state = self.state;

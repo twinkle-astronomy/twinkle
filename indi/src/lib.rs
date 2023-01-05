@@ -21,6 +21,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use std::collections::HashMap;
+use std::net::ToSocketAddrs;
 
 pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 
@@ -246,34 +247,20 @@ impl Device {
         match command {
             Command::Message(_) => Ok(None),
             Command::GetProperties(_) => Ok(None),
-            Command::DefSwitchVector(def_command) => self.new_param(def_command),
-            Command::SetSwitchVector(set_command) => self.update_param(set_command),
+            Command::DefSwitchVector(command) => self.new_param(command),
+            Command::SetSwitchVector(command) => self.update_param(command),
             Command::NewSwitchVector(_) => Ok(None),
-            Command::DefNumberVector(def_command) => self.new_param(def_command),
-            Command::SetNumberVector(set_command) => self.update_param(set_command),
+            Command::DefNumberVector(command) => self.new_param(command),
+            Command::SetNumberVector(command) => self.update_param(command),
             Command::NewNumberVector(_) => Ok(None),
-            Command::DefTextVector(def_command) => self.new_param(def_command),
-            Command::SetTextVector(set_command) => self.update_param(set_command),
+            Command::DefTextVector(command) => self.new_param(command),
+            Command::SetTextVector(command) => self.update_param(command),
             Command::NewTextVector(_) => Ok(None),
-            Command::DefBlobVector(def_command) => self.new_param(def_command),
-            Command::SetBlobVector(set_command) => self.update_param(set_command),
-            Command::DefLightVector(def_command) => self.new_param(def_command),
-            Command::SetLightVector(set_command) => self.update_param(set_command),
-
-            Command::DelProperty(del_command) => {
-                match del_command.name {
-                    Some(name) => {
-                        self.names.retain(|n| *n != name);
-                        self.parameters.remove(&name);
-                        ()
-                    }
-                    None => {
-                        self.parameters.drain();
-                        ()
-                    }
-                }
-                Ok(None)
-            }
+            Command::DefBlobVector(command) => self.new_param(command),
+            Command::SetBlobVector(command) => self.update_param(command),
+            Command::DefLightVector(command) => self.new_param(command),
+            Command::SetLightVector(command) => self.update_param(command),
+            Command::DelProperty(command) => self.delete_param(command.name),
             Command::EnableBlob(_) => Ok(None),
         }
     }
@@ -309,7 +296,7 @@ impl Device {
     ) -> Result<Option<&Parameter>, UpdateError> {
         match self.parameters.get_mut(&new_command.get_name().clone()) {
             Some(param) => {
-                new_command.update(param)?;
+                new_command.update_param(param)?;
                 Ok(Some(param))
             }
             None => Err(UpdateError::ParameterMissing(
@@ -317,31 +304,50 @@ impl Device {
             )),
         }
     }
+
+    fn delete_param(&mut self, name: Option<String>) -> Result<Option<&Parameter>, UpdateError> {
+        match name {
+            Some(name) => {
+                self.names.retain(|n| *n != name);
+                self.parameters.remove(&name);
+            }
+            None => {
+                self.names.clear();
+                self.parameters.drain();
+            }
+        };
+        Ok(None)
+    }
 }
 
-trait CommandtoParam {
+pub trait CommandtoParam {
     fn get_name(&self) -> &String;
     fn get_group(&self) -> &Option<String>;
     fn to_param(self) -> Parameter;
 }
 
-trait CommandToUpdate {
+pub trait CommandToUpdate {
     fn get_name(&self) -> &String;
-    fn update(self, param: &mut Parameter) -> Result<String, UpdateError>;
+    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError>;
 }
 
+/// Struct used to keep track of a the devices and their properties.
+/// When used in conjunction with the Connection struct can be used to
+/// track and control devices managed by an INDI server.
 #[derive(Debug)]
 pub struct Client {
     devices: HashMap<String, Device>,
 }
 
 impl Client {
+    /// Create a new client object.
     pub fn new() -> Client {
         Client {
             devices: HashMap::new(),
         }
     }
 
+    /// Update the state of the appropriate device property for a command that came from an INDI server.
     pub fn update(
         &mut self,
         command: serialization::Command,
@@ -356,10 +362,12 @@ impl Client {
         }
     }
 
+    /// Accessor for stored devices.
     pub fn get_devices(&self) -> &HashMap<String, Device> {
         return &self.devices;
     }
 
+    /// Clear (aka, empty) the stored devices.
     pub fn clear(&mut self) {
         self.devices.clear();
     }
@@ -374,7 +382,8 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(addr: &str) -> std::io::Result<Connection> {
+    /// Creates a new connection to an INDI server at the specified address.
+    pub fn new<A: ToSocketAddrs>(addr: A) -> std::io::Result<Connection> {
         let connection = TcpStream::connect(addr)?;
         let xml_writer = Writer::new_with_indent(BufWriter::new(connection.try_clone()?), b' ', 2);
 
@@ -384,21 +393,46 @@ impl Connection {
         })
     }
 
+    /// Disconnects from the INDI server
     pub fn disconnect(&self) -> Result<(), std::io::Error> {
         self.connection.shutdown(Shutdown::Both)
     }
 
-    pub fn command_iter(
-        &self,
-    ) -> Result<serialization::CommandIter<BufReader<TcpStream>>, std::io::Error> {
+    /// Creates an interator that yields commands from the the connected INDI server.
+    /// Example usage:
+    /// ```no_run
+    /// let mut connection = indi::Connection::new("localhost:7624").unwrap();
+    /// connection.write(&indi::GetProperties {
+    ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
+    ///     device: None,
+    ///     name: None,
+    /// }).unwrap();
+    ///
+    /// let mut client = indi::Client::new();
+    ///
+    /// for command in connection.iter().unwrap() {
+    ///     println!("Command: {:?}", command);
+    ///     client.update(command.unwrap());
+    /// }
+    pub fn iter(&self) -> Result<serialization::CommandIter<BufReader<TcpStream>>, std::io::Error> {
         let mut xml_reader = Reader::from_reader(BufReader::new(self.connection.try_clone()?));
         xml_reader.trim_text(true);
         xml_reader.expand_empty_elements(true);
         Ok(serialization::CommandIter::new(xml_reader))
     }
 
-    pub fn send<T: XmlSerialization>(&mut self, command: &T) -> Result<(), DeError> {
-        command.send(&mut self.xml_writer)?;
+    /// Sends the given INDI command to the connected server.  Consumes the command.
+    /// Example usage:
+    /// ```no_run
+    /// let mut connection = indi::Connection::new("localhost:7624").unwrap();
+    /// connection.write(&indi::GetProperties {
+    ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
+    ///     device: None,
+    ///     name: None,
+    /// }).unwrap();
+    ///
+    pub fn write<T: XmlSerialization>(&mut self, command: &T) -> Result<(), DeError> {
+        command.write(&mut self.xml_writer)?;
         self.xml_writer.inner().flush()?;
         Ok(())
     }

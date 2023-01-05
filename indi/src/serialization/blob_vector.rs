@@ -47,7 +47,7 @@ impl CommandToUpdate for SetBlobVector {
         &self.name
     }
 
-    fn update(self, param: &mut Parameter) -> Result<String, UpdateError> {
+    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::BlobVector(blob_vector) => {
                 blob_vector.state = self.state;
@@ -67,7 +67,7 @@ impl CommandToUpdate for SetBlobVector {
 }
 
 impl XmlSerialization for EnableBlob {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
@@ -417,7 +417,7 @@ mod tests {
             enabled: BlobEnable::Also,
         };
 
-        command.send(&mut writer).unwrap();
+        command.write(&mut writer).unwrap();
 
         let result = writer.into_inner().into_inner();
         assert_eq!(

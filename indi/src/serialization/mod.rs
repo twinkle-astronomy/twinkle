@@ -93,15 +93,15 @@ impl Command {
 }
 
 impl XmlSerialization for Command {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>> {
         match self {
-            Command::NewTextVector(c) => c.send(xml_writer),
-            Command::NewNumberVector(c) => c.send(xml_writer),
-            Command::NewSwitchVector(c) => c.send(xml_writer),
-            Command::EnableBlob(c) => c.send(xml_writer),
+            Command::NewTextVector(c) => c.write(xml_writer),
+            Command::NewNumberVector(c) => c.write(xml_writer),
+            Command::NewSwitchVector(c) => c.write(xml_writer),
+            Command::EnableBlob(c) => c.write(xml_writer),
 
             _ => panic!("asdf"),
         }
@@ -372,7 +372,7 @@ pub struct GetProperties {
 }
 
 pub trait XmlSerialization {
-    fn send<'a, T: std::io::Write>(
+    fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
     ) -> XmlResult<&'a mut Writer<T>>;
@@ -533,164 +533,160 @@ impl<T: std::io::BufRead> CommandIter<T> {
     fn next_command(&mut self) -> Result<Option<Command>, DeError> {
         let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
-            Event::Start(e) => {
-                let result = match e.name() {
-                    QName(b"defTextVector") => {
-                        let mut text_vector = DefTextIter::text_vector(&self.xml_reader, &e)?;
+            Event::Start(e) => match e.name() {
+                QName(b"defTextVector") => {
+                    let mut text_vector = DefTextIter::text_vector(&self.xml_reader, &e)?;
 
-                        for text in DefTextIter::new(self) {
-                            let text = text?;
-                            text_vector.texts.push(text);
-                        }
-
-                        Ok(Some(Command::DefTextVector(text_vector)))
-                    }
-                    QName(b"setTextVector") => {
-                        let mut text_vector = SetTextIter::text_vector(&self.xml_reader, &e)?;
-
-                        for text in SetTextIter::new(self) {
-                            let text = text?;
-                            text_vector.texts.push(text);
-                        }
-
-                        Ok(Some(Command::SetTextVector(text_vector)))
-                    }
-                    QName(b"newTextVector") => {
-                        let mut text_vector = NewTextIter::text_vector(&self.xml_reader, &e)?;
-
-                        for text in NewTextIter::new(self) {
-                            let text = text?;
-                            text_vector.texts.push(text);
-                        }
-
-                        Ok(Some(Command::NewTextVector(text_vector)))
-                    }
-                    QName(b"defNumberVector") => {
-                        let mut number_vector = DefNumberIter::number_vector(&self.xml_reader, &e)?;
-
-                        for number in DefNumberIter::new(self) {
-                            let number = number?;
-                            number_vector.numbers.push(number);
-                        }
-
-                        Ok(Some(Command::DefNumberVector(number_vector)))
-                    }
-                    QName(b"setNumberVector") => {
-                        let mut number_vector = SetNumberIter::number_vector(&self.xml_reader, &e)?;
-
-                        for number in SetNumberIter::new(self) {
-                            let number = number?;
-                            number_vector.numbers.push(number);
-                        }
-
-                        Ok(Some(Command::SetNumberVector(number_vector)))
-                    }
-                    QName(b"newNumberVector") => {
-                        let mut number_vector = NewNumberIter::number_vector(&self.xml_reader, &e)?;
-
-                        for number in NewNumberIter::new(self) {
-                            let number = number?;
-                            number_vector.numbers.push(number);
-                        }
-
-                        Ok(Some(Command::NewNumberVector(number_vector)))
-                    }
-                    QName(b"defSwitchVector") => {
-                        let mut switch_vector = DefSwitchIter::switch_vector(&self.xml_reader, &e)?;
-
-                        for switch in DefSwitchIter::new(self) {
-                            let switch = switch?;
-                            switch_vector.switches.push(switch);
-                        }
-
-                        Ok(Some(Command::DefSwitchVector(switch_vector)))
-                    }
-                    QName(b"setSwitchVector") => {
-                        let mut switch_vector = SetSwitchIter::switch_vector(&self.xml_reader, &e)?;
-
-                        for switch in SetSwitchIter::new(self) {
-                            let switch = switch?;
-                            switch_vector.switches.push(switch);
-                        }
-
-                        Ok(Some(Command::SetSwitchVector(switch_vector)))
-                    }
-                    QName(b"newSwitchVector") => {
-                        let mut switch_vector = NewSwitchIter::switch_vector(&self.xml_reader, &e)?;
-
-                        for switch in NewSwitchIter::new(self) {
-                            let switch = switch?;
-                            switch_vector.switches.push(switch);
-                        }
-
-                        Ok(Some(Command::NewSwitchVector(switch_vector)))
-                    }
-                    QName(b"defLightVector") => {
-                        let mut light_vector = DefLightIter::light_vector(&self.xml_reader, &e)?;
-
-                        for light in DefLightIter::new(self) {
-                            let light = light?;
-                            light_vector.lights.push(light);
-                        }
-
-                        Ok(Some(Command::DefLightVector(light_vector)))
-                    }
-                    QName(b"setLightVector") => {
-                        let mut light_vector = SetLightIter::light_vector(&self.xml_reader, &e)?;
-
-                        for light in SetLightIter::new(self) {
-                            let light = light?;
-                            light_vector.lights.push(light);
-                        }
-
-                        Ok(Some(Command::SetLightVector(light_vector)))
-                    }
-                    QName(b"defBLOBVector") => {
-                        let mut blob_vector = DefBlobIter::blob_vector(&self.xml_reader, &e)?;
-
-                        for blob in DefBlobIter::new(self) {
-                            let blob = blob?;
-                            blob_vector.blobs.push(blob);
-                        }
-
-                        Ok(Some(Command::DefBlobVector(blob_vector)))
-                    }
-                    QName(b"setBLOBVector") => {
-                        let mut blob_vector = SetBlobIter::blob_vector(&self.xml_reader, &e)?;
-
-                        for blob in SetBlobIter::new(self) {
-                            let blob = blob?;
-                            blob_vector.blobs.push(blob);
-                        }
-
-                        Ok(Some(Command::SetBlobVector(blob_vector)))
-                    }
-                    QName(b"message") => {
-                        let message = MessageIter::message(&self.xml_reader, &e)?;
-                        for _ in MessageIter::new(self) {}
-
-                        Ok(Some(Command::Message(message)))
-                    }
-                    QName(b"delProperty") => {
-                        let message = DelPropertyIter::del_property(&self.xml_reader, &e)?;
-                        for _ in DelPropertyIter::new(self) {}
-
-                        Ok(Some(Command::DelProperty(message)))
+                    for text in DefTextIter::new(self) {
+                        let text = text?;
+                        text_vector.texts.push(text);
                     }
 
-                    QName(b"getProperties") => {
-                        let get_properties =
-                            GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
-                        for _ in GetPropertiesIter::new(self) {}
+                    Ok(Some(Command::DefTextVector(text_vector)))
+                }
+                QName(b"setTextVector") => {
+                    let mut text_vector = SetTextIter::text_vector(&self.xml_reader, &e)?;
 
-                        Ok(Some(Command::GetProperties(get_properties)))
+                    for text in SetTextIter::new(self) {
+                        let text = text?;
+                        text_vector.texts.push(text);
                     }
-                    tag => Err(DeError::UnexpectedTag(
-                        str::from_utf8(tag.into_inner())?.to_string(),
-                    )),
-                };
-                result
-            }
+
+                    Ok(Some(Command::SetTextVector(text_vector)))
+                }
+                QName(b"newTextVector") => {
+                    let mut text_vector = NewTextIter::text_vector(&self.xml_reader, &e)?;
+
+                    for text in NewTextIter::new(self) {
+                        let text = text?;
+                        text_vector.texts.push(text);
+                    }
+
+                    Ok(Some(Command::NewTextVector(text_vector)))
+                }
+                QName(b"defNumberVector") => {
+                    let mut number_vector = DefNumberIter::number_vector(&self.xml_reader, &e)?;
+
+                    for number in DefNumberIter::new(self) {
+                        let number = number?;
+                        number_vector.numbers.push(number);
+                    }
+
+                    Ok(Some(Command::DefNumberVector(number_vector)))
+                }
+                QName(b"setNumberVector") => {
+                    let mut number_vector = SetNumberIter::number_vector(&self.xml_reader, &e)?;
+
+                    for number in SetNumberIter::new(self) {
+                        let number = number?;
+                        number_vector.numbers.push(number);
+                    }
+
+                    Ok(Some(Command::SetNumberVector(number_vector)))
+                }
+                QName(b"newNumberVector") => {
+                    let mut number_vector = NewNumberIter::number_vector(&self.xml_reader, &e)?;
+
+                    for number in NewNumberIter::new(self) {
+                        let number = number?;
+                        number_vector.numbers.push(number);
+                    }
+
+                    Ok(Some(Command::NewNumberVector(number_vector)))
+                }
+                QName(b"defSwitchVector") => {
+                    let mut switch_vector = DefSwitchIter::switch_vector(&self.xml_reader, &e)?;
+
+                    for switch in DefSwitchIter::new(self) {
+                        let switch = switch?;
+                        switch_vector.switches.push(switch);
+                    }
+
+                    Ok(Some(Command::DefSwitchVector(switch_vector)))
+                }
+                QName(b"setSwitchVector") => {
+                    let mut switch_vector = SetSwitchIter::switch_vector(&self.xml_reader, &e)?;
+
+                    for switch in SetSwitchIter::new(self) {
+                        let switch = switch?;
+                        switch_vector.switches.push(switch);
+                    }
+
+                    Ok(Some(Command::SetSwitchVector(switch_vector)))
+                }
+                QName(b"newSwitchVector") => {
+                    let mut switch_vector = NewSwitchIter::switch_vector(&self.xml_reader, &e)?;
+
+                    for switch in NewSwitchIter::new(self) {
+                        let switch = switch?;
+                        switch_vector.switches.push(switch);
+                    }
+
+                    Ok(Some(Command::NewSwitchVector(switch_vector)))
+                }
+                QName(b"defLightVector") => {
+                    let mut light_vector = DefLightIter::light_vector(&self.xml_reader, &e)?;
+
+                    for light in DefLightIter::new(self) {
+                        let light = light?;
+                        light_vector.lights.push(light);
+                    }
+
+                    Ok(Some(Command::DefLightVector(light_vector)))
+                }
+                QName(b"setLightVector") => {
+                    let mut light_vector = SetLightIter::light_vector(&self.xml_reader, &e)?;
+
+                    for light in SetLightIter::new(self) {
+                        let light = light?;
+                        light_vector.lights.push(light);
+                    }
+
+                    Ok(Some(Command::SetLightVector(light_vector)))
+                }
+                QName(b"defBLOBVector") => {
+                    let mut blob_vector = DefBlobIter::blob_vector(&self.xml_reader, &e)?;
+
+                    for blob in DefBlobIter::new(self) {
+                        let blob = blob?;
+                        blob_vector.blobs.push(blob);
+                    }
+
+                    Ok(Some(Command::DefBlobVector(blob_vector)))
+                }
+                QName(b"setBLOBVector") => {
+                    let mut blob_vector = SetBlobIter::blob_vector(&self.xml_reader, &e)?;
+
+                    for blob in SetBlobIter::new(self) {
+                        let blob = blob?;
+                        blob_vector.blobs.push(blob);
+                    }
+
+                    Ok(Some(Command::SetBlobVector(blob_vector)))
+                }
+                QName(b"message") => {
+                    let message = MessageIter::message(&self.xml_reader, &e)?;
+                    for _ in MessageIter::new(self) {}
+
+                    Ok(Some(Command::Message(message)))
+                }
+                QName(b"delProperty") => {
+                    let message = DelPropertyIter::del_property(&self.xml_reader, &e)?;
+                    for _ in DelPropertyIter::new(self) {}
+
+                    Ok(Some(Command::DelProperty(message)))
+                }
+
+                QName(b"getProperties") => {
+                    let get_properties = GetPropertiesIter::get_properties(&self.xml_reader, &e)?;
+                    for _ in GetPropertiesIter::new(self) {}
+
+                    Ok(Some(Command::GetProperties(get_properties)))
+                }
+                tag => Err(DeError::UnexpectedTag(
+                    str::from_utf8(tag.into_inner())?.to_string(),
+                )),
+            },
             Event::End(tag) => {
                 println!("Unexpected end: {}", tag.escape_ascii().to_string());
                 Err(DeError::UnexpectedEvent(format!("{:?}", tag)))
