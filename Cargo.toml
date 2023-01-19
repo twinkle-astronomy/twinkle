@@ -4,5 +4,6 @@ members = [
 	"indi",
 	"indi_exporter",
 	"twinkle",
-	"lucky"
+	"lucky",
+	"fits_inspect"
 ]
