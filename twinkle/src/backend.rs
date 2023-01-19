@@ -50,7 +50,7 @@ impl Backend {
     pub fn send_command(&self, command: &indi::Command) {
         let mut locked_connection = self.connection.lock().unwrap();
         if let Some(connection) = &mut *locked_connection {
-            connection.send(command);
+            connection.write(command);
         }
     }
 
@@ -101,19 +101,18 @@ impl Backend {
                     ctx.request_repaint();
                 }
 
-                connection.send(&indi::GetProperties {
+                connection.write(&indi::GetProperties {
                     version: indi::INDI_PROTOCOL_VERSION.to_string(),
                     device: None,
                     name: None,
                 })?;
-                
 
                 {
                     let mut l = runtime_connection_status.lock().unwrap();
                     *l = ConnectionStatus::Connected;
                     ctx.request_repaint();
                 }
-                let iter = connection.command_iter()?;
+                let iter = connection.iter()?;
                 *locked_connection = Some(connection);
                 iter
             };

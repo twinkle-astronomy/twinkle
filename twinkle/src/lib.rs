@@ -112,9 +112,9 @@ impl eframe::App for TwinkleApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // if let Some(fits_viewer) = fits_viewer {
-            //     fits_viewer.update(ctx, _frame);
-            // }
+            if let Some(fits_viewer) = fits_viewer {
+                fits_viewer.update(ctx, _frame);
+            }
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .show_viewport(ui, |ui, viewport| {
@@ -125,7 +125,10 @@ impl eframe::App for TwinkleApp {
                             ui.horizontal(|ui| {
                                 for group in device.parameter_groups() {
                                     if ui
-                                        .add(egui::SelectableLabel::new(group == selected_group, group.clone().unwrap_or("".to_string())))
+                                        .add(egui::SelectableLabel::new(
+                                            group == selected_group,
+                                            group.clone().unwrap_or("".to_string()),
+                                        ))
                                         .clicked()
                                     {
                                         *selected_group = group.clone();
@@ -133,7 +136,11 @@ impl eframe::App for TwinkleApp {
                                 }
                             });
                             ui.separator();
-                            for (name, param) in device.get_parameters().iter().filter(|(_,p)| p.get_group() == selected_group ) {
+                            for (name, param) in device
+                                .get_parameters()
+                                .iter()
+                                .filter(|(_, p)| p.get_group() == selected_group)
+                            {
                                 ui.label(name);
                                 ui.separator();
 
@@ -198,7 +205,9 @@ impl eframe::App for TwinkleApp {
                                                     name: None,
                                                     enabled: indi::BlobEnable::Also,
                                                 };
-                                                backend.send_command(&indi::Command::EnableBlob(enable_blob));
+                                                backend.send_command(&indi::Command::EnableBlob(
+                                                    enable_blob,
+                                                ));
                                             }
                                         }
                                     }
