@@ -1,113 +1,12 @@
 use ndarray::{
-    array, Array, Array2, ArrayBase, ArrayD, ArrayView, ArrayViewD, Dim, Dimension, IntoDimension,
-    Ix2, IxDyn, IxDynImpl, OwnedRepr, SliceInfo, SliceInfoElem, ViewRepr, Zip,
+    array, Array, Array2, ArrayBase, ArrayD, ArrayView, Dim, Dimension, IntoDimension, Ix2, IxDyn,
+    IxDynImpl, OwnedRepr, SliceInfo, SliceInfoElem, ViewRepr, Zip,
 };
 use ndarray_conv::*;
 
 pub mod egui;
-pub use ::egui::*;
 
-pub struct Sample {
-    pub value: u16,
-    pub count: usize,
-}
-
-pub struct Statistics {
-    pub unique: usize,
-    pub median: u16,
-    pub mean: f32,
-    pub std_dev: f32,
-    pub clip_high: Sample,
-    pub clip_low: Sample,
-    pub histogram: Vec<usize>,
-}
-
-impl Statistics {
-    pub fn new(data: &ArrayViewD<u16>) -> Statistics {
-        let mut histogram: Vec<usize> = vec![0; std::u16::MAX as usize];
-
-        for d in data.iter() {
-            histogram[*d as usize] += 1;
-        }
-
-        let median_count: usize = data.shape().iter().product();
-        let median = {
-            let mut seen = 0;
-            let mut median = 0;
-            for (index, count) in histogram.iter().enumerate() {
-                seen += *count;
-                if seen >= median_count / 2 {
-                    median = index;
-                    break;
-                }
-            }
-            median
-        } as u16;
-
-        let unique = histogram
-            .iter()
-            .map(|&item| if item > 0 { 1 } else { 0 })
-            .sum();
-
-        let clip_high = histogram
-            .iter()
-            .rev()
-            .enumerate()
-            .find_map(|(val, count)| {
-                if *count == 0 {
-                    return None;
-                }
-
-                Some(Sample {
-                    value: std::u16::MAX - (val + 1) as u16,
-                    count: *count,
-                })
-            })
-            .unwrap_or_else(|| Sample {
-                value: std::u16::MAX,
-                count: 0,
-            });
-
-        let clip_low = histogram
-            .iter()
-            .enumerate()
-            .find_map(|(val, count)| {
-                if *count == 0 {
-                    return None;
-                }
-
-                Some(Sample {
-                    value: val as u16,
-                    count: *count,
-                })
-            })
-            .unwrap_or_else(|| Sample { value: 0, count: 0 });
-
-        let mean = histogram
-            .iter()
-            .enumerate()
-            .map(|(val, count)| (val as f32) * (*count as f32) / data.len() as f32)
-            .sum();
-
-        let std_dev = histogram
-            .iter()
-            .enumerate()
-            .map(|(val, count)| (*count as f32) * ((val as f32) - mean) * ((val as f32) - mean))
-            .sum::<f32>()
-            .sqrt()
-            / (data.shape().iter().product::<usize>() as f32);
-
-        Statistics {
-            unique,
-            median,
-            mean,
-            std_dev,
-            clip_high,
-            clip_low,
-            histogram,
-        }
-    }
-}
+pub mod analysis;
 
 pub fn phd2_convolve(data: &ArrayD<u16>) -> Array2<f32> {
     let data_f32: ArrayBase<OwnedRepr<f32>, Ix2> = data

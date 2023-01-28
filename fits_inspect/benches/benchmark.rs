@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use fits_inspect::{phd2_convolve, sobel, Statistics};
+use fits_inspect::analysis::Statistics;
 use fitsio::FitsFile;
-use ndarray::{ArrayD, IxDyn};
+use ndarray::ArrayD;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("statistics");
@@ -25,7 +25,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
     group.finish();
 
-    let mut group = c.benchmark_group("filters");
+    let mut _group = c.benchmark_group("filters");
 
     // group.bench_function("phd2_convolv", |b| b.iter(|| phd2_convolve(&data)));
     // group.bench_function("sobel", |b| b.iter(|| sobel(&data)));

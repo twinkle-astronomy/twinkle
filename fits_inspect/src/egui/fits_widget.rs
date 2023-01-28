@@ -1,36 +1,79 @@
 use std::sync::Arc;
 
-use eframe::{egui_glow, glow::{HasContext}};
+use eframe::{egui_glow, glow::HasContext};
 use egui::mutex::Mutex;
 // use egui::ScrollArea;
 use egui_glow::glow;
 use fitsio::FitsFile;
-use ndarray::{Array2, ArrayD};
+use ndarray::ArrayD;
 
-use crate::Statistics;
+use crate::analysis::Statistics;
 // use image::EncodableLayout;
 
 // use std::cmp;
 
+struct FitsRef {
+    image: ArrayD<u16>,
+    stats: Statistics,
+    dirty: bool,
+}
+
 pub struct FitsWidget {
     /// Behind an `Arc<Mutex<…>>` so we can pass it to [`egui::PaintCallback`] and paint later.
-    renderer: Arc<Mutex<FitsRender>>
+    renderer: Arc<Mutex<FitsRender>>,
+    image: Arc<Mutex<FitsRef>>,
 }
 
 impl FitsWidget {
     pub fn new<'a>(cc: &'a eframe::CreationContext<'a>) -> Option<Self> {
+        // let image = ArrayD::from_elem(&[100, 100][..], 0);
+
+        let mut fptr = FitsFile::open(
+            "../fits_inspect/images/NGC_281_Light_Red_15_secs_2022-11-13T01-13-00_001.fits",
+        )
+        .unwrap();
+        let hdu = fptr.primary_hdu().unwrap();
+        let image: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
+        // dbg!(image.shape());
+
         let gl = cc.gl.as_ref()?;
-        Some(Self {
-            renderer: Arc::new(Mutex::new(FitsRender::new(gl)?))
-        })
+        dbg!(image.shape());
+        let stats = Statistics::new(&image.view());
+        dbg!(stats.clip_low.value);
+        dbg!(stats.clip_high.value);
+        let mut s = Self {
+            renderer: Arc::new(Mutex::new(FitsRender::new(gl)?)),
+            image: Arc::new(Mutex::new(FitsRef {
+                image: image,
+                stats: stats,
+                dirty: true,
+            })),
+        };
+
+        s.update_stretch();
+        Some(s)
     }
 
-    pub fn set_fits(&mut self, gl: &glow::Context, mut fptr: FitsFile) {
-        let hdu = fptr.primary_hdu().unwrap();
-        let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
-        let stats = Statistics::new(&data.view());
-        let mut rt = self.renderer.lock();
-        rt.set_image_data(gl, data.into_dimensionality().expect("Bad dimmensions"), stats);
+    pub fn set_fits(&mut self, data: ArrayD<u16>, stats: Statistics) {
+        println!("set_fits");
+        {
+            let mut image = self.image.lock();
+
+            image.image = data;
+            image.stats = stats;
+            image.dirty = true;
+        }
+
+        self.update_stretch()
+    }
+
+    fn update_stretch(&mut self) {
+        let image = self.image.lock();
+        let mut renderer = self.renderer.lock();
+        renderer.histogram_high = image.stats.clip_high.value as f32 / std::u16::MAX as f32;
+        renderer.histogram_low = image.stats.clip_low.value as f32 / std::u16::MAX as f32;
+        renderer.histogram_mtf =
+            (image.stats.median as f32 - 2.8 * image.stats.mad as f32) / std::u16::MAX as f32;
     }
 }
 
@@ -41,25 +84,29 @@ impl eframe::App for FitsWidget {
                 egui::Frame::canvas(ui.style()).show(ui, |ui| {
                     self.custom_painting(ui);
                 });
-                
+
                 ui.spacing_mut().slider_width = ui.available_width() - 100.0;
                 let mut renderer = self.renderer.lock();
-                if ui.add(egui::Slider::new(&mut renderer.histogram_low, 0.0..=1.0).prefix("low: ")).changed() {
+                if ui
+                    .add(egui::Slider::new(&mut renderer.histogram_low, 0.0..=1.0).prefix("low: "))
+                    .changed()
+                {
                     if renderer.histogram_low > renderer.histogram_high {
                         renderer.histogram_high = renderer.histogram_low;
                     }
                 }
 
                 ui.add(egui::Slider::new(&mut renderer.histogram_mtf, 0.0..=1.0).prefix("mid: "));
-                if ui.add(egui::Slider::new(&mut renderer.histogram_high, 0.0..=1.0).prefix("high: ")).changed() {
+                if ui
+                    .add(
+                        egui::Slider::new(&mut renderer.histogram_high, 0.0..=1.0).prefix("high: "),
+                    )
+                    .changed()
+                {
                     if renderer.histogram_low > renderer.histogram_high {
                         renderer.histogram_low = renderer.histogram_high;
                     }
-                    
                 }
-
-    
-                
             });
         });
     }
@@ -73,7 +120,10 @@ impl eframe::App for FitsWidget {
 
 impl FitsWidget {
     fn custom_painting(&mut self, ui: &mut egui::Ui) {
-        let (image_width, image_height) = (4144, 2822);
+        let iamge_ref = self.image.lock();
+        let shape = iamge_ref.image.shape();
+
+        let (image_width, image_height) = (shape[1], shape[0]);
         let image_ratio = image_width as f32 / image_height as f32;
 
         let space = ui.available_size();
@@ -135,7 +185,6 @@ impl FitsWidget {
             renderer.max_x = 0.0;
         }
 
-
         let drag_scale = response.drag_delta().y / space.y;
         let drag_y = drag_scale * (renderer.max_y - renderer.min_y);
         renderer.min_y += drag_y;
@@ -163,11 +212,19 @@ impl FitsWidget {
         }
 
         let renderer = self.renderer.clone();
+        let image_ref = self.image.clone();
 
         let cb = egui_glow::CallbackFn::new(move |_info, painter| {
-            renderer
-                .lock()
-                .paint(painter.gl());
+            let mut r = renderer.lock();
+            let mut i = image_ref.lock();
+            let gl = painter.gl();
+
+            if i.dirty {
+                println!("is dirty");
+                r.load_image_data(gl, &i.image, &i.stats);
+                i.dirty = false;
+            }
+            r.paint(gl);
         });
 
         let callback = egui::PaintCallback {
@@ -195,7 +252,7 @@ struct FitsRender {
     min_x: f32,
     min_y: f32,
     max_x: f32,
-    max_y: f32
+    max_y: f32,
 }
 
 #[allow(unsafe_code)] // we need unsafe code to use glow
@@ -337,7 +394,6 @@ impl FitsRender {
                 .expect("Cannot create vertex array");
             gl.bind_vertex_array(Some(vertex_array));
 
-
             let texture = gl.create_texture().expect("Cannot create texture");
 
             Some(Self {
@@ -349,18 +405,25 @@ impl FitsRender {
                 histogram_low: 0.0,
                 histogram_mtf: 0.5,
                 histogram_high: 1.0,
-                min_x: 0.0, min_y: 0.0,
-                max_x: 1.0, max_y: 1.0
+                min_x: 0.0,
+                min_y: 0.0,
+                max_x: 1.0,
+                max_y: 1.0,
             })
         }
     }
 
-    pub fn set_image_data(&mut self,  gl: &glow::Context, data: Array2<u16>, stats: Statistics) {
+    // https://en.wikipedia.org/wiki/Median_absolute_deviation
+    // midpoint = median + -2.8*mad (if median < 0.5)
+
+    pub fn load_image_data(&mut self, gl: &glow::Context, data: &ArrayD<u16>, stats: &Statistics) {
+        println!("load_image_data");
+
         self.clip_low = (stats.clip_low.value as f32) / (std::u16::MAX as f32);
         self.clip_high = (stats.clip_high.value as f32) / (std::u16::MAX as f32);
+        // let data = data.map(|x| (*x) as f32 / std::u16::MAX as f32);
 
         unsafe {
-            self.texture = gl.create_texture().expect("Cannot create texture");
             gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
@@ -371,17 +434,21 @@ impl FitsRender {
                 0,
                 glow::RED,
                 glow::UNSIGNED_SHORT,
-                Some(std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len())),
+                Some(std::slice::from_raw_parts(
+                    data.as_ptr() as *const u8,
+                    data.len(),
+                )),
             );
+
             gl.tex_parameter_i32(
-                glow::TEXTURE_2D_ARRAY,
+                glow::TEXTURE_2D,
                 glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR as i32,
+                glow::NEAREST as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
-                glow::NEAREST as i32,
+                glow::LINEAR as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
@@ -411,7 +478,10 @@ impl FitsRender {
         unsafe {
             gl.use_program(Some(self.program));
             gl.active_texture(glow::TEXTURE0);
-            gl.uniform_1_i32(gl.get_uniform_location(self.program, "mono_fits").as_ref(), 0);
+            gl.uniform_1_i32(
+                gl.get_uniform_location(self.program, "mono_fits").as_ref(),
+                0,
+            );
 
             gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
 
@@ -425,16 +495,19 @@ impl FitsRender {
             );
 
             gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "histogram_low").as_ref(),
+                gl.get_uniform_location(self.program, "histogram_low")
+                    .as_ref(),
                 self.histogram_low as f32,
             );
 
             gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "histogram_high").as_ref(),
+                gl.get_uniform_location(self.program, "histogram_high")
+                    .as_ref(),
                 self.histogram_high as f32,
             );
             gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "histogram_mtf").as_ref(),
+                gl.get_uniform_location(self.program, "histogram_mtf")
+                    .as_ref(),
                 self.histogram_mtf as f32,
             );
 
@@ -460,12 +533,11 @@ impl FitsRender {
             gl.draw_arrays(glow::TRIANGLES, 0, 6);
 
             match gl.get_error() {
-                0 => {},
+                0 => {}
                 err => {
                     dbg!(err);
                 }
             }
-
         }
     }
 }
