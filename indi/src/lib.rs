@@ -6,8 +6,6 @@ use quick_xml::events::Event;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
-use derivative::Derivative;
-
 use std::borrow::Cow;
 use std::io::{BufReader, BufWriter};
 use std::net::{Shutdown, TcpStream};
@@ -373,11 +371,8 @@ impl Client {
     }
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
 pub struct Connection {
     connection: TcpStream,
-    #[derivative(Debug = "ignore")]
     xml_writer: Writer<BufWriter<TcpStream>>,
 }
 

@@ -334,11 +334,11 @@ pub struct SetBlobVector {
 
 #[derive(Debug, PartialEq)]
 pub struct OneBlob {
-    name: String,
-    size: u64,
-    enclen: Option<u64>,
-    format: String,
-    value: Vec<u8>,
+    pub name: String,
+    pub size: u64,
+    pub enclen: Option<u64>,
+    pub format: String,
+    pub value: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq)]
