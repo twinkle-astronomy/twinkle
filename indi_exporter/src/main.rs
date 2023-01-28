@@ -12,7 +12,7 @@ fn main() {
 
     let mut connection = indi::Connection::new(addr).unwrap();
     connection
-        .send(&indi::GetProperties {
+        .write(&indi::GetProperties {
             version: indi::INDI_PROTOCOL_VERSION.to_string(),
             device: None,
             name: None,
@@ -40,7 +40,7 @@ fn main() {
     )
     .unwrap();
 
-    for command in connection.command_iter().unwrap() {
+    for command in connection.iter().unwrap() {
         match command {
             Ok(command) => {
                 println!("Command: {:?}", command);
