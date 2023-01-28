@@ -2,7 +2,7 @@
 mod backend;
 use backend::*;
 
-mod fits_viewer;
+use fits_inspect::egui::FitsWidget;
 
 use tracing::{event, Level};
 
@@ -15,7 +15,7 @@ pub struct TwinkleApp {
 
     selected_device: Option<String>,
     selected_group: Option<String>,
-    fits_viewer: Option<fits_viewer::Custom3d>,
+    fits_viewer: Option<FitsWidget>,
 }
 
 impl Default for TwinkleApp {
@@ -36,7 +36,7 @@ impl TwinkleApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut newed: TwinkleApp = Default::default();
-        newed.fits_viewer = fits_viewer::Custom3d::new(cc);
+        newed.fits_viewer = FitsWidget::new(cc);
         newed
     }
 }
@@ -117,7 +117,7 @@ impl eframe::App for TwinkleApp {
             }
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
-                .show_viewport(ui, |ui, viewport| {
+                .show_viewport(ui, |ui, _viewport| {
                     if let Some(device_name) = selected_device {
                         if let Some(device) = devices.get(device_name) {
                             ui.heading(device_name.clone());
@@ -179,7 +179,7 @@ impl eframe::App for TwinkleApp {
                                                     ))
                                                     .clicked()
                                                 {
-                                                    backend.send_command(
+                                                    backend.write(
                                                         &indi::Command::NewSwitchVector(
                                                             indi::NewSwitchVector {
                                                                 device: device_name.to_string(),
@@ -191,13 +191,13 @@ impl eframe::App for TwinkleApp {
                                                                 }],
                                                             },
                                                         ),
-                                                    );
+                                                    ).unwrap_or_else(|e| {dbg!(e);});
                                                 }
                                             }
                                         });
                                     }
                                     Parameter::BlobVector(bv) => {
-                                        for (name, blob) in &bv.values {
+                                        for (name, _blob) in &bv.values {
                                             ui.label(format!("BLOB {}", name));
                                             if ui.button("Images").clicked() {
                                                 let enable_blob = indi::EnableBlob {
@@ -205,9 +205,9 @@ impl eframe::App for TwinkleApp {
                                                     name: None,
                                                     enabled: indi::BlobEnable::Also,
                                                 };
-                                                backend.send_command(&indi::Command::EnableBlob(
+                                                backend.write(&indi::Command::EnableBlob(
                                                     enable_blob,
-                                                ));
+                                                )).unwrap_or_else(|e| {dbg!(e);});
                                             }
                                         }
                                     }

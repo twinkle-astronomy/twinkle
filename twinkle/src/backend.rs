@@ -47,11 +47,12 @@ impl Drop for Backend {
     }
 }
 impl Backend {
-    pub fn send_command(&self, command: &indi::Command) {
+    pub fn write(&self, command: &indi::Command) -> Result<(), DeError>{
         let mut locked_connection = self.connection.lock().unwrap();
         if let Some(connection) = &mut *locked_connection {
-            connection.write(command);
+            connection.write(command)?;
         }
+        Ok(())
     }
 
     #[instrument(skip(self, ctx))]
