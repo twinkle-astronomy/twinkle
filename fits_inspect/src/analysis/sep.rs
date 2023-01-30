@@ -40,15 +40,15 @@ impl From<i32> for SepApiStatus {
 
 pub struct Image {
     sep_sys_image: sep_sys::sep_image,
-    image_data: Array2<f32>,
+    image: Array2<f32>,
 }
 
-impl Image {
+impl<'a> Image {
     pub fn new(image: ArrayD<u16>) -> Result<Image, ndarray::ShapeError> {
         let data_f32: Array2<f32> = image.into_dimensionality()?.map(|x| *x as f32);
-
+        let data_ptr = data_f32.as_slice().unwrap();
         let sep_image = sep_sys::sep_image {
-            data: data_f32.as_ptr() as *const c_void,
+            data: data_ptr.as_ptr() as *const c_void,
             noise: std::ptr::null(),
             mask: std::ptr::null(),
             segmap: std::ptr::null(),
@@ -66,7 +66,7 @@ impl Image {
 
         Ok(Image {
             sep_sys_image: sep_image,
-            image_data: data_f32,
+            image: data_f32,
         })
     }
 
@@ -219,7 +219,7 @@ impl Background {
         let status: SepApiStatus = unsafe {
             sep_sys::sep_bkg_subarray(
                 self.sep_sys_background,
-                image.image_data.as_mut_ptr() as *mut c_void,
+                image.image.as_ptr() as *mut c_void,
                 sep_sys::SEP_TFLOAT,
             )
         }

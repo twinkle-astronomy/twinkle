@@ -8,15 +8,6 @@ use std::env;
 use csv::Writer;
 use serde::Serialize;
 
-#[derive(Serialize)]
-struct SepResult {
-    thresh: f32,
-    npix: i32,
-    flux: f32,
-    peak: f32,
-    fwhm: f32,
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
 
