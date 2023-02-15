@@ -10,19 +10,22 @@ convolutions-rs = "0.3.4"
 csv = "1.1.6"
 eframe = "0.20.1"
 egui = "0.20.1"
-fitsio = {features = ["array"], path = "../../rust-fitsio/fitsio" }
+fitsio = {features = ["array"] }
 image = "0.24.5"
 indi = {version = "1.0.0", path = "../indi" }
 median = "0.3.2"
 ndarray = "0.15.6"
 ndarray-conv = "0.1.3"
 ndarray-ndimage = "0.3.0"
+ndarray-stats = "0.5.1"
 num-traits = "0.2.15"
+rmpfit = "0.2.0"
 sep-sys = "1.2.0"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 criterion="0.3"
+approx = "0.5.1"
 
 [[bench]]
 name="benchmark"

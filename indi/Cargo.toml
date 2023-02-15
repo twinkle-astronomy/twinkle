@@ -17,6 +17,9 @@ encoding = "0.2"
 base64 = "0.13.0"
 log = "0.4.17"
 derivative = "2.2.0"
+fitsio = {version="0.21.2", features = ["array"] }
+libc = "0.2.139"
+ndarray = "0.15.6"
 
 [dev-dependencies]
 bytes = "1.2.1"

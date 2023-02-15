@@ -1,33 +1,29 @@
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 mod backend;
-use backend::*;
 
-use fits_inspect::egui::FitsWidget;
+// use fits_inspect::egui::FitsWidget;
 
-use tracing::{event, Level};
-
-use indi::Parameter;
 
 pub struct TwinkleApp {
-    backend: Backend,
+    // // backend: Backend,
 
-    address: String,
+    // address: String,
 
-    selected_device: Option<String>,
-    selected_group: Option<String>,
-    fits_viewer: Option<FitsWidget>,
+    // selected_device: Option<String>,
+    // selected_group: Option<String>,
+    // fits_viewer: Option<FitsWidget>,
 }
 
 impl Default for TwinkleApp {
     fn default() -> Self {
         Self {
             // Example stuff:
-            address: "localhost:7624".to_owned(),
-            backend: Default::default(),
+            // address: "localhost:7624".to_owned(),
+            // // backend: Default::default(),
 
-            selected_device: None,
-            selected_group: None,
-            fits_viewer: None,
+            // selected_device: None,
+            // selected_group: None,
+            // fits_viewer: None::<T>,
         }
     }
 }
@@ -36,7 +32,7 @@ impl TwinkleApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut newed: TwinkleApp = Default::default();
-        newed.fits_viewer = FitsWidget::new(cc);
+        // newed.fits_viewer = FitsWidget::new(cc);
         newed
     }
 }
@@ -44,8 +40,8 @@ impl TwinkleApp {
 impl eframe::App for TwinkleApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self {
+    fn update(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        /*let Self {
             address,
             backend,
             selected_device,
@@ -55,7 +51,7 @@ impl eframe::App for TwinkleApp {
 
         let client_lock = backend.get_client(); //.lock().unwrap();
         let client = client_lock.lock().unwrap();
-        let devices = client.get_devices();
+        let devices = client.devices;
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -89,7 +85,7 @@ impl eframe::App for TwinkleApp {
             ui.separator();
 
             {
-                for (name, device) in devices {
+                for (name, device) in devices.as_ref().as_ref() {
                     if ui
                         .selectable_value(&mut Some(name), selected_device.as_ref(), name)
                         .clicked()
@@ -221,5 +217,6 @@ impl eframe::App for TwinkleApp {
                 });
         });
         // self.backend.tick();
+        */
     }
 }

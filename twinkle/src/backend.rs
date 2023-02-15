@@ -1,16 +1,11 @@
-use indi::DeError;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread;
-use tracing::{event, instrument, Level};
 
-#[derive(Clone)]
-pub enum ConnectionStatus {
-    Disconnected,
-    Connecting,
-    Initializing,
-    Connected,
-}
+// #[derive(Clone)]
+// pub enum ConnectionStatus {
+//     Disconnected,
+//     Connecting,
+//     Initializing,
+//     Connected,
+// }
 
 struct DropFn {
     func: Box<dyn Fn() -> ()>,
@@ -21,7 +16,7 @@ impl Drop for DropFn {
         (self.func)();
     }
 }
-
+/*
 pub struct Backend {
     client: Arc<Mutex<indi::Client>>,
     connection: Arc<Mutex<Option<indi::Connection>>>,
@@ -167,3 +162,4 @@ impl Backend {
         Ok(())
     }
 }
+*/

@@ -1,3 +1,5 @@
+use client::notify;
+use client::notify::Notify;
 use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::events::attributes::Attribute;
@@ -8,10 +10,18 @@ use quick_xml::{Reader, Writer};
 
 use std::borrow::Cow;
 use std::io::{BufReader, BufWriter};
-use std::net::{Shutdown, TcpStream};
+use std::net::TcpStream;
 
 use std::num;
+use std::num::Wrapping;
+
 use std::str;
+use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use chrono::format::ParseError;
 use chrono::prelude::*;
@@ -19,13 +29,15 @@ use std::io::Write;
 use std::str::FromStr;
 
 use std::collections::HashMap;
-use std::net::ToSocketAddrs;
 
 pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 
 pub mod serialization;
 pub use serialization::*;
-#[derive(Debug, PartialEq)]
+
+pub mod client;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum PropertyState {
     Idle,
     Ok,
@@ -33,41 +45,48 @@ pub enum PropertyState {
     Alert,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SwitchState {
     On,
     Off,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SwitchRule {
     OneOfMany,
     AtMostOne,
     AnyOfMany,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum PropertyPerm {
     RO,
     WO,
     RW,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum BlobEnable {
     Never,
     Also,
     Only,
 }
 
-#[derive(Debug, PartialEq)]
+pub trait FromParamValue {
+    fn values_from(w: &Parameter) -> Result<&Self, ()>
+    where
+        Self: Sized;
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Switch {
     pub label: Option<String>,
     pub value: SwitchState,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SwitchVector {
+    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -80,7 +99,16 @@ pub struct SwitchVector {
     pub values: HashMap<String, Switch>,
 }
 
-#[derive(Debug, PartialEq)]
+impl FromParamValue for HashMap<String, Switch> {
+    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+        match p {
+            Parameter::SwitchVector(p) => Ok(&p.values),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Number {
     pub label: Option<String>,
     pub format: String,
@@ -90,8 +118,9 @@ pub struct Number {
     pub value: f64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct NumberVector {
+    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -103,14 +132,24 @@ pub struct NumberVector {
     pub values: HashMap<String, Number>,
 }
 
-#[derive(Debug, PartialEq)]
+impl FromParamValue for HashMap<String, Number> {
+    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+        match p {
+            Parameter::NumberVector(p) => Ok(&p.values),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Light {
     label: Option<String>,
     value: PropertyState,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LightVector {
+    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -120,14 +159,33 @@ pub struct LightVector {
     pub values: HashMap<String, Light>,
 }
 
-#[derive(Debug, PartialEq)]
+impl FromParamValue for HashMap<String, Light> {
+    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+        match p {
+            Parameter::LightVector(p) => Ok(&p.values),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Text {
     pub label: Option<String>,
     pub value: String,
 }
 
-#[derive(Debug, PartialEq)]
+impl FromParamValue for HashMap<String, Text> {
+    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+        match p {
+            Parameter::TextVector(p) => Ok(&p.values),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct TextVector {
+    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -149,6 +207,7 @@ pub struct Blob {
 
 #[derive(Debug, PartialEq)]
 pub struct BlobVector {
+    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -156,9 +215,17 @@ pub struct BlobVector {
     pub perm: PropertyPerm,
     pub timeout: Option<u32>,
     pub timestamp: Option<DateTime<Utc>>,
-    pub enable_status: BlobEnable,
 
     pub values: HashMap<String, Blob>,
+}
+
+impl FromParamValue for HashMap<String, Blob> {
+    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+        match p {
+            Parameter::BlobVector(p) => Ok(&p.values),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -208,8 +275,198 @@ impl Parameter {
             Parameter::BlobVector(p) => &p.state,
         }
     }
+    pub fn get_timeout(&self) -> &Option<u32> {
+        match self {
+            Parameter::TextVector(p) => &p.timeout,
+            Parameter::NumberVector(p) => &p.timeout,
+            Parameter::SwitchVector(p) => &p.timeout,
+            Parameter::LightVector(_) => &None,
+            Parameter::BlobVector(p) => &p.timeout,
+        }
+    }
+
+    pub fn get_values<T: FromParamValue>(&self) -> Result<&T, ()> {
+        T::values_from(self)
+    }
+
+    pub fn gen(&self) -> core::num::Wrapping<usize> {
+        match self {
+            Parameter::TextVector(p) => p.gen,
+            Parameter::NumberVector(p) => p.gen,
+            Parameter::SwitchVector(p) => p.gen,
+            Parameter::LightVector(p) => p.gen,
+            Parameter::BlobVector(p) => p.gen,
+        }
+    }
+
+    pub fn gen_mut(&mut self) -> &mut core::num::Wrapping<usize> {
+        match self {
+            Parameter::TextVector(p) => &mut p.gen,
+            Parameter::NumberVector(p) => &mut p.gen,
+            Parameter::SwitchVector(p) => &mut p.gen,
+            Parameter::LightVector(p) => &mut p.gen,
+            Parameter::BlobVector(p) => &mut p.gen,
+        }
+    }
 }
 
+pub trait TryEq<T, E> {
+    fn try_eq(&self, other: &T) -> Result<bool, E>;
+}
+
+impl TryEq<Parameter, ()> for Vec<OneSwitch> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+        let current_values = other.get_values::<HashMap<String, Switch>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(other_value.value) == current_values.get(&other_value.name).map(|x| x.value)
+        }))
+    }
+}
+
+impl Into<SwitchState> for bool {
+    fn into(self) -> SwitchState {
+        match self {
+            true => SwitchState::On,
+            false => SwitchState::Off,
+        }
+    }
+}
+impl<I: Into<SwitchState> + Copy> TryEq<Parameter, ()> for Vec<(&str, I)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+        let current_values = other.get_values::<HashMap<String, Switch>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(other_value.1.into()) == current_values.get(other_value.0).map(|x| x.value)
+        }))
+    }
+}
+
+impl TryEq<Parameter, ()> for Vec<(&str, f64)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+        let current_values = other.get_values::<HashMap<String, Number>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(other_value.1) == current_values.get(other_value.0).map(|x| x.value)
+        }))
+    }
+}
+
+impl TryEq<Parameter, ()> for Vec<OneNumber> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+        let current_values = other.get_values::<HashMap<String, Number>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(other_value.value) == current_values.get(&other_value.name).map(|x| x.value)
+        }))
+    }
+}
+
+impl TryEq<Parameter, ()> for Vec<(&str, &str)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+        let current_values = other.get_values::<HashMap<String, Text>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(other_value.1) == current_values.get(other_value.0).map(|x| x.value.as_str())
+        }))
+    }
+}
+
+impl TryEq<Parameter, ()> for Vec<OneText> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+        let current_values = other.get_values::<HashMap<String, Text>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(&other_value.value) == current_values.get(&other_value.name).map(|x| &x.value)
+        }))
+    }
+}
+
+pub trait ToCommand<T> {
+    fn to_command(self, device_name: String, param_name: String) -> Command;
+}
+
+impl<I: Into<SwitchState> + Copy> ToCommand<Vec<(&str, I)>> for Vec<(&str, I)> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewSwitchVector(NewSwitchVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            switches: self
+                .iter()
+                .map(|x| OneSwitch {
+                    name: String::from(x.0),
+                    value: x.1.into(),
+                })
+                .collect(),
+        })
+    }
+}
+
+impl ToCommand<Vec<OneSwitch>> for Vec<OneSwitch> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewSwitchVector(NewSwitchVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            switches: self,
+        })
+    }
+}
+
+impl ToCommand<Vec<(&str, f64)>> for Vec<(&str, f64)> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewNumberVector(NewNumberVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            numbers: self
+                .iter()
+                .map(|x| OneNumber {
+                    name: String::from(x.0),
+                    value: x.1,
+                })
+                .collect(),
+        })
+    }
+}
+impl ToCommand<Vec<OneNumber>> for Vec<OneNumber> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewNumberVector(NewNumberVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            numbers: self,
+        })
+    }
+}
+
+impl ToCommand<Vec<(&str, &str)>> for Vec<(&str, &str)> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewTextVector(NewTextVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            texts: self
+                .iter()
+                .map(|x| OneText {
+                    name: String::from(x.0),
+                    value: String::from(x.1),
+                })
+                .collect(),
+        })
+    }
+}
+impl ToCommand<Vec<OneText>> for Vec<OneText> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewTextVector(NewTextVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            texts: self,
+        })
+    }
+}
 #[derive(Debug, PartialEq)]
 pub enum UpdateError {
     ParameterMissing(String),
@@ -222,106 +479,10 @@ pub enum Action {
     Delete,
 }
 
-#[derive(Debug)]
-pub struct Device {
-    parameters: HashMap<String, Parameter>,
-    names: Vec<String>,
-    groups: Vec<Option<String>>,
-}
-
-impl Device {
-    pub fn new() -> Device {
-        Device {
-            parameters: HashMap::new(),
-            names: vec![],
-            groups: vec![],
-        }
-    }
-
-    pub fn update(
-        &mut self,
-        command: serialization::Command,
-    ) -> Result<Option<&Parameter>, UpdateError> {
-        match command {
-            Command::Message(_) => Ok(None),
-            Command::GetProperties(_) => Ok(None),
-            Command::DefSwitchVector(command) => self.new_param(command),
-            Command::SetSwitchVector(command) => self.update_param(command),
-            Command::NewSwitchVector(_) => Ok(None),
-            Command::DefNumberVector(command) => self.new_param(command),
-            Command::SetNumberVector(command) => self.update_param(command),
-            Command::NewNumberVector(_) => Ok(None),
-            Command::DefTextVector(command) => self.new_param(command),
-            Command::SetTextVector(command) => self.update_param(command),
-            Command::NewTextVector(_) => Ok(None),
-            Command::DefBlobVector(command) => self.new_param(command),
-            Command::SetBlobVector(command) => self.update_param(command),
-            Command::DefLightVector(command) => self.new_param(command),
-            Command::SetLightVector(command) => self.update_param(command),
-            Command::DelProperty(command) => self.delete_param(command.name),
-            Command::EnableBlob(_) => Ok(None),
-        }
-    }
-
-    pub fn parameter_names(&self) -> &Vec<String> {
-        return &self.names;
-    }
-
-    pub fn parameter_groups(&self) -> &Vec<Option<String>> {
-        return &self.groups;
-    }
-
-    pub fn get_parameters(&self) -> &HashMap<String, Parameter> {
-        return &self.parameters;
-    }
-
-    fn new_param<T: CommandtoParam>(&mut self, def: T) -> Result<Option<&Parameter>, UpdateError> {
-        let name = def.get_name().clone();
-
-        self.names.push(name.clone());
-        if let None = self.groups.iter().find(|&x| x == def.get_group()) {
-            self.groups.push(def.get_group().clone());
-        }
-
-        let param = def.to_param();
-        self.parameters.insert(name.clone(), param);
-        Ok(self.parameters.get(&name))
-    }
-
-    fn update_param<T: CommandToUpdate>(
-        &mut self,
-        new_command: T,
-    ) -> Result<Option<&Parameter>, UpdateError> {
-        match self.parameters.get_mut(&new_command.get_name().clone()) {
-            Some(param) => {
-                new_command.update_param(param)?;
-                Ok(Some(param))
-            }
-            None => Err(UpdateError::ParameterMissing(
-                new_command.get_name().clone(),
-            )),
-        }
-    }
-
-    fn delete_param(&mut self, name: Option<String>) -> Result<Option<&Parameter>, UpdateError> {
-        match name {
-            Some(name) => {
-                self.names.retain(|n| *n != name);
-                self.parameters.remove(&name);
-            }
-            None => {
-                self.names.clear();
-                self.parameters.drain();
-            }
-        };
-        Ok(None)
-    }
-}
-
 pub trait CommandtoParam {
     fn get_name(&self) -> &String;
     fn get_group(&self) -> &Option<String>;
-    fn to_param(self) -> Parameter;
+    fn to_param(self, gen: Wrapping<usize>) -> Parameter;
 }
 
 pub trait CommandToUpdate {
@@ -329,414 +490,235 @@ pub trait CommandToUpdate {
     fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError>;
 }
 
+pub enum ClientErrors {
+    DeError(DeError),
+    UpdateError(UpdateError),
+}
+
+impl From<DeError> for ClientErrors {
+    fn from(err: DeError) -> Self {
+        ClientErrors::DeError(err)
+    }
+}
+impl From<UpdateError> for ClientErrors {
+    fn from(err: UpdateError) -> Self {
+        ClientErrors::UpdateError(err)
+    }
+}
+
 /// Struct used to keep track of a the devices and their properties.
 /// When used in conjunction with the Connection struct can be used to
 /// track and control devices managed by an INDI server.
-#[derive(Debug)]
-pub struct Client {
-    devices: HashMap<String, Device>,
+pub struct Client<T: ClientConnection + 'static> {
+    pub devices: Arc<Notify<MemoryDeviceStore>>,
+    pub errors: Receiver<ClientErrors>,
+    pub connection: T,
 }
 
-impl Client {
+#[derive(Debug)]
+pub enum ChangeError<E> {
+    NotifyError(notify::Error<E>),
+    DeError(serialization::DeError),
+    IoError(std::io::Error),
+    TypeMismatch,
+}
+
+impl<T> From<std::io::Error> for ChangeError<T> {
+    fn from(value: std::io::Error) -> Self {
+        ChangeError::IoError(value)
+    }
+}
+impl<T> From<notify::Error<T>> for ChangeError<T> {
+    fn from(value: notify::Error<T>) -> Self {
+        ChangeError::NotifyError(value)
+    }
+}
+impl<T> From<DeError> for ChangeError<T> {
+    fn from(value: DeError) -> Self {
+        ChangeError::DeError(value)
+    }
+}
+impl<T> From<()> for ChangeError<T> {
+    fn from(_: ()) -> Self {
+        ChangeError::TypeMismatch
+    }
+}
+
+pub fn batch<T>(
+    funcs: Vec<Box<dyn FnOnce() -> Result<Arc<Notify<Parameter>>, T>>>,
+) -> Result<(), T> {
+    for f in funcs {
+        f()?;
+    }
+    Ok(())
+}
+
+impl<T: ClientConnection> Client<T> {
     /// Create a new client object.
-    pub fn new() -> Client {
-        Client {
-            devices: HashMap::new(),
-        }
+    pub fn new(
+        connection: T,
+        device: Option<&str>,
+        parameter: Option<&str>,
+    ) -> Result<Client<T>, std::io::Error> {
+        connection
+            .write(&GetProperties {
+                version: INDI_PROTOCOL_VERSION.to_string(),
+                device: device.map(|x| String::from(x)),
+                name: parameter.map(|x| String::from(x)),
+            })
+            .expect("Unable to write command");
+
+        let (error_tx, error_rx): (Sender<ClientErrors>, Receiver<ClientErrors>) = mpsc::channel();
+        let c = Client {
+            devices: Arc::new(Notify::new(HashMap::new())),
+            errors: error_rx,
+            connection,
+        };
+
+        let thread_devices = c.devices.clone();
+        let connection_iter = c.connection.iter()?;
+        thread::spawn(move || {
+            for command in connection_iter {
+                match command {
+                    Ok(command) => {
+                        let mut locked_devices = thread_devices.lock();
+                        let update_result = locked_devices.update(command, |_param| {});
+                        if let Err(e) = update_result {
+                            error_tx.send(e.into()).unwrap();
+                        }
+                    }
+                    Err(e) => {
+                        // dbg!(&e);
+                        error_tx.send(e.into()).unwrap();
+                    }
+                }
+            }
+        });
+        Ok(c)
     }
 
+    pub fn get_device<'a>(
+        &'a self,
+        name: &str,
+    ) -> Result<client::device::ActiveDevice<'a, T>, client::notify::Error<()>> {
+        self.devices
+            .wait_fn::<_, (), _>(Duration::from_secs(60), |devices| {
+                if let Some(device) = devices.get(name) {
+                    return Ok(client::notify::Status::Complete(
+                        client::device::ActiveDevice::new(device.clone(), self),
+                    ));
+                }
+
+                Ok(client::notify::Status::Pending)
+            })
+    }
+}
+
+pub type MemoryDeviceStore = HashMap<String, Arc<Notify<client::device::Device>>>;
+
+pub trait DeviceStore {
     /// Update the state of the appropriate device property for a command that came from an INDI server.
-    pub fn update(
+    fn update<T>(
         &mut self,
         command: serialization::Command,
-    ) -> Result<Option<&Parameter>, UpdateError> {
+        f: impl FnOnce(notify::NotifyMutexGuard<Parameter>) -> T,
+    ) -> Result<Option<T>, UpdateError>;
+}
+
+impl DeviceStore for MemoryDeviceStore {
+    fn update<T>(
+        &mut self,
+        command: serialization::Command,
+        f: impl FnOnce(notify::NotifyMutexGuard<Parameter>) -> T,
+    ) -> Result<Option<T>, UpdateError> {
         let name = command.device_name();
         match name {
             Some(name) => {
-                let device = self.devices.entry(name.clone()).or_insert(Device::new());
-                device.update(command)
+                let mut device = self
+                    .entry(name.clone())
+                    .or_insert(Arc::new(Notify::new(client::device::Device::new(
+                        name.clone(),
+                    ))))
+                    .lock();
+                let param = device.update(command)?;
+                Ok(match param {
+                    Some(p) => Some(f(p)),
+                    None => None,
+                })
             }
             None => Ok(None),
         }
     }
-
-    /// Accessor for stored devices.
-    pub fn get_devices(&self) -> &HashMap<String, Device> {
-        return &self.devices;
-    }
-
-    /// Clear (aka, empty) the stored devices.
-    pub fn clear(&mut self) {
-        self.devices.clear();
-    }
 }
 
-pub struct Connection {
-    connection: TcpStream,
-    xml_writer: Writer<BufWriter<TcpStream>>,
-}
-
-impl Connection {
-    /// Creates a new connection to an INDI server at the specified address.
-    pub fn new<A: ToSocketAddrs>(addr: A) -> std::io::Result<Connection> {
-        let connection = TcpStream::connect(addr)?;
-        let xml_writer = Writer::new_with_indent(BufWriter::new(connection.try_clone()?), b' ', 2);
-
-        Ok(Connection {
-            connection,
-            xml_writer,
-        })
-    }
-
-    /// Disconnects from the INDI server
-    pub fn disconnect(&self) -> Result<(), std::io::Error> {
-        self.connection.shutdown(Shutdown::Both)
-    }
+pub trait ClientConnection {
+    type Read: std::io::Read + Send;
+    type Write: std::io::Write + Send;
 
     /// Creates an interator that yields commands from the the connected INDI server.
     /// Example usage:
     /// ```no_run
-    /// let mut connection = indi::Connection::new("localhost:7624").unwrap();
+    /// use std::collections::HashMap;
+    /// use crate::indi::{ClientConnection, DeviceStore, Device};
+    /// use std::net::TcpStream;
+    /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
     /// connection.write(&indi::GetProperties {
     ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
     ///     device: None,
     ///     name: None,
     /// }).unwrap();
     ///
-    /// let mut client = indi::Client::new();
+    /// let mut client = HashMap::<String, Device>::new();
     ///
     /// for command in connection.iter().unwrap() {
     ///     println!("Command: {:?}", command);
     ///     client.update(command.unwrap());
     /// }
-    pub fn iter(&self) -> Result<serialization::CommandIter<BufReader<TcpStream>>, std::io::Error> {
-        let mut xml_reader = Reader::from_reader(BufReader::new(self.connection.try_clone()?));
+    fn iter(&self) -> Result<serialization::CommandIter<BufReader<Self::Read>>, std::io::Error> {
+        let mut xml_reader = Reader::from_reader(BufReader::new(self.clone_reader()?));
+
         xml_reader.trim_text(true);
         xml_reader.expand_empty_elements(true);
-        Ok(serialization::CommandIter::new(xml_reader))
+
+        let iter = serialization::CommandIter::new(xml_reader);
+        Ok(iter)
     }
 
     /// Sends the given INDI command to the connected server.  Consumes the command.
     /// Example usage:
     /// ```no_run
-    /// let mut connection = indi::Connection::new("localhost:7624").unwrap();
+    /// use crate::indi::ClientConnection;
+    /// use std::net::TcpStream;
+    /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
     /// connection.write(&indi::GetProperties {
     ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
     ///     device: None,
     ///     name: None,
     /// }).unwrap();
     ///
-    pub fn write<T: XmlSerialization>(&mut self, command: &T) -> Result<(), DeError> {
-        command.write(&mut self.xml_writer)?;
-        self.xml_writer.inner().flush()?;
+    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>
+    where
+        <Self as ClientConnection>::Write: std::io::Write,
+    {
+        let mut xml_writer = Writer::new_with_indent(BufWriter::new(self.clone_writer()?), b' ', 2);
+
+        command.write(&mut xml_writer)?;
+        xml_writer.inner().flush()?;
         Ok(())
     }
+
+    fn clone_reader(&self) -> Result<Self::Read, std::io::Error>;
+    fn clone_writer(&self) -> Result<Self::Write, std::io::Error>;
 }
 
-#[cfg(test)]
-mod device_tests {
-    use super::*;
+impl ClientConnection for TcpStream {
+    type Read = TcpStream;
+    type Write = TcpStream;
 
-    #[test]
-    fn test_update_switch() {
-        let mut device = Device::new();
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
-
-        let def_switch = DefSwitchVector {
-            device: String::from_str("CCD Simulator").unwrap(),
-            name: String::from_str("Exposure").unwrap(),
-            label: Some(String::from_str("thingo").unwrap()),
-            group: Some(String::from_str("group").unwrap()),
-            state: PropertyState::Ok,
-            perm: PropertyPerm::RW,
-            rule: SwitchRule::AtMostOne,
-            timeout: Some(60),
-            timestamp: Some(timestamp),
-            message: None,
-            switches: vec![DefSwitch {
-                name: String::from_str("seconds").unwrap(),
-                label: Some(String::from_str("asdf").unwrap()),
-                value: SwitchState::On,
-            }],
-        };
-        assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefSwitchVector(def_switch))
-            .unwrap();
-        assert_eq!(device.get_parameters().len(), 1);
-
-        if let Parameter::SwitchVector(stored) = device.get_parameters().get("Exposure").unwrap() {
-            assert_eq!(
-                stored,
-                &SwitchVector {
-                    name: String::from_str("Exposure").unwrap(),
-                    group: Some(String::from_str("group").unwrap()),
-                    label: Some(String::from_str("thingo").unwrap()),
-                    state: PropertyState::Ok,
-                    perm: PropertyPerm::RW,
-                    rule: SwitchRule::AtMostOne,
-                    timeout: Some(60),
-                    timestamp: Some(timestamp),
-                    values: HashMap::from([(
-                        String::from_str("seconds").unwrap(),
-                        Switch {
-                            label: Some(String::from_str("asdf").unwrap()),
-                            value: SwitchState::On
-                        }
-                    )])
-                }
-            );
-        } else {
-            panic!("Unexpected");
-        }
-
-        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
-        let set_switch = SetSwitchVector {
-            device: String::from_str("CCD Simulator").unwrap(),
-            name: String::from_str("Exposure").unwrap(),
-            state: PropertyState::Ok,
-            timeout: Some(60),
-            timestamp: Some(timestamp),
-            message: None,
-            switches: vec![OneSwitch {
-                name: String::from_str("seconds").unwrap(),
-                value: SwitchState::Off,
-            }],
-        };
-        assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::SetSwitchVector(set_switch))
-            .unwrap();
-        assert_eq!(device.get_parameters().len(), 1);
-
-        if let Parameter::SwitchVector(stored) = device.get_parameters().get("Exposure").unwrap() {
-            assert_eq!(
-                stored,
-                &SwitchVector {
-                    name: String::from_str("Exposure").unwrap(),
-                    group: Some(String::from_str("group").unwrap()),
-                    label: Some(String::from_str("thingo").unwrap()),
-                    state: PropertyState::Ok,
-                    perm: PropertyPerm::RW,
-                    rule: SwitchRule::AtMostOne,
-                    timeout: Some(60),
-                    timestamp: Some(timestamp),
-                    values: HashMap::from([(
-                        String::from_str("seconds").unwrap(),
-                        Switch {
-                            label: Some(String::from_str("asdf").unwrap()),
-                            value: SwitchState::Off
-                        }
-                    )])
-                }
-            );
-        } else {
-            panic!("Unexpected");
-        }
+    fn clone_reader(&self) -> Result<TcpStream, std::io::Error> {
+        self.try_clone()
     }
-
-    #[test]
-    fn test_update_number() {
-        let mut device = Device::new();
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
-
-        let def_number = DefNumberVector {
-            device: String::from_str("CCD Simulator").unwrap(),
-            name: String::from_str("Exposure").unwrap(),
-            label: Some(String::from_str("thingo").unwrap()),
-            group: Some(String::from_str("group").unwrap()),
-            state: PropertyState::Ok,
-            perm: PropertyPerm::RW,
-            timeout: Some(60),
-            timestamp: Some(timestamp),
-            message: None,
-            numbers: vec![DefNumber {
-                name: String::from_str("seconds").unwrap(),
-                label: Some(String::from_str("asdf").unwrap()),
-                format: String::from_str("%4.0f").unwrap(),
-                min: 0.0,
-                max: 100.0,
-                step: 1.0,
-                value: 13.3,
-            }],
-        };
-        assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefNumberVector(def_number))
-            .unwrap();
-        assert_eq!(device.get_parameters().len(), 1);
-
-        if let Parameter::NumberVector(stored) = device.get_parameters().get("Exposure").unwrap() {
-            assert_eq!(
-                stored,
-                &NumberVector {
-                    name: String::from_str("Exposure").unwrap(),
-                    group: Some(String::from_str("group").unwrap()),
-                    label: Some(String::from_str("thingo").unwrap()),
-                    state: PropertyState::Ok,
-                    perm: PropertyPerm::RW,
-                    timeout: Some(60),
-                    timestamp: Some(timestamp),
-                    values: HashMap::from([(
-                        String::from_str("seconds").unwrap(),
-                        Number {
-                            label: Some(String::from_str("asdf").unwrap()),
-                            format: String::from_str("%4.0f").unwrap(),
-                            min: 0.0,
-                            max: 100.0,
-                            step: 1.0,
-                            value: 13.3,
-                        }
-                    )])
-                }
-            );
-        } else {
-            panic!("Unexpected");
-        }
-
-        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
-        let set_number = SetNumberVector {
-            device: String::from_str("CCD Simulator").unwrap(),
-            name: String::from_str("Exposure").unwrap(),
-            state: PropertyState::Ok,
-            timeout: Some(60),
-            timestamp: Some(timestamp),
-            message: None,
-            numbers: vec![OneNumber {
-                name: String::from_str("seconds").unwrap(),
-                min: None,
-                max: None,
-                step: None,
-                value: 5.0,
-            }],
-        };
-        assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::SetNumberVector(set_number))
-            .unwrap();
-        assert_eq!(device.get_parameters().len(), 1);
-
-        if let Parameter::NumberVector(stored) = device.get_parameters().get("Exposure").unwrap() {
-            assert_eq!(
-                stored,
-                &NumberVector {
-                    name: String::from_str("Exposure").unwrap(),
-                    group: Some(String::from_str("group").unwrap()),
-                    label: Some(String::from_str("thingo").unwrap()),
-                    state: PropertyState::Ok,
-                    perm: PropertyPerm::RW,
-                    timeout: Some(60),
-                    timestamp: Some(timestamp),
-                    values: HashMap::from([(
-                        String::from_str("seconds").unwrap(),
-                        Number {
-                            label: Some(String::from_str("asdf").unwrap()),
-                            format: String::from_str("%4.0f").unwrap(),
-                            min: 0.0,
-                            max: 100.0,
-                            step: 1.0,
-                            value: 5.0
-                        }
-                    )])
-                }
-            );
-        } else {
-            panic!("Unexpected");
-        }
-    }
-
-    #[test]
-    fn test_update_text() {
-        let mut device = Device::new();
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
-
-        let def_text = DefTextVector {
-            device: String::from_str("CCD Simulator").unwrap(),
-            name: String::from_str("Exposure").unwrap(),
-            label: Some(String::from_str("thingo").unwrap()),
-            group: Some(String::from_str("group").unwrap()),
-            state: PropertyState::Ok,
-            perm: PropertyPerm::RW,
-            timeout: Some(60),
-            timestamp: Some(timestamp),
-            message: None,
-            texts: vec![DefText {
-                name: String::from_str("seconds").unwrap(),
-                label: Some(String::from_str("asdf").unwrap()),
-                value: String::from_str("something").unwrap(),
-            }],
-        };
-        assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefTextVector(def_text))
-            .unwrap();
-        assert_eq!(device.get_parameters().len(), 1);
-
-        if let Parameter::TextVector(stored) = device.get_parameters().get("Exposure").unwrap() {
-            assert_eq!(
-                stored,
-                &TextVector {
-                    name: String::from_str("Exposure").unwrap(),
-                    group: Some(String::from_str("group").unwrap()),
-                    label: Some(String::from_str("thingo").unwrap()),
-                    state: PropertyState::Ok,
-                    perm: PropertyPerm::RW,
-                    timeout: Some(60),
-                    timestamp: Some(timestamp),
-                    values: HashMap::from([(
-                        String::from_str("seconds").unwrap(),
-                        Text {
-                            label: Some(String::from_str("asdf").unwrap()),
-                            value: String::from_str("something").unwrap(),
-                        }
-                    )])
-                }
-            );
-        } else {
-            panic!("Unexpected");
-        }
-
-        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
-        let set_number = SetTextVector {
-            device: String::from_str("CCD Simulator").unwrap(),
-            name: String::from_str("Exposure").unwrap(),
-            state: PropertyState::Ok,
-            timeout: Some(60),
-            timestamp: Some(timestamp),
-            message: None,
-            texts: vec![OneText {
-                name: String::from_str("seconds").unwrap(),
-                value: String::from_str("something else").unwrap(),
-            }],
-        };
-        assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::SetTextVector(set_number))
-            .unwrap();
-        assert_eq!(device.get_parameters().len(), 1);
-
-        if let Parameter::TextVector(stored) = device.get_parameters().get("Exposure").unwrap() {
-            assert_eq!(
-                stored,
-                &TextVector {
-                    name: String::from_str("Exposure").unwrap(),
-                    group: Some(String::from_str("group").unwrap()),
-                    label: Some(String::from_str("thingo").unwrap()),
-                    state: PropertyState::Ok,
-                    perm: PropertyPerm::RW,
-                    timeout: Some(60),
-                    timestamp: Some(timestamp),
-                    values: HashMap::from([(
-                        String::from_str("seconds").unwrap(),
-                        Text {
-                            label: Some(String::from_str("asdf").unwrap()),
-                            value: String::from_str("something else").unwrap(),
-                        }
-                    )])
-                }
-            );
-        } else {
-            panic!("Unexpected");
-        }
+    fn clone_writer(&self) -> Result<TcpStream, std::io::Error> {
+        self.try_clone()
     }
 }

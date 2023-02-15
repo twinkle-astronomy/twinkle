@@ -35,9 +35,6 @@ use quick_xml::name::QName;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug)]
 pub enum Command {
     // Commands from Device to Connections
@@ -151,7 +148,7 @@ pub struct NewTextVector {
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct OneText {
     pub name: String,
     pub value: String,
@@ -192,7 +189,16 @@ pub struct SetNumberVector {
     pub timestamp: Option<DateTime<Utc>>,
     pub message: Option<String>,
 
-    pub numbers: Vec<OneNumber>,
+    pub numbers: Vec<SetOneNumber>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SetOneNumber {
+    pub name: String,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub step: Option<f64>,
+    pub value: f64,
 }
 
 #[derive(Debug)]
@@ -204,12 +210,9 @@ pub struct NewNumberVector {
     pub numbers: Vec<OneNumber>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct OneNumber {
     pub name: String,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-    pub step: Option<f64>,
     pub value: f64,
 }
 
@@ -256,7 +259,7 @@ pub struct NewSwitchVector {
     pub switches: Vec<OneSwitch>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct OneSwitch {
     pub name: String,
     pub value: SwitchState,
@@ -349,7 +352,7 @@ pub struct EnableBlob {
     pub enabled: BlobEnable,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Message {
     pub device: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,

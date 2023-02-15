@@ -3,6 +3,8 @@ use sep_sys;
 use serde::Serialize;
 use std::ffi::c_void;
 
+use super::Star;
+
 #[derive(PartialEq, Debug)]
 pub enum SepApiStatus {
     ReturnOk,
@@ -93,18 +95,15 @@ impl<'a> Image {
         }
     }
 
-    pub fn extract(&self, background: &Background) -> Result<Vec<CatalogEntry>, SepApiStatus> {
+    pub fn extract(&self, _background: &Background) -> Result<Vec<CatalogEntry>, SepApiStatus> {
         let mut catalog: *mut sep_sys::sep_catalog = std::ptr::null_mut();
         let status: SepApiStatus = unsafe {
             sep_sys::sep_extract(
                 &self.sep_sys_image,
-                background.global(),
+                (2.0 as f32).powf(15.0),
                 sep_sys::SEP_THRESH_ABS,
                 10,
-                &[
-                    1.0 as f32, 2.0 as f32, 1.0 as f32, 2.0 as f32, 4.0 as f32, 2.0 as f32,
-                    1.0 as f32, 2.0 as f32, 1.0 as f32,
-                ] as *const f32,
+                std::ptr::null(),
                 3,
                 3,
                 sep_sys::SEP_FILTER_CONV,
@@ -155,7 +154,6 @@ impl<'a> Image {
                 xpeak: unsafe { std::slice::from_raw_parts((*catalog).xpeak, nobj) }[i],
                 ypeak: unsafe { std::slice::from_raw_parts((*catalog).ypeak, nobj) }[i],
                 flag: unsafe { std::slice::from_raw_parts((*catalog).flag, nobj) }[i],
-                fwhm: 2.0 * std::f32::consts::LN_2 * (a * a + b * b).sqrt(),
             })
         }
         unsafe {
@@ -165,7 +163,7 @@ impl<'a> Image {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct CatalogEntry {
     pub thresh: f32,
     pub npix: i32,
@@ -199,8 +197,28 @@ pub struct CatalogEntry {
     pub xpeak: i32,
     pub ypeak: i32,
     pub flag: i16,
+}
 
-    pub fwhm: f32,
+impl Star for CatalogEntry {
+    fn image_center(&self) -> [f64; 2] {
+        [self.x, self.y]
+    }
+
+    fn intensity_peak(&self) -> f32 {
+        self.peak
+    }
+
+    fn intensity_loc(&self) -> [usize; 2] {
+        [self.xpeak as usize, self.ypeak as usize]
+    }
+
+    fn flux(&self) -> f32 {
+        self.flux
+    }
+
+    fn fwhm(&self) -> f32 {
+        2.0 * std::f32::consts::LN_2 * (self.a * self.a + self.b * self.b).sqrt()
+    }
 }
 
 pub struct Background {

@@ -1,23 +1,18 @@
 extern crate fitsio;
 
 use fits_inspect::analysis::Statistics;
-use fitsio::FitsFile;
 use ndarray::prelude::*;
 use std::env;
 
 use csv::Writer;
-use serde::Serialize;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     let filename = &args[1];
 
-    let mut file_data = std::fs::read(filename).unwrap();
-    let mut fptr = FitsFile::open_memfile(&mut file_data).unwrap();
-
-    let hdu = fptr.primary_hdu().unwrap();
-    let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
+    let file_data = std::fs::read(filename).unwrap();
+    let data: ArrayD<u16> = indi::client::device::Device::image_from_fits(&file_data);
 
     let nd_stats = Statistics::new(&data.view());
 

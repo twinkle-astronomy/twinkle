@@ -14,8 +14,9 @@ impl CommandtoParam for DefBlobVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self) -> Parameter {
+    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
         Parameter::BlobVector(BlobVector {
+            gen,
             name: self.name,
             group: self.group,
             label: self.label,
@@ -23,7 +24,6 @@ impl CommandtoParam for DefBlobVector {
             perm: self.perm,
             timeout: self.timeout,
             timestamp: self.timestamp,
-            enable_status: BlobEnable::Never,
             values: self
                 .blobs
                 .into_iter()
@@ -340,6 +340,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
+                    dbg!(&format);
 
                     Ok(Some(OneBlob {
                         name: name?,

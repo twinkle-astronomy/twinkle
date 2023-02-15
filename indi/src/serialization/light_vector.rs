@@ -14,8 +14,9 @@ impl CommandtoParam for DefLightVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self) -> Parameter {
+    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
         Parameter::LightVector(LightVector {
+            gen,
             name: self.name,
             group: self.group,
             label: self.label,

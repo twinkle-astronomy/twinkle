@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 indi = { path = "../indi" }
+prometheus = "0.13.3"
 prometheus_exporter = "0.8.5"

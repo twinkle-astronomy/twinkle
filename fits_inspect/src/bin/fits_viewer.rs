@@ -3,11 +3,11 @@
 use std::{
     env,
     sync::{Arc, Mutex},
-    thread,
+    thread, net::TcpStream,
 };
 
 use fits_inspect::{analysis::Statistics, egui::FitsWidget};
-use fitsio::FitsFile;
+use indi::ClientConnection;
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
@@ -47,7 +47,7 @@ impl FitsViewerApp {
             // }
             let args: Vec<String> = env::args().collect();
 
-            let mut connection = indi::Connection::new(&args[1]).unwrap();
+            let connection = TcpStream::connect(&args[1]).unwrap();
             connection
                 .write(&indi::GetProperties {
                     version: indi::INDI_PROTOCOL_VERSION.to_string(),
@@ -69,16 +69,14 @@ impl FitsViewerApp {
             for command in c_iter {
                 match command {
                     Ok(indi::Command::SetBlobVector(mut sbv)) => {
+                        
+
                         println!("Got image for: {:?}", sbv.device);
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;
                         }
 
-                        let mut fptr =
-                            FitsFile::open_memfile(&mut sbv.blobs.get_mut(0).unwrap().value)
-                                .unwrap();
-                        let hdu = fptr.primary_hdu().unwrap();
-                        let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
+                        let data: ArrayD<u16> = indi::client::device::Device::image_from_fits(&sbv.blobs.get_mut(0).unwrap().value);
 
                         let mut fits_widget = fits_widget.lock().unwrap();
                         if let Some(w) = &mut *fits_widget {

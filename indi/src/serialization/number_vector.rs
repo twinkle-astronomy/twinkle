@@ -17,8 +17,9 @@ impl CommandtoParam for DefNumberVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self) -> Parameter {
+    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
         Parameter::NumberVector(NumberVector {
+            gen,
             name: self.name,
             group: self.group,
             label: self.label,
@@ -73,7 +74,7 @@ impl CommandToUpdate for SetNumberVector {
     }
 }
 
-impl XmlSerialization for OneNumber {
+impl XmlSerialization for SetOneNumber {
     fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
@@ -91,6 +92,21 @@ impl XmlSerialization for OneNumber {
         if let Some(step) = &self.step {
             creator = creator.with_attribute(("step", step.to_string().as_str()));
         }
+        creator.write_text_content(BytesText::new(self.value.to_string().as_str()))?;
+
+        Ok(xml_writer)
+    }
+}
+
+impl XmlSerialization for OneNumber {
+    fn write<'a, T: std::io::Write>(
+        &self,
+        xml_writer: &'a mut Writer<T>,
+    ) -> XmlResult<&'a mut Writer<T>> {
+        let creator = xml_writer
+            .create_element("oneNumber")
+            .with_attribute(("name", &*self.name));
+
         creator.write_text_content(BytesText::new(self.value.to_string().as_str()))?;
 
         Ok(xml_writer)
@@ -146,10 +162,10 @@ fn parse_number(e: &BytesText) -> Result<f64, DeError> {
     return Ok(val);
 }
 
-fn next_one_number<T: std::io::BufRead>(
+fn next_set_one_number<T: std::io::BufRead>(
     xml_reader: &mut Reader<T>,
     buf: &mut Vec<u8>,
-) -> Result<Option<OneNumber>, DeError> {
+) -> Result<Option<SetOneNumber>, DeError> {
     let event = xml_reader.read_event_into(buf)?;
     match event {
         Event::Start(e) => match e.name() {
@@ -188,11 +204,61 @@ fn next_one_number<T: std::io::BufRead>(
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 }
 
-                Ok(Some(OneNumber {
+                Ok(Some(SetOneNumber {
                     name: name?,
                     min: min,
                     max: max,
                     step: step,
+                    value: value?,
+                }))
+            }
+            tag => Err(DeError::UnexpectedTag(
+                str::from_utf8(tag.into_inner())?.to_string(),
+            )),
+        },
+        Event::End(_) => Ok(None),
+        Event::Eof => Ok(None),
+        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+    }
+}
+fn next_one_number<T: std::io::BufRead>(
+    xml_reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+) -> Result<Option<OneNumber>, DeError> {
+    let event = xml_reader.read_event_into(buf)?;
+    match event {
+        Event::Start(e) => match e.name() {
+            QName(b"oneNumber") => {
+                let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
+
+                for attr in e.attributes() {
+                    let attr = attr?;
+                    let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
+
+                    match attr.key {
+                        QName(b"name") => name = Ok(attr_value),
+                        key => {
+                            return Err(DeError::UnexpectedAttr(format!(
+                                "Unexpected attribute {}",
+                                str::from_utf8(key.into_inner())?
+                            )))
+                        }
+                    }
+                }
+
+                let value: Result<f64, DeError> = match xml_reader.read_event_into(buf) {
+                    Ok(Event::Text(e)) => parse_number(&e),
+                    e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                };
+
+                let trailing_event = xml_reader.read_event_into(buf)?;
+                match trailing_event {
+                    Event::End(_) => (),
+                    e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
+                }
+
+                Ok(Some(OneNumber {
+                    name: name?,
                     value: value?,
                 }))
             }
@@ -357,9 +423,9 @@ pub struct SetNumberIter<'a, T: std::io::BufRead> {
 }
 
 impl<'a, T: std::io::BufRead> Iterator for SetNumberIter<'a, T> {
-    type Item = Result<OneNumber, DeError>;
+    type Item = Result<SetOneNumber, DeError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match next_one_number(&mut self.xml_reader, &mut self.buf) {
+        match next_set_one_number(&mut self.xml_reader, &mut self.buf) {
             Ok(Some(number)) => {
                 return Some(Ok(number));
             }
@@ -413,9 +479,9 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
             device: device.ok_or(DeError::MissingAttr(&"device"))?,
             name: name.ok_or(DeError::MissingAttr(&"name"))?,
             state: state.ok_or(DeError::MissingAttr(&"state"))?,
-            timeout: timeout,
-            timestamp: timestamp,
-            message: message,
+            timeout,
+            timestamp,
+            message,
             numbers: Vec::new(),
         })
     }
@@ -503,7 +569,7 @@ mod tests {
 
         assert_eq!(
             result,
-            OneNumber {
+            SetOneNumber {
                 name: "SIM_FOCUS_POSITION".to_string(),
                 min: None,
                 max: None,
@@ -626,9 +692,6 @@ mod tests {
             timestamp: Some(timestamp),
             numbers: vec![OneNumber {
                 name: String::from_str("seconds").unwrap(),
-                max: None,
-                min: None,
-                step: None,
                 value: 3.0,
             }],
         };

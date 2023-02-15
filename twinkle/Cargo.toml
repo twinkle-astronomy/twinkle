@@ -16,3 +16,7 @@ tracing = "0.1.37"
 tokio = {version = "1.21.2", features = ["full"]}
 image = "0.24.4"
 fits_inspect = { version = "0.1.0", path = "../fits_inspect" }
+fitsio = {features = ["array"] }
+chrono = "0.4.23"
+ndarray = "0.15.6"
+libc = "0.2.139"

@@ -1,7 +1,83 @@
-use indi;
-use std::env;
+use indi::{self, ClientConnection, DeviceStore};
+use prometheus::core::{GenericGaugeVec};
+use std::{env, net::TcpStream, collections::HashMap};
 
-use prometheus_exporter::{self, prometheus::*};
+use prometheus_exporter::{self, prometheus::{*, core::AtomicF64}};
+
+struct Metrics {
+    devices: indi::MemoryDeviceStore,
+    gauge: GenericGaugeVec<AtomicF64>,
+    states: GenericGaugeVec<AtomicF64>
+}
+
+impl Metrics {
+    fn new(gauge: GenericGaugeVec<AtomicF64>, states: GenericGaugeVec<AtomicF64>) -> Self {
+        Metrics {
+            devices: HashMap::new(),
+            states,
+            gauge
+
+        }
+    }
+    fn handle_command(&mut self, command: indi::Command) {
+        println!("Command: {:?}", command);
+        let device_name = command.device_name().unwrap().clone();
+        self.devices.update(command, |param_enum| {
+            state_metric(&self.states, &device_name, &param_enum);
+            match param_enum.as_ref() {
+                indi::Parameter::NumberVector(param) => {
+                    for (value_name, value) in &param.values {
+                        self.gauge
+                            .with_label_values(&[
+                                device_name.as_str(),
+                                param.name.as_str(),
+                                param
+                                    .label
+                                    .as_ref()
+                                    .unwrap_or(&"".to_string())
+                                    .as_str(),
+                                value_name.as_str(),
+                                value
+                                    .label
+                                    .as_ref()
+                                    .unwrap_or(&"".to_string())
+                                    .as_str(),
+                            ])
+                            .set(value.value);
+                    }
+                }
+                indi::Parameter::SwitchVector(param) => {
+                    for (value_name, value) in &param.values {
+                        let v = if value.value == indi::SwitchState::On {
+                            1.0
+                        } else {
+                            0.0
+                        };
+                        self.gauge
+                            .with_label_values(&[
+                                device_name.as_str(),
+                                param.name.as_str(),
+                                param
+                                    .label
+                                    .as_ref()
+                                    .unwrap_or(&"".to_string())
+                                    .as_str(),
+                                value_name.as_str(),
+                                value
+                                    .label
+                                    .as_ref()
+                                    .unwrap_or(&"".to_string())
+                                    .as_str(),
+                            ])
+                            .set(v);
+                    }
+                }
+                _ => {}
+            }
+        }).unwrap();
+    }
+}
+
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -10,7 +86,7 @@ fn main() {
         _ => "localhost:7624",
     };
 
-    let mut connection = indi::Connection::new(addr).unwrap();
+    let connection = TcpStream::connect(addr).unwrap();
     connection
         .write(&indi::GetProperties {
             version: indi::INDI_PROTOCOL_VERSION.to_string(),
@@ -18,8 +94,6 @@ fn main() {
             name: None,
         })
         .unwrap();
-
-    let mut client = indi::Client::new();
 
     let binding = "0.0.0.0:9186".parse().unwrap();
     prometheus_exporter::start(binding).unwrap();
@@ -39,71 +113,12 @@ fn main() {
         &["device_name", "param_name", "param_label", "state"]
     )
     .unwrap();
+    let mut metrics = Metrics::new(gauge, states);
 
     for command in connection.iter().unwrap() {
         match command {
             Ok(command) => {
-                println!("Command: {:?}", command);
-                let device_name = command.device_name().unwrap().clone();
-                match client.update(command) {
-                    Err(e) => {
-                        println!("error: {:?}", e)
-                    }
-                    Ok(Some(param_enum)) => {
-                        state_metric(&states, &device_name, &param_enum);
-                        match param_enum {
-                            indi::Parameter::NumberVector(param) => {
-                                for (value_name, value) in &param.values {
-                                    gauge
-                                        .with_label_values(&[
-                                            device_name.as_str(),
-                                            param.name.as_str(),
-                                            param
-                                                .label
-                                                .as_ref()
-                                                .unwrap_or(&"".to_string())
-                                                .as_str(),
-                                            value_name.as_str(),
-                                            value
-                                                .label
-                                                .as_ref()
-                                                .unwrap_or(&"".to_string())
-                                                .as_str(),
-                                        ])
-                                        .set(value.value);
-                                }
-                            }
-                            indi::Parameter::SwitchVector(param) => {
-                                for (value_name, value) in &param.values {
-                                    let v = if value.value == indi::SwitchState::On {
-                                        1.0
-                                    } else {
-                                        0.0
-                                    };
-                                    gauge
-                                        .with_label_values(&[
-                                            device_name.as_str(),
-                                            param.name.as_str(),
-                                            param
-                                                .label
-                                                .as_ref()
-                                                .unwrap_or(&"".to_string())
-                                                .as_str(),
-                                            value_name.as_str(),
-                                            value
-                                                .label
-                                                .as_ref()
-                                                .unwrap_or(&"".to_string())
-                                                .as_str(),
-                                        ])
-                                        .set(v);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    Ok(None) => {}
-                }
+                metrics.handle_command(command);
             }
             Err(e) => match e {
                 e => println!("error: {:?}", e),
