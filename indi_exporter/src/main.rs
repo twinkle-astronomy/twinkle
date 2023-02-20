@@ -1,13 +1,16 @@
 use indi::{self, ClientConnection, DeviceStore};
-use prometheus::core::{GenericGaugeVec};
-use std::{env, net::TcpStream, collections::HashMap};
+use prometheus::core::GenericGaugeVec;
+use std::{collections::HashMap, env, net::TcpStream};
 
-use prometheus_exporter::{self, prometheus::{*, core::AtomicF64}};
+use prometheus_exporter::{
+    self,
+    prometheus::{core::AtomicF64, *},
+};
 
 struct Metrics {
     devices: indi::MemoryDeviceStore,
     gauge: GenericGaugeVec<AtomicF64>,
-    states: GenericGaugeVec<AtomicF64>
+    states: GenericGaugeVec<AtomicF64>,
 }
 
 impl Metrics {
@@ -15,69 +18,53 @@ impl Metrics {
         Metrics {
             devices: HashMap::new(),
             states,
-            gauge
-
+            gauge,
         }
     }
     fn handle_command(&mut self, command: indi::Command) {
         println!("Command: {:?}", command);
         let device_name = command.device_name().unwrap().clone();
-        self.devices.update(command, |param_enum| {
-            state_metric(&self.states, &device_name, &param_enum);
-            match param_enum.as_ref() {
-                indi::Parameter::NumberVector(param) => {
-                    for (value_name, value) in &param.values {
-                        self.gauge
-                            .with_label_values(&[
-                                device_name.as_str(),
-                                param.name.as_str(),
-                                param
-                                    .label
-                                    .as_ref()
-                                    .unwrap_or(&"".to_string())
-                                    .as_str(),
-                                value_name.as_str(),
-                                value
-                                    .label
-                                    .as_ref()
-                                    .unwrap_or(&"".to_string())
-                                    .as_str(),
-                            ])
-                            .set(value.value);
+        self.devices
+            .update(command, |param_enum| {
+                state_metric(&self.states, &device_name, &param_enum);
+                match param_enum.as_ref() {
+                    indi::Parameter::NumberVector(param) => {
+                        for (value_name, value) in &param.values {
+                            self.gauge
+                                .with_label_values(&[
+                                    device_name.as_str(),
+                                    param.name.as_str(),
+                                    param.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                    value_name.as_str(),
+                                    value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                ])
+                                .set(value.value);
+                        }
                     }
-                }
-                indi::Parameter::SwitchVector(param) => {
-                    for (value_name, value) in &param.values {
-                        let v = if value.value == indi::SwitchState::On {
-                            1.0
-                        } else {
-                            0.0
-                        };
-                        self.gauge
-                            .with_label_values(&[
-                                device_name.as_str(),
-                                param.name.as_str(),
-                                param
-                                    .label
-                                    .as_ref()
-                                    .unwrap_or(&"".to_string())
-                                    .as_str(),
-                                value_name.as_str(),
-                                value
-                                    .label
-                                    .as_ref()
-                                    .unwrap_or(&"".to_string())
-                                    .as_str(),
-                            ])
-                            .set(v);
+                    indi::Parameter::SwitchVector(param) => {
+                        for (value_name, value) in &param.values {
+                            let v = if value.value == indi::SwitchState::On {
+                                1.0
+                            } else {
+                                0.0
+                            };
+                            self.gauge
+                                .with_label_values(&[
+                                    device_name.as_str(),
+                                    param.name.as_str(),
+                                    param.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                    value_name.as_str(),
+                                    value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                ])
+                                .set(v);
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-        }).unwrap();
+            })
+            .unwrap();
     }
 }
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
