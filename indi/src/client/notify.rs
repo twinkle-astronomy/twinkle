@@ -1,5 +1,6 @@
 use std::{
     fmt::Debug,
+    mem,
     ops::{Deref, DerefMut},
     sync::{Mutex, MutexGuard},
     time::{Duration, Instant},
@@ -85,8 +86,10 @@ impl<'a, T: Debug> DerefMut for NotifyMutexGuard<'a, T> {
 
 impl<'a, T: Debug> Drop for NotifyMutexGuard<'a, T> {
     fn drop(&mut self) {
-        self.guard = None;
         self.to_notify.notify_all();
+        if let Some(guard) = mem::replace(&mut self.guard, None) {
+            drop(guard);
+        }
     }
 }
 
@@ -133,8 +136,9 @@ impl<T: Debug> Notify<T> {
             } else {
                 return Err(Error::Timeout);
             };
+            let timeout;
 
-            let (next_lock, timeout) = self
+            (subject_lock, timeout) = self
                 .change_condition
                 .wait_timeout(subject_lock, remaining)
                 .unwrap();
@@ -142,8 +146,6 @@ impl<T: Debug> Notify<T> {
             if timeout.timed_out() {
                 return Err(Error::Timeout);
             }
-
-            subject_lock = next_lock;
         }
     }
 }

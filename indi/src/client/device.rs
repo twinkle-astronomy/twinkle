@@ -484,7 +484,7 @@ mod tests {
                 assert_eq!(
                     stored,
                     &SwitchVector {
-                        gen: Wrapping(0),
+                        gen: Wrapping(1),
                         name: String::from_str("Exposure").unwrap(),
                         group: Some(String::from_str("group").unwrap()),
                         label: Some(String::from_str("thingo").unwrap()),
@@ -599,7 +599,7 @@ mod tests {
                 assert_eq!(
                     stored,
                     &NumberVector {
-                        gen: Wrapping(0),
+                        gen: Wrapping(1),
                         name: String::from_str("Exposure").unwrap(),
                         group: Some(String::from_str("group").unwrap()),
                         label: Some(String::from_str("thingo").unwrap()),
@@ -705,7 +705,7 @@ mod tests {
                 assert_eq!(
                     stored,
                     &TextVector {
-                        gen: Wrapping(0),
+                        gen: Wrapping(1),
                         name: String::from_str("Exposure").unwrap(),
                         group: Some(String::from_str("group").unwrap()),
                         label: Some(String::from_str("thingo").unwrap()),
