@@ -8,7 +8,6 @@ pub mod egui;
 
 pub mod analysis;
 
-
 pub fn phd2_convolve(data: &ArrayD<u16>) -> Array2<f32> {
     let data_f32: ArrayBase<OwnedRepr<f32>, Ix2> = data
         .map(|element| f32::from(*element))

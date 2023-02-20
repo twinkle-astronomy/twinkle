@@ -2,10 +2,10 @@ mod statistics;
 pub use statistics::*;
 pub mod sep;
 
-use std::cmp::Ordering;
 use ndarray::Array;
 use ndarray_stats::CorrelationExt;
 use rmpfit::{MPFitter, MPResult};
+use std::cmp::Ordering;
 
 pub trait Star {
     fn image_center(&self) -> [f64; 2];
@@ -41,7 +41,7 @@ pub enum MPError {
 #[derive(Debug)]
 pub enum FitError {
     MPError(MPError),
-    NoMin
+    NoMin,
 }
 
 impl From<rmpfit::MPError> for FitError {
@@ -66,18 +66,24 @@ pub struct HyperbolicFit {
     pub b: f64,
     pub c: f64,
     pub d: f64,
-    
+
     // Pearson correlation coefficient
     pub pcc: f64,
 }
 
 impl HyperbolicFit {
     pub fn new(points: &Vec<[f64; 2]>) -> Result<Self, FitError> {
-        let min_x = points.iter().min_by(|[x1, _y1], [x2, _y2]| if x1 < x2 { Ordering::Less } else { Ordering::Greater } );
-        
+        let min_x = points.iter().min_by(|[x1, _y1], [x2, _y2]| {
+            if x1 < x2 {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
         let min_elem = match min_x {
             Some(elem) => elem,
-            None => return Err(FitError::NoMin)
+            None => return Err(FitError::NoMin),
         };
 
         let min_c = min_elem[0];
@@ -86,7 +92,7 @@ impl HyperbolicFit {
         let samples = HyperbolicPoints { points };
         // let mut fit = HyperbolicFit {
         //     samples: HyperbolicPoints { points },
-        //     params: [1.0, 1.0, min_c, min_d] 
+        //     params: [1.0, 1.0, min_c, min_d]
         // };
         samples.mpfit(&mut params, None, &Default::default())?;
         let pcc = samples.coor(&params);
@@ -95,7 +101,7 @@ impl HyperbolicFit {
             b: params[1],
             c: params[2],
             d: params[3],
-            pcc
+            pcc,
         })
     }
 
@@ -109,17 +115,20 @@ struct HyperbolicPoints<'a> {
 
 impl<'a> HyperbolicPoints<'a> {
     fn coor(&self, params: &[f64]) -> f64 {
-        let expected = Array::from_iter(self.points.iter().map(|[x, _y]| {
-            Self::expected_y(*x, params)    
-        }));
+        let expected = Array::from_iter(
+            self.points
+                .iter()
+                .map(|[x, _y]| Self::expected_y(*x, params)),
+        );
 
-        let measured = Array::from_iter(self.points.iter().map(|[_x, y]| { *y }));
-
+        let measured = Array::from_iter(self.points.iter().map(|[_x, y]| *y));
 
         let mut a = Array::zeros((0, measured.len()));
-        a.push_row(expected.view()).expect("Adding expected values row");
-        a.push_row(measured.view()).expect("Adding measured values row");
-        a.pearson_correlation().unwrap()[(0,1)]        
+        a.push_row(expected.view())
+            .expect("Adding expected values row");
+        a.push_row(measured.view())
+            .expect("Adding measured values row");
+        a.pearson_correlation().unwrap()[(0, 1)]
     }
 
     fn expected_y(x: f64, params: &[f64]) -> f64 {
@@ -128,7 +137,7 @@ impl<'a> HyperbolicPoints<'a> {
         let c = params[2];
         let d = params[3];
 
-        (((x - c)*(x - c)/(a*a)  + 1.0) * b*b ).sqrt() + d            
+        (((x - c) * (x - c) / (a * a) + 1.0) * b * b).sqrt() + d
     }
 }
 impl<'a> MPFitter for HyperbolicPoints<'a> {
@@ -139,20 +148,18 @@ impl<'a> MPFitter for HyperbolicPoints<'a> {
         Ok(())
     }
 
-    
     fn number_of_points(&self) -> usize {
         self.points.len()
     }
 }
 #[cfg(test)]
 mod tests {
-    use approx::{assert_relative_eq};
+    use approx::assert_relative_eq;
 
     use super::*;
 
     #[test]
     fn test_foo() {
-
         let points = vec![
             [26881.0, 6.77],
             [26893.0, 6.24],
@@ -165,12 +172,12 @@ mod tests {
             [26965.0, 5.19],
             [26977.0, 5.28],
             [26989.0, 5.87],
-            [27001.0, 6.36]
+            [27001.0, 6.36],
         ];
 
         let fit = HyperbolicFit::new(&points).unwrap();
 
-        assert_relative_eq!(fit.c, 26944.0, epsilon=1.0);
-        assert_relative_eq!(fit.d, 3.89, epsilon=0.01);
+        assert_relative_eq!(fit.c, 26944.0, epsilon = 1.0);
+        assert_relative_eq!(fit.d, 3.89, epsilon = 0.01);
     }
 }

@@ -2,8 +2,9 @@
 
 use std::{
     env,
+    net::TcpStream,
     sync::{Arc, Mutex},
-    thread, net::TcpStream,
+    thread,
 };
 
 use fits_inspect::{analysis::Statistics, egui::FitsWidget};
@@ -69,14 +70,14 @@ impl FitsViewerApp {
             for command in c_iter {
                 match command {
                     Ok(indi::Command::SetBlobVector(mut sbv)) => {
-                        
-
                         println!("Got image for: {:?}", sbv.device);
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;
                         }
 
-                        let data: ArrayD<u16> = indi::client::device::Device::image_from_fits(&sbv.blobs.get_mut(0).unwrap().value);
+                        let data: ArrayD<u16> = indi::client::device::Device::image_from_fits(
+                            &sbv.blobs.get_mut(0).unwrap().value,
+                        );
 
                         let mut fits_widget = fits_widget.lock().unwrap();
                         if let Some(w) = &mut *fits_widget {
