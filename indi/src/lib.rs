@@ -659,7 +659,8 @@ pub trait ClientConnection {
     /// Example usage:
     /// ```no_run
     /// use std::collections::HashMap;
-    /// use crate::indi::{ClientConnection, DeviceStore, Device};
+    /// use crate::indi::{ClientConnection, DeviceStore};
+    /// use crate::indi::client::device::Device;
     /// use std::net::TcpStream;
     /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
     /// connection.write(&indi::GetProperties {
@@ -672,7 +673,6 @@ pub trait ClientConnection {
     ///
     /// for command in connection.iter().unwrap() {
     ///     println!("Command: {:?}", command);
-    ///     client.update(command.unwrap());
     /// }
     fn iter(&self) -> Result<serialization::CommandIter<BufReader<Self::Read>>, std::io::Error> {
         let mut xml_reader = Reader::from_reader(BufReader::new(self.clone_reader()?));
