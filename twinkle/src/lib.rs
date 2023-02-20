@@ -3,7 +3,6 @@ mod backend;
 
 // use fits_inspect::egui::FitsWidget;
 
-
 pub struct TwinkleApp {
     // // backend: Backend,
 
