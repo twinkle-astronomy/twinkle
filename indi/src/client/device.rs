@@ -16,7 +16,7 @@ use crate::{
 
 use super::notify::{self, Notify};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Device {
     name: String,
     parameters: HashMap<String, Arc<Notify<Parameter>>>,

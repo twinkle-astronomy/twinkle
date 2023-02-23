@@ -1,3 +1,4 @@
+use client::device;
 use client::notify;
 use client::notify::Notify;
 use quick_xml::events;
@@ -198,14 +199,14 @@ pub struct TextVector {
     pub values: HashMap<String, Text>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Blob {
     pub label: Option<String>,
     pub format: Option<String>,
     pub value: Option<Vec<u8>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BlobVector {
     pub gen: core::num::Wrapping<usize>,
     pub name: String,
@@ -228,7 +229,7 @@ impl FromParamValue for HashMap<String, Blob> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Parameter {
     TextVector(TextVector),
     NumberVector(NumberVector),
@@ -525,7 +526,7 @@ pub enum ChangeError<E> {
 
 impl<T> From<std::io::Error> for ChangeError<T> {
     fn from(value: std::io::Error) -> Self {
-        ChangeError::IoError(value)
+        ChangeError::<T>::IoError(value)
     }
 }
 impl<T> From<notify::Error<T>> for ChangeError<T> {
@@ -535,12 +536,12 @@ impl<T> From<notify::Error<T>> for ChangeError<T> {
 }
 impl<T> From<DeError> for ChangeError<T> {
     fn from(value: DeError) -> Self {
-        ChangeError::DeError(value)
+        ChangeError::<T>::DeError(value)
     }
 }
 impl<T> From<()> for ChangeError<T> {
     fn from(_: ()) -> Self {
-        ChangeError::TypeMismatch
+        ChangeError::<T>::TypeMismatch
     }
 }
 
@@ -600,16 +601,17 @@ impl<T: ClientConnection> Client<T> {
     pub fn get_device<'a>(
         &'a self,
         name: &str,
-    ) -> Result<client::device::ActiveDevice<'a, T>, client::notify::Error<()>> {
+    ) -> Result<client::device::ActiveDevice<'a, T>, notify::Error<()>> {
         self.devices
             .wait_fn::<_, (), _>(Duration::from_secs(60), |devices| {
                 if let Some(device) = devices.get(name) {
-                    return Ok(client::notify::Status::Complete(
-                        client::device::ActiveDevice::new(device.clone(), self),
-                    ));
+                    return Ok(notify::Status::Complete(device::ActiveDevice::new(
+                        device.clone(),
+                        self,
+                    )));
                 }
 
-                Ok(client::notify::Status::Pending)
+                Ok(notify::Status::Pending)
             })
     }
 }

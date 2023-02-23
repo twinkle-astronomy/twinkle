@@ -1,10 +1,16 @@
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use std::{
+    collections::BTreeSet,
     fmt::Debug,
-    mem,
     ops::{Deref, DerefMut},
-    sync::{Mutex, MutexGuard},
-    time::{Duration, Instant},
+    sync::{atomic::AtomicU64, Mutex, MutexGuard},
 };
+
+use crossbeam_channel::bounded;
+
+static ID_GENERATOR: once_cell::sync::Lazy<Arc<AtomicU64>> =
+    once_cell::sync::Lazy::new(|| Arc::new(AtomicU64::new(0)));
 
 #[derive(Debug, PartialEq)]
 pub enum Error<E> {
@@ -12,14 +18,45 @@ pub enum Error<E> {
     Abort(E),
 }
 
+impl<T> From<T> for Error<T> {
+    fn from(value: T) -> Self {
+        Error::Abort(value)
+    }
+}
+
 pub enum Status<S> {
     Pending,
     Complete(S),
 }
 
+#[derive(Clone)]
+struct OrdBox<T> {
+    id: u64,
+    item: T,
+}
+
+impl<T> std::cmp::Ord for OrdBox<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+impl<T> std::cmp::PartialOrd for OrdBox<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl<T> std::cmp::PartialEq for OrdBox<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl<T> std::cmp::Eq for OrdBox<T> {}
+
+#[derive(Default)]
 pub struct Notify<T> {
-    subject: Mutex<T>,
-    change_condition: std::sync::Condvar,
+    subject: Mutex<Arc<T>>,
+    senders: Mutex<BTreeSet<OrdBox<crossbeam_channel::Sender<Arc<T>>>>>,
 }
 
 impl<T: Debug> Debug for Notify<T> {
@@ -31,120 +68,110 @@ impl<T: Debug> Debug for Notify<T> {
 impl<T> Notify<T> {
     pub fn new(value: T) -> Notify<T> {
         Notify {
-            subject: Mutex::new(value),
-            change_condition: std::sync::Condvar::new(),
-        }
-    }
-}
-impl<T: Default> Default for Notify<T> {
-    fn default() -> Self {
-        Notify {
-            subject: Mutex::new(Default::default()),
-            change_condition: std::sync::Condvar::new(),
+            subject: Mutex::new(Arc::new(value)),
+            senders: Mutex::new(BTreeSet::new()),
         }
     }
 }
 
-impl<T> From<T> for Error<T> {
-    fn from(value: T) -> Self {
-        Error::Abort(value)
-    }
-}
-
-pub struct NotifyMutexGuard<'a, T: Debug> {
+pub struct NotifyMutexGuard<'a, T: Clone> {
     // Made an option to allow explicit drop order
     // Must never be None unless in the process of dropping
     // https://stackoverflow.com/a/41056727
-    guard: Option<MutexGuard<'a, T>>,
+    guard: MutexGuard<'a, Arc<T>>,
     to_notify: &'a Notify<T>,
+    should_notify: bool,
 }
 
-impl<'a, T: Debug> Debug for NotifyMutexGuard<'a, T> {
+impl<'a, T: Debug + Clone> Debug for NotifyMutexGuard<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.guard.fmt(f)
-    }
-}
-impl<'a, T: Debug> AsRef<T> for NotifyMutexGuard<'a, T> {
-    fn as_ref(&self) -> &T {
-        &self.guard.as_ref().unwrap()
+        self.to_notify.subject.fmt(f)
     }
 }
 
-impl<'a, T: Debug> Deref for NotifyMutexGuard<'a, T> {
+impl<'a, T: Clone> AsRef<T> for NotifyMutexGuard<'a, T> {
+    fn as_ref(&self) -> &T {
+        &self.guard
+    }
+}
+
+impl<'a, T: Clone> Deref for NotifyMutexGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.guard.as_deref().unwrap()
+        &self.guard
     }
 }
 
-impl<'a, T: Debug> DerefMut for NotifyMutexGuard<'a, T> {
+impl<'a, T: Debug + Clone> DerefMut for NotifyMutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.guard.as_deref_mut().unwrap()
+        self.should_notify = true;
+        Arc::make_mut(self.guard.deref_mut())
     }
 }
 
-impl<'a, T: Debug> Drop for NotifyMutexGuard<'a, T> {
+impl<'a, T: Clone> Drop for NotifyMutexGuard<'a, T> {
     fn drop(&mut self) {
-        self.to_notify.notify_all();
-        if let Some(guard) = mem::replace(&mut self.guard, None) {
-            drop(guard);
+        if self.should_notify {
+            let mut senders = self.to_notify.senders.lock().unwrap();
+            senders.retain(|s| {
+                s.item
+                    .send_timeout(self.guard.deref().clone(), Duration::from_secs(1))
+                    .is_ok()
+            });
         }
+        drop(&mut self.guard);
     }
 }
 
-impl<T: Debug> Notify<T> {
+impl<T: Clone + Debug> Notify<T> {
     pub fn lock(&self) -> NotifyMutexGuard<T> {
         NotifyMutexGuard {
-            guard: Some(self.subject.lock().unwrap()),
-            to_notify: &self,
+            guard: self.subject.lock().unwrap(),
+            to_notify: self,
+            should_notify: false,
         }
     }
 
-    pub fn notify_all(&self) {
-        self.change_condition.notify_all();
+    pub fn subscribe(&self) -> crossbeam_channel::Receiver<Arc<T>> {
+        let (s, r) = bounded::<Arc<T>>(0);
+        // let _subject = self.subject.lock().unwrap();
+        let mut senders = self.senders.lock().unwrap();
+        // s.send(subject.deref().clone())
+        //     .expect("sending initial value");
+        senders.insert(OrdBox {
+            id: ID_GENERATOR.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            item: s,
+        });
+        r
     }
 
-    pub fn wait(&self, dur: Duration) -> Result<MutexGuard<T>, ()> {
-        let subject_lock = self.subject.lock().unwrap();
-        let (m, result) = self
-            .change_condition
-            .wait_timeout(subject_lock, dur)
-            .unwrap();
-        match result.timed_out() {
-            true => Err(()),
-            false => Ok(m),
-        }
-    }
-
-    pub fn wait_fn<'a, S, E, F: FnMut(&MutexGuard<T>) -> Result<Status<S>, E>>(
+    pub fn wait_fn<'a, S, E, F: FnMut(&T) -> Result<Status<S>, E>>(
         &self,
         dur: Duration,
         mut f: F,
     ) -> Result<S, Error<E>> {
         let start = Instant::now();
-        let mut subject_lock = self.subject.lock().unwrap();
+
+        let (mut next, recv) = {
+            let lock = self.subject.lock().unwrap();
+            (lock.clone(), self.subscribe())
+        };
 
         loop {
-            if let Status::Complete(ret) = f(&subject_lock)? {
+            if let Status::Complete(ret) = f(next.deref())? {
                 return Ok(ret);
             }
-
             let elapsed = start.elapsed();
             let remaining = if dur > elapsed {
                 dur - elapsed
             } else {
                 return Err(Error::Timeout);
             };
-            let timeout;
 
-            (subject_lock, timeout) = self
-                .change_condition
-                .wait_timeout(subject_lock, remaining)
-                .unwrap();
-
-            if timeout.timed_out() {
-                return Err(Error::Timeout);
+            next = match recv.recv_timeout(remaining) {
+                Ok(n) => n,
+                Err(_) => return Err(Error::Timeout),
             }
         }
     }
@@ -153,72 +180,121 @@ impl<T: Debug> Notify<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{sync::Arc, thread};
+    use std::{thread, time::Duration};
 
     #[test]
-    fn test_wait_fn_trivial() {
-        let notify: Arc<Notify<u32>> = Default::default();
+    fn test_sequence() {
+        let mut joins = Vec::new();
+        {
+            let n = Arc::new(Notify::new(-1));
 
-        let wait_fn_result = notify
-            .wait_fn::<u32, (), _>(Duration::from_secs(1), move |i| {
-                let state = **i;
-                Ok(Status::Complete(state))
-            })
-            .expect("Notify completed");
-        assert_eq!(wait_fn_result, 0);
-    }
+            for _ in 0..10 {
+                let thread_n = n.clone();
 
-    #[test]
-    fn test_wait_fn_abort() {
-        let notify: Arc<Notify<u32>> = Default::default();
-
-        let wait_fn_result = notify.wait_fn::<(), u32, _>(Duration::from_secs(1), |_| Err(1));
-        assert_eq!(wait_fn_result, Err(Error::Abort(1)));
-    }
-
-    #[test]
-    fn test_wait_fn_timeout() {
-        let notify: Arc<Notify<u32>> = Default::default();
-
-        let wait_fn_result =
-            notify.wait_fn::<(), (), _>(Duration::from_millis(100), |_| Ok(Status::Pending));
-        assert_eq!(wait_fn_result, Err(Error::Timeout));
-    }
-
-    #[test]
-    fn test_wait_fn_condition() {
-        let notify: Arc<Notify<u32>> = Default::default();
-        let fn_count: Arc<Mutex<u32>> = Default::default();
-
-        let thread_notify = notify.clone();
-        let thread_count = fn_count.clone();
-        let t = thread::spawn(move || {
-            thread_notify
-                .wait_fn::<u32, (), _>(Duration::from_secs(1), move |i| {
-                    {
-                        let mut l = thread_count.lock().unwrap();
-                        *l = *l + 1;
+                joins.push(thread::spawn(move || {
+                    let mut prev = -1;
+                    let r = thread_n.subscribe();
+                    for j in r.iter() {
+                        if *j == 90 {
+                            break;
+                        }
+                        assert_eq!(*j, prev + 1);
+                        prev = *j;
                     }
-                    if **i == 0 {
-                        return Ok(Status::Pending);
+                }));
+            }
+            // ugly race-based attempt to wait for threads to be ready
+            thread::sleep(Duration::from_millis(100));
+
+            for i in 0..=90 {
+                let mut l = n.lock();
+                *l = i;
+            }
+        }
+
+        joins.into_iter().for_each(|x| x.join().unwrap());
+    }
+
+    #[test]
+    fn test_destroying_receivers() {
+        let n = Notify::new(0);
+
+        let len = n.senders.lock().unwrap().len();
+        assert_eq!(len, 0);
+
+        {
+            let _r = n.subscribe();
+
+            let len = n.senders.lock().unwrap().len();
+            assert_eq!(len, 1);
+        }
+        let len = n.senders.lock().unwrap().len();
+        assert_eq!(len, 1);
+        {
+            let mut l = n.lock();
+            *l = 1;
+        }
+
+        let len = n.senders.lock().unwrap().len();
+        assert_eq!(len, 0);
+    }
+
+    #[test]
+    fn test_notify_on_mut() {
+        let n = Arc::new(Notify::new(0));
+
+        let r = n.subscribe();
+
+        let thread_n = n.clone();
+        let j = thread::spawn(move || {
+            {
+                let _no_mut = thread_n.lock();
+            }
+            {
+                let mut with_mut = thread_n.lock();
+                *with_mut = 1;
+            }
+        });
+        let update = r.recv_timeout(Duration::from_millis(100)).unwrap();
+        assert!(r.try_recv().is_err());
+        assert_eq!(*update, 1);
+
+        j.join().unwrap();
+    }
+
+    #[test]
+    fn test_wakes() {
+        let notify: Arc<Notify<u32>> = Arc::new(Notify::new(0));
+
+        let count = Arc::new(Mutex::new(0));
+        let count_thread = count.clone();
+        let thread_notify = notify.clone();
+        let j = thread::spawn(move || {
+            thread_notify
+                .wait_fn::<(), (), _>(Duration::from_secs(1), |iteration| {
+                    {
+                        let mut l = count_thread.lock().unwrap();
+                        *l += 1;
+                    }
+                    if *iteration == 9 {
+                        Ok(Status::Complete(()))
                     } else {
-                        return Ok(Status::Complete(**i));
+                        Ok(Status::Pending)
                     }
                 })
-                .expect("Notify completed")
+                .unwrap();
         });
         // ugly race-based thread syncronization
         thread::sleep(Duration::from_millis(100));
-        {
-            let mut nl = notify.lock();
-            *nl = 1;
+        for i in 0..=9 {
+            let mut lock = notify.lock();
+            *lock = i;
         }
 
-        let t_result = t.join().unwrap();
-        assert_eq!(t_result, 1);
+        j.join().unwrap();
         {
-            let l = fn_count.lock().unwrap();
-            assert_eq!(*l, 2);
+            let lock = count.lock().unwrap();
+            assert_eq!(*lock, 11);
         }
     }
 }
