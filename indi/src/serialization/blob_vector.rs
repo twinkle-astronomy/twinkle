@@ -56,7 +56,7 @@ impl CommandToUpdate for SetBlobVector {
                 for blob in self.blobs {
                     if let Some(existing) = blob_vector.values.get_mut(&blob.name) {
                         existing.format = Some(blob.format);
-                        existing.value = Some(blob.value);
+                        existing.value = Some(Arc::new(blob.value));
                     }
                 }
                 Ok(self.name)

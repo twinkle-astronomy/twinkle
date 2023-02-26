@@ -23,7 +23,7 @@ fn main() {
     let mut image_number = 0;
     let mut imager_gen = imager.lock().gen();
 
-    imager
+    imager.subscribe()
         .wait_fn::<(), (), _>(Duration::MAX, |imager| {
             if imager.gen() == imager_gen {
                 return Ok(notify::Status::Pending);

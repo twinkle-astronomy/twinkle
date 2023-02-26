@@ -203,7 +203,7 @@ pub struct TextVector {
 pub struct Blob {
     pub label: Option<String>,
     pub format: Option<String>,
-    pub value: Option<Vec<u8>>,
+    pub value: Option<Arc<Vec<u8>>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -602,7 +602,7 @@ impl<T: ClientConnection> Client<T> {
         &'a self,
         name: &str,
     ) -> Result<client::device::ActiveDevice<'a, T>, notify::Error<()>> {
-        self.devices
+        self.devices.subscribe()
             .wait_fn::<_, (), _>(Duration::from_secs(60), |devices| {
                 if let Some(device) = devices.get(name) {
                     return Ok(notify::Status::Complete(device::ActiveDevice::new(

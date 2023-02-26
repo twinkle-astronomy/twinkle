@@ -3,6 +3,19 @@ mod backend;
 
 // use fits_inspect::egui::FitsWidget;
 
+pub struct OpticsConfig {
+    pub focal_length: f64,
+    pub aperture: f64
+}
+
+pub struct TelescopeConfig {
+    pub mount: String,
+    pub imaging_optics: OpticsConfig,
+    pub imaging_camera: String,
+    pub focuser: String,
+    pub filter_wheel: String,
+}
+
 pub struct TwinkleApp {
     // // backend: Backend,
 

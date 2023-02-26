@@ -3,7 +3,7 @@ use std::{
     num::Wrapping,
     ops::Deref,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration, Instant}, path::Path, fs::{create_dir_all, File}, io::Write,
 };
 
 use fitsio::FitsFile;
@@ -11,10 +11,11 @@ use fitsio::FitsFile;
 use crate::{
     batch, serialization, Blob, BlobEnable, ChangeError, Client, ClientConnection, Command,
     CommandToUpdate, CommandtoParam, EnableBlob, Number, Parameter, PropertyState, ToCommand,
-    TryEq, UpdateError,
+    TryEq, UpdateError, FromParamValue,
 };
 
-use super::notify::{self, Notify};
+use super::notify::{Notify, self};
+
 
 #[derive(Debug, Clone)]
 pub struct Device {
@@ -165,6 +166,52 @@ impl Device {
     }
 }
 
+pub struct FitsImage {
+    raw_data: Arc<Vec<u8>>,
+}
+
+impl FitsImage {
+    pub fn read_image(&self) -> ndarray::ArrayD<u16> {
+        let mut ptr_size = self.raw_data.capacity();
+        let mut ptr = self.raw_data.as_ptr();
+
+        // now we have a pointer to the data, let's open this in `fitsio_sys`
+        let mut fptr = std::ptr::null_mut();
+        let mut status = 0;
+
+        let c_filename = std::ffi::CString::new("memory.fits").expect("creating c string");
+        unsafe {
+            fitsio::sys::ffomem(
+                &mut fptr as *mut *mut _,
+                c_filename.as_ptr(),
+                fitsio::sys::READONLY as _,
+                &mut ptr as *const _ as *mut *mut libc::c_void,
+                &mut ptr_size as *mut _,
+                0,
+                None,
+                &mut status,
+            );
+        }
+        fitsio::errors::check_status(status).expect("checking internal fitsio status");
+
+        let mut f = unsafe { FitsFile::from_raw(fptr, fitsio::FileOpenMode::READONLY) }
+            .expect("Creating a FitsFile");
+
+        let hdu = f.primary_hdu().expect("Getting primary image");
+        hdu.read_image(&mut f)
+            .expect("reading image from in memory fits file")
+    }
+
+    pub fn save<T: AsRef<Path>>(&self, path: T) -> Result<(), std::io::Error> {
+        if let Some(dir) = path.as_ref().parent() {
+            create_dir_all(dir)?;
+        }
+        let mut f = File::create(path)?;
+        f.write_all(&self.raw_data)?;
+        Ok(())
+    }
+}
+
 pub struct ActiveDevice<'a, T: ClientConnection + 'static> {
     device: Arc<Notify<Device>>,
     client: &'a Client<T>,
@@ -183,18 +230,27 @@ impl<'a, T: ClientConnection> Deref for ActiveDevice<'a, T> {
     }
 }
 
-impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
+impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
     pub fn get_parameter(
         &self,
         param_name: &str,
     ) -> Result<Arc<Notify<Parameter>>, notify::Error<()>> {
-        self.device
+        self.device.subscribe()
             .wait_fn::<_, (), _>(Duration::from_secs(1), |device| {
                 Ok(match device.get_parameters().get(param_name) {
                     Some(param) => notify::Status::Complete(param.clone()),
                     None => notify::Status::Pending,
                 })
             })
+    }
+
+    pub fn get_parameter_value<P: Clone>(&self, param_name: &str, param_value: &str) -> P
+    where HashMap<std::string::String, P>: FromParamValue {
+        let param = self.get_parameter(param_name).expect("getting parameter");
+        {
+            let lock = param.lock();
+            lock.get_values::<HashMap<String, P>>().expect("extracting values").get(param_value).expect("getting value").clone()
+        }
     }
 
     pub fn change<P: Clone + TryEq<Parameter, ()> + ToCommand<P> + 'static>(
@@ -206,7 +262,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
         ChangeError<()>,
     > {
         let (device_name, param) =
-            self.device
+            self.device.subscribe()
                 .wait_fn::<_, (), _>(Duration::from_secs(1), |device| {
                     Ok(match device.get_parameters().get(param_name) {
                         Some(param) => {
@@ -231,7 +287,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
 
         Ok(Box::new(move || {
             // dbg!(timeout);
-            param.wait_fn::<Arc<Notify<Parameter>>, (), _>(
+            param.subscribe().wait_fn::<Arc<Notify<Parameter>>, (), _>(
                 Duration::from_secs(timeout.into()),
                 |param_lock| {
                     // dbg!(param);
@@ -270,7 +326,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
         Ok(())
     }
 
-    pub fn capture_image(&self, exposure: f64) -> Result<ndarray::ArrayD<u16>, notify::Error<()>> {
+    pub fn capture_image(&self, exposure: f64) -> Result<FitsImage, notify::Error<()>> {
         // Set imge format to something we can work with.
         batch(vec![
             self.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)])
@@ -297,7 +353,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
         let mut previous_exposure_secs = exposure;
         let mut previous_tick = Instant::now();
 
-        exposure_param.wait_fn::<(), (), _>(
+        exposure_param.subscribe().wait_fn::<(), (), _>(
             Duration::from_secs(exposure.ceil() as u64 + 10),
             |exposure_param| {
                 // Exposure goes to idle when canceled
@@ -343,7 +399,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
         )?;
 
         // Wait for the image data to come in.
-        let image_data = image_param.wait_fn(
+        let image_data = image_param.subscribe().wait_fn(
             Duration::from_secs((exposure.ceil() as u64 + 60).into()),
             |ccd| {
                 // We've been called before the next image has come in.
@@ -353,36 +409,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
 
                 if let Some(image_data) = ccd.get_values::<HashMap<String, Blob>>()?.get("CCD1") {
                     if let Some(bytes) = &image_data.value {
-                        Ok(notify::Status::Complete(Device::image_from_fits(bytes)))
-                        // let mut ptr_size = bytes.capacity();
-                        // let mut ptr = bytes.as_ptr();
-
-                        // // now we have a pointer to the data, let's open this in `fitsio_sys`
-                        // let mut fptr = std::ptr::null_mut();
-                        // let mut status = 0;
-
-                        // let c_filename = std::ffi::CString::new("memory.fits").expect("creating c string");
-                        // unsafe {
-                        //     fitsio::sys::ffomem(
-                        //         &mut fptr as *mut *mut _,
-                        //         c_filename.as_ptr(),
-                        //         fitsio::sys::READONLY as _,
-                        //         &mut ptr as *const _ as *mut *mut libc::c_void,
-                        //         &mut ptr_size as *mut _,
-                        //         0,
-                        //         None,
-                        //         &mut status,
-                        //     );
-                        // }
-
-                        // fitsio::errors::check_status(status).expect("checking internal fitsio status");
-
-                        // let mut f = unsafe { FitsFile::from_raw(fptr, fitsio::FileOpenMode::READONLY) }.expect("Creating a FitsFile");
-
-                        // let hdu = f.primary_hdu().expect("Getting primary image");
-                        // let i = hdu.read_image(&mut f).expect("reading image from in memory fits file");
-
-                        // Ok(notify::Status::Complete(i))
+                        Ok(notify::Status::Complete(FitsImage { raw_data: bytes.clone() }))
                     } else {
                         Err(())
                     }
