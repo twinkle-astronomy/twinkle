@@ -1,21 +1,19 @@
 use std::{
     collections::HashMap,
+    fs::{create_dir_all, File},
+    io::Write,
     num::Wrapping,
     ops::Deref,
+    path::Path,
     sync::Arc,
-    time::{Duration, Instant}, path::Path, fs::{create_dir_all, File}, io::Write,
+    time::{Duration, Instant},
 };
 
 use fitsio::FitsFile;
 
-use crate::{
-    batch, serialization, Blob, BlobEnable, ChangeError, Client, ClientConnection, Command,
-    CommandToUpdate, CommandtoParam, EnableBlob, Number, Parameter, PropertyState, ToCommand,
-    TryEq, UpdateError, FromParamValue,
-};
+use crate::*;
 
-use super::notify::{Notify, self};
-
+use super::notify::{self, Notify};
 
 #[derive(Debug, Clone)]
 pub struct Device {
@@ -77,9 +75,6 @@ impl Device {
         def: T,
     ) -> Result<Option<notify::NotifyMutexGuard<'_, Parameter>>, UpdateError> {
         let name = def.get_name().clone();
-        if self.name == "ZWO CCD ASI294MM Pro" && name == "CCD1" {
-            // dbg!(&def);
-        }
 
         self.names.push(name.clone());
         if let None = self.groups.iter().find(|&x| x == def.get_group()) {
@@ -132,38 +127,6 @@ impl Device {
         };
         Ok(None)
     }
-
-    pub fn image_from_fits(bytes: &Vec<u8>) -> ndarray::ArrayD<u16> {
-        let mut ptr_size = bytes.capacity();
-        let mut ptr = bytes.as_ptr();
-
-        // now we have a pointer to the data, let's open this in `fitsio_sys`
-        let mut fptr = std::ptr::null_mut();
-        let mut status = 0;
-
-        let c_filename = std::ffi::CString::new("memory.fits").expect("creating c string");
-        unsafe {
-            fitsio::sys::ffomem(
-                &mut fptr as *mut *mut _,
-                c_filename.as_ptr(),
-                fitsio::sys::READONLY as _,
-                &mut ptr as *const _ as *mut *mut libc::c_void,
-                &mut ptr_size as *mut _,
-                0,
-                None,
-                &mut status,
-            );
-        }
-
-        fitsio::errors::check_status(status).expect("checking internal fitsio status");
-
-        let mut f = unsafe { FitsFile::from_raw(fptr, fitsio::FileOpenMode::READONLY) }
-            .expect("Creating a FitsFile");
-
-        let hdu = f.primary_hdu().expect("Getting primary image");
-        hdu.read_image(&mut f)
-            .expect("reading image from in memory fits file")
-    }
 }
 
 pub struct FitsImage {
@@ -171,7 +134,11 @@ pub struct FitsImage {
 }
 
 impl FitsImage {
-    pub fn read_image(&self) -> ndarray::ArrayD<u16> {
+    pub fn new(data: Arc<Vec<u8>>) -> FitsImage {
+        FitsImage { raw_data: data }
+    }
+
+    pub fn read_image(&self) -> fitsio::errors::Result<ndarray::ArrayD<u16>> {
         let mut ptr_size = self.raw_data.capacity();
         let mut ptr = self.raw_data.as_ptr();
 
@@ -192,14 +159,12 @@ impl FitsImage {
                 &mut status,
             );
         }
-        fitsio::errors::check_status(status).expect("checking internal fitsio status");
+        fitsio::errors::check_status(status)?;
 
-        let mut f = unsafe { FitsFile::from_raw(fptr, fitsio::FileOpenMode::READONLY) }
-            .expect("Creating a FitsFile");
+        let mut f = unsafe { FitsFile::from_raw(fptr, fitsio::FileOpenMode::READONLY) }?;
 
-        let hdu = f.primary_hdu().expect("Getting primary image");
+        let hdu = f.primary_hdu()?;
         hdu.read_image(&mut f)
-            .expect("reading image from in memory fits file")
     }
 
     pub fn save<T: AsRef<Path>>(&self, path: T) -> Result<(), std::io::Error> {
@@ -212,17 +177,28 @@ impl FitsImage {
     }
 }
 
-pub struct ActiveDevice<'a, T: ClientConnection + 'static> {
+#[derive(Clone)]
+pub struct ActiveDevice {
     device: Arc<Notify<Device>>,
-    client: &'a Client<T>,
+    command_sender: crossbeam_channel::Sender<Command>,
 }
-impl<'a, T: ClientConnection> ActiveDevice<'a, T> {
-    pub fn new(device: Arc<Notify<Device>>, client: &'a Client<T>) -> ActiveDevice<'a, T> {
-        ActiveDevice { device, client }
+impl ActiveDevice {
+    pub fn new(
+        device: Arc<Notify<Device>>,
+        command_sender: crossbeam_channel::Sender<Command>,
+    ) -> ActiveDevice {
+        ActiveDevice {
+            device,
+            command_sender,
+        }
+    }
+
+    pub fn sender(&self) -> &crossbeam_channel::Sender<Command> {
+        &self.command_sender
     }
 }
 
-impl<'a, T: ClientConnection> Deref for ActiveDevice<'a, T> {
+impl Deref for ActiveDevice {
     type Target = Arc<Notify<Device>>;
 
     fn deref(&self) -> &Self::Target {
@@ -230,13 +206,14 @@ impl<'a, T: ClientConnection> Deref for ActiveDevice<'a, T> {
     }
 }
 
-impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
+impl ActiveDevice {
     pub fn get_parameter(
         &self,
         param_name: &str,
-    ) -> Result<Arc<Notify<Parameter>>, notify::Error<()>> {
-        self.device.subscribe()
-            .wait_fn::<_, (), _>(Duration::from_secs(1), |device| {
+    ) -> Result<Arc<Notify<Parameter>>, notify::Error<Command>> {
+        self.device
+            .subscribe()
+            .wait_fn(Duration::from_secs(1), |device| {
                 Ok(match device.get_parameters().get(param_name) {
                     Some(param) => notify::Status::Complete(param.clone()),
                     None => notify::Status::Pending,
@@ -244,26 +221,15 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
             })
     }
 
-    pub fn get_parameter_value<P: Clone>(&self, param_name: &str, param_value: &str) -> P
-    where HashMap<std::string::String, P>: FromParamValue {
-        let param = self.get_parameter(param_name).expect("getting parameter");
-        {
-            let lock = param.lock();
-            lock.get_values::<HashMap<String, P>>().expect("extracting values").get(param_value).expect("getting value").clone()
-        }
-    }
-
-    pub fn change<P: Clone + TryEq<Parameter, ()> + ToCommand<P> + 'static>(
+    pub fn change<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static>(
         &self,
         param_name: &str,
         values: P,
-    ) -> Result<
-        Box<dyn FnOnce() -> Result<Arc<Notify<Parameter>>, notify::Error<()>>>,
-        ChangeError<()>,
-    > {
+    ) -> Result<PendingChangeImpl<P>, ChangeError<Command>> {
         let (device_name, param) =
-            self.device.subscribe()
-                .wait_fn::<_, (), _>(Duration::from_secs(1), |device| {
+            self.device
+                .subscribe()
+                .wait_fn::<_, Command, _>(Duration::from_secs(1), |device| {
                     Ok(match device.get_parameters().get(param_name) {
                         Some(param) => {
                             notify::Status::Complete((device.name.clone(), param.clone()))
@@ -271,7 +237,7 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
                         None => notify::Status::Pending,
                     })
                 })?;
-
+        let subscription = param.subscribe();
         let timeout = {
             let param = param.lock();
 
@@ -279,66 +245,48 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
                 let c = values
                     .clone()
                     .to_command(device_name, String::from(param_name));
-                self.client.connection.write(&c)?;
+                self.sender().send(c)?;
             }
 
             param.get_timeout().unwrap_or(60)
         };
-
-        Ok(Box::new(move || {
-            // dbg!(timeout);
-            param.subscribe().wait_fn::<Arc<Notify<Parameter>>, (), _>(
-                Duration::from_secs(timeout.into()),
-                |param_lock| {
-                    // dbg!(param);
-                    if *param_lock.get_state() == PropertyState::Alert {
-                        return Err(());
-                    }
-                    if values.try_eq(&param_lock)? {
-                        Ok(notify::Status::Complete(param.clone()))
-                    } else {
-                        Ok(notify::Status::Pending)
-                    }
-                },
-            )
-        }))
+        Ok(PendingChangeImpl {
+            subscription,
+            param,
+            deadline: Instant::now() + Duration::from_secs(timeout.into()),
+            values,
+        })
     }
 
     pub fn enable_blob(
         &self,
         name: Option<&str>,
         enabled: BlobEnable,
-    ) -> Result<(), notify::Error<()>> {
+    ) -> Result<(), notify::Error<Command>> {
         // Wait for device and paramater to exist
         if let Some(name) = name {
             let _ = self.get_parameter(name)?;
         }
         let device_name = self.device.lock().name.clone();
-
-        self.client
-            .connection
-            .write(&Command::EnableBlob(EnableBlob {
-                device: device_name,
-                name: name.map(|x| String::from(x)),
-                enabled: enabled,
-            }))
-            .expect("Unable to write command");
+        self.sender().send(Command::EnableBlob(EnableBlob {
+            device: device_name,
+            name: name.map(|x| String::from(x)),
+            enabled,
+        }))?;
         Ok(())
     }
 
-    pub fn capture_image(&self, exposure: f64) -> Result<FitsImage, notify::Error<()>> {
+    pub fn capture_image(&self, exposure: f64) -> Result<FitsImage, ChangeError<Command>> {
         // Set imge format to something we can work with.
         batch(vec![
-            self.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)])
-                .unwrap(),
+            self.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)])?,
             self.change(
                 "CCD_TRANSFER_FORMAT",
                 vec![
                     //            ( "FORMAT_NATIVE", true ),
                     ("FORMAT_FITS", true),
                 ],
-            )
-            .unwrap(),
+            )?,
         ])?;
 
         let image_param = self.get_parameter("CCD1")?;
@@ -347,56 +295,58 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
         let image_gen = image_param.lock().gen();
 
         let exposure_param = self
-            .change("CCD_EXPOSURE", vec![("CCD_EXPOSURE_VALUE", exposure)])
-            .unwrap()()?;
+            .change("CCD_EXPOSURE", vec![("CCD_EXPOSURE_VALUE", exposure)])?
+            .wait()?;
 
         let mut previous_exposure_secs = exposure;
         let mut previous_tick = Instant::now();
 
-        exposure_param.subscribe().wait_fn::<(), (), _>(
-            Duration::from_secs(exposure.ceil() as u64 + 10),
-            |exposure_param| {
-                // Exposure goes to idle when canceled
-                if *exposure_param.get_state() == PropertyState::Idle {
-                    return Err(());
-                }
-                let remaining_exposure = exposure_param
-                    .get_values::<HashMap<String, Number>>()?
-                    .get("CCD_EXPOSURE_VALUE")
-                    .and_then(|x| Some(x.value))
-                    .expect("Missing CCD_EXPOSURE_VALUE from CCD_EXPOSURE parameter");
+        exposure_param
+            .subscribe()
+            .wait_fn::<(), ChangeError<Command>, _>(
+                Duration::from_secs(exposure.ceil() as u64 + 10),
+                |exposure_param| {
+                    // Exposure goes to idle when canceled
+                    if *exposure_param.get_state() == PropertyState::Idle {
+                        return Err(ChangeError::Abort);
+                    }
+                    let remaining_exposure = exposure_param
+                        .get_values::<HashMap<String, Number>>()?
+                        .get("CCD_EXPOSURE_VALUE")
+                        .and_then(|x| Some(x.value))
+                        .expect("Missing CCD_EXPOSURE_VALUE from CCD_EXPOSURE parameter");
 
-                // Image is done exposing, new image data should be sent very soon
-                if remaining_exposure == 0.0 {
-                    return Ok(notify::Status::Complete(()));
-                }
+                    // Image is done exposing, new image data should be sent very soon
+                    if remaining_exposure == 0.0 {
+                        return Ok(notify::Status::Complete(()));
+                    }
 
-                // remaining exposure didn't change, nothing to check
-                if previous_exposure_secs == remaining_exposure {
-                    return Ok(notify::Status::Pending);
-                }
+                    // remaining exposure didn't change, nothing to check
+                    if previous_exposure_secs == remaining_exposure {
+                        return Ok(notify::Status::Pending);
+                    }
 
-                // Make sure exposure changed by a reasonable amount.
-                // If another exposure is started before our exposure is finished
-                //  there is a good chance the remaining exposure won't have changed
-                //  by the amount of time since the last tick.
-                let now = Instant::now();
-                let exposure_change = Duration::from_millis(
-                    ((previous_exposure_secs - remaining_exposure).abs() * 1000.0) as u64,
-                );
-                let time_change = now - previous_tick;
+                    // Make sure exposure changed by a reasonable amount.
+                    // If another exposure is started before our exposure is finished
+                    //  there is a good chance the remaining exposure won't have changed
+                    //  by the amount of time since the last tick.
+                    let now = Instant::now();
+                    let exposure_change = Duration::from_millis(
+                        ((previous_exposure_secs - remaining_exposure).abs() * 1000.0) as u64,
+                    );
+                    let time_change = now - previous_tick;
 
-                if exposure_change > time_change + Duration::from_millis(1100) {
-                    return Err(());
-                }
-                previous_tick = now;
-                previous_exposure_secs = remaining_exposure;
+                    if exposure_change > time_change + Duration::from_millis(1100) {
+                        return Err(ChangeError::Abort);
+                    }
+                    previous_tick = now;
+                    previous_exposure_secs = remaining_exposure;
 
-                // Nothing funky happened, so we're still waiting for the
-                // exposure to finish.
-                Ok(notify::Status::Pending)
-            },
-        )?;
+                    // Nothing funky happened, so we're still waiting for the
+                    // exposure to finish.
+                    Ok(notify::Status::Pending)
+                },
+            )?;
 
         // Wait for the image data to come in.
         let image_data = image_param.subscribe().wait_fn(
@@ -409,13 +359,15 @@ impl<'a, T: ClientConnection> ActiveDevice<'a, T>  {
 
                 if let Some(image_data) = ccd.get_values::<HashMap<String, Blob>>()?.get("CCD1") {
                     if let Some(bytes) = &image_data.value {
-                        Ok(notify::Status::Complete(FitsImage { raw_data: bytes.clone() }))
+                        Ok(notify::Status::Complete(FitsImage {
+                            raw_data: bytes.clone(),
+                        }))
                     } else {
-                        Err(())
+                        Err(ChangeError::PropertyError)
                     }
                 } else {
                     dbg!("Missing CCD1");
-                    Err(())
+                    Err(ChangeError::PropertyError)
                 }
             },
         )?;
@@ -429,7 +381,6 @@ mod tests {
     use std::ops::Deref;
 
     use super::*;
-    use crate::*;
 
     #[test]
     fn test_update_switch() {

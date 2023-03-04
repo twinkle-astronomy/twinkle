@@ -11,8 +11,9 @@ fn main() {
 
     let filename = &args[1];
 
-    let file_data = std::fs::read(filename).unwrap();
-    let data: ArrayD<u16> = indi::client::device::Device::image_from_fits(&file_data);
+    let mut fptr = fitsio::FitsFile::open(filename).expect("Opening fits file");
+    let hdu = fptr.primary_hdu().expect("Getting primary HDU");
+    let data: ArrayD<u16> = hdu.read_image(&mut fptr).expect("reading image");
 
     let nd_stats = Statistics::new(&data.view());
 

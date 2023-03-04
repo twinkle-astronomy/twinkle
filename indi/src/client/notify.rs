@@ -7,7 +7,7 @@ use std::{
     sync::{atomic::AtomicU64, Mutex, MutexGuard},
 };
 
-use crossbeam_channel::{bounded, RecvTimeoutError};
+use crossbeam_channel::{unbounded, RecvTimeoutError, SendError, TryRecvError};
 
 static ID_GENERATOR: once_cell::sync::Lazy<Arc<AtomicU64>> =
     once_cell::sync::Lazy::new(|| Arc::new(AtomicU64::new(0)));
@@ -25,6 +25,12 @@ impl<T> From<T> for Error<T> {
     }
 }
 
+impl<T> From<SendError<T>> for Error<T> {
+    fn from(value: SendError<T>) -> Self {
+        Error::Abort(value.into_inner())
+    }
+}
+
 pub enum Status<S> {
     Pending,
     Complete(S),
@@ -37,6 +43,14 @@ pub struct Subscription<T> {
 }
 
 impl<T> Subscription<T> {
+    pub fn tick<'a, S, E, F: FnMut(&T) -> Result<Status<S>, E>>(
+        &self,
+        mut f: F,
+    ) -> Result<Result<Status<S>, E>, TryRecvError> {
+        let next = self.try_recv()?;
+
+        Ok(f(next.deref()))
+    }
 
     pub fn wait_fn<'a, S, E, F: FnMut(&T) -> Result<Status<S>, E>>(
         &self,
@@ -46,7 +60,6 @@ impl<T> Subscription<T> {
         let start = Instant::now();
         let mut remaining = dur;
         loop {
-
             let next = match self.recv_timeout(remaining) {
                 Ok(n) => n,
                 Err(RecvTimeoutError::Timeout) => return Err(Error::Timeout),
@@ -62,7 +75,6 @@ impl<T> Subscription<T> {
             } else {
                 return Err(Error::Timeout);
             };
-
         }
     }
 }
@@ -92,10 +104,9 @@ impl<T> Deref for Subscription<T> {
     }
 }
 
-#[derive(Default)]
 pub struct Notify<T> {
     subject: Mutex<Arc<T>>,
-    senders: Mutex<BTreeMap<u64, crossbeam_channel::Sender<Arc<T>>>>,
+    to_notify: Mutex<BTreeMap<u64, crossbeam_channel::Sender<Arc<T>>>>,
 }
 
 impl<T: Debug> Debug for Notify<T> {
@@ -108,15 +119,12 @@ impl<T> Notify<T> {
     pub fn new(value: T) -> Notify<T> {
         Notify {
             subject: Mutex::new(Arc::new(value)),
-            senders: Mutex::new(BTreeMap::new()),
+            to_notify: Mutex::new(BTreeMap::new()),
         }
     }
 }
 
 pub struct NotifyMutexGuard<'a, T: Clone> {
-    // Made an option to allow explicit drop order
-    // Must never be None unless in the process of dropping
-    // https://stackoverflow.com/a/41056727
     guard: MutexGuard<'a, Arc<T>>,
     to_notify: &'a Notify<T>,
     should_notify: bool,
@@ -152,9 +160,10 @@ impl<'a, T: Debug + Clone> DerefMut for NotifyMutexGuard<'a, T> {
 impl<'a, T: Clone> Drop for NotifyMutexGuard<'a, T> {
     fn drop(&mut self) {
         if self.should_notify {
-            let mut senders = self.to_notify.senders.lock().unwrap();
+            let mut senders = self.to_notify.to_notify.lock().unwrap();
             senders.retain(|_id, s| {
-                s.send_timeout(self.guard.deref().clone(), Duration::from_secs(1)).is_ok()
+                s.send_timeout(self.guard.deref().clone(), Duration::from_secs(1))
+                    .is_ok()
             });
         }
         drop(&mut self.guard);
@@ -180,21 +189,25 @@ impl<T: Clone + Debug> Notify<T> {
     }
 
     pub fn subscribe(&self) -> Subscription<T> {
-        let (s, r) = bounded::<Arc<T>>(1);
+        let (s, r) = unbounded::<Arc<T>>();
         let subject = self.subject.lock().unwrap();
-        let mut senders = self.senders.lock().unwrap();
+        let mut senders = self.to_notify.lock().unwrap();
         s.send(subject.deref().clone())
             .expect("sending initial value");
         let id = ID_GENERATOR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        senders.insert(id,s);
+        senders.insert(id, s);
         Subscription { id, recv: r }
     }
 
     pub fn cancel(&self, subscription: &Subscription<T>) {
-        let mut lock = self.senders.lock().unwrap();
+        let mut lock = self.to_notify.lock().unwrap();
         lock.remove(&subscription.get_id());
     }
 
+    pub fn cancel_all(&self) {
+        let mut lock = self.to_notify.lock().unwrap();
+        lock.clear();
+    }
 }
 
 #[cfg(test)]
@@ -213,7 +226,11 @@ mod test {
 
                 joins.push(thread::spawn(move || {
                     let r = thread_n.subscribe();
-                    let mut prev = r.recv_timeout(Duration::from_millis(100)).unwrap().deref().clone();
+                    let mut prev = r
+                        .recv_timeout(Duration::from_millis(100))
+                        .unwrap()
+                        .deref()
+                        .clone();
                     for j in r.iter() {
                         if *j == 90 {
                             break;
@@ -239,23 +256,23 @@ mod test {
     fn test_destroying_receivers() {
         let n = Notify::new(0);
 
-        let len = n.senders.lock().unwrap().len();
+        let len = n.to_notify.lock().unwrap().len();
         assert_eq!(len, 0);
 
         {
             let _r = n.subscribe();
 
-            let len = n.senders.lock().unwrap().len();
+            let len = n.to_notify.lock().unwrap().len();
             assert_eq!(len, 1);
         }
-        let len = n.senders.lock().unwrap().len();
+        let len = n.to_notify.lock().unwrap().len();
         assert_eq!(len, 1);
         {
             let mut l = n.lock();
             *l = 1;
         }
 
-        let len = n.senders.lock().unwrap().len();
+        let len = n.to_notify.lock().unwrap().len();
         assert_eq!(len, 0);
     }
 
@@ -292,7 +309,8 @@ mod test {
         let count_thread = count.clone();
         let thread_notify = notify.clone();
         let j = thread::spawn(move || {
-            thread_notify.subscribe()
+            thread_notify
+                .subscribe()
                 .wait_fn::<(), (), _>(Duration::from_secs(1), |iteration| {
                     {
                         let mut l = count_thread.lock().unwrap();
@@ -323,7 +341,7 @@ mod test {
     #[test]
     fn test_cancel_subscription() {
         let notify: Arc<Notify<u32>> = Arc::new(Notify::new(0));
-        
+
         let sub = Arc::new(notify.subscribe());
         let thread_sub = sub.clone();
 
@@ -336,12 +354,14 @@ mod test {
 
         notify.cancel(&sub);
 
-        assert_eq!(j.join().unwrap(), Err(crossbeam_channel::RecvTimeoutError::Disconnected));
+        assert_eq!(
+            j.join().unwrap(),
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected)
+        );
     }
 
     #[test]
     fn test_cancel_wait_fn() {
-    
         let notify: Arc<Notify<u32>> = Arc::new(Notify::new(0));
         let subscription = Arc::new(notify.subscribe());
         let thread_subscription = subscription.clone();

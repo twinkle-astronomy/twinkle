@@ -340,7 +340,6 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
-                    dbg!(&format);
 
                     Ok(Some(OneBlob {
                         name: name?,

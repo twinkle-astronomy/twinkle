@@ -8,7 +8,7 @@ use std::{
 };
 
 use fits_inspect::{analysis::Statistics, egui::FitsWidget};
-use indi::ClientConnection;
+use indi::{ClientConnection, client::device::FitsImage};
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
@@ -35,17 +35,6 @@ impl FitsViewerApp {
         let fits_widget = newed.fits_widget.clone();
         let ctx = cc.egui_ctx.clone();
         thread::spawn(move || {
-            // thread::sleep(time::Duration::from_millis(5000));
-            // let mut fptr = FitsFile::open("images/M_33_Light_Red_180_secs_2022-11-24T18-58-20_001.fits").unwrap();
-            // let hdu = fptr.primary_hdu().unwrap();
-            // let image: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
-
-            // let mut fits_widget = fits_widget.lock().unwrap();
-            // if let Some(w) = &mut *fits_widget {
-            //     let stats = Statistics::new(&image.view());
-            //     w.set_fits(image, stats);
-            //     ctx.request_repaint();
-            // }
             let args: Vec<String> = env::args().collect();
 
             let connection = TcpStream::connect(&args[1]).unwrap();
@@ -74,10 +63,8 @@ impl FitsViewerApp {
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;
                         }
-
-                        let data: ArrayD<u16> = indi::client::device::Device::image_from_fits(
-                            &sbv.blobs.get_mut(0).unwrap().value,
-                        );
+                        let fits = FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
+                        let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
 
                         let mut fits_widget = fits_widget.lock().unwrap();
                         if let Some(w) = &mut *fits_widget {
@@ -90,17 +77,6 @@ impl FitsViewerApp {
                 }
             }
         });
-
-        // let filename = &args[1];
-        // let mut file_data = fs::read(filename).unwrap();
-        // let mut fptr = FitsFile::open_memfile(&mut file_data).unwrap();
-        // let hdu = fptr.primary_hdu().unwrap();
-        // let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
-
-        // if let Some(ref mut w) = newed.fits_widget {
-        //     let gl = cc.gl.as_ref().unwrap();
-        //     w.set_fits(gl, data);
-        // }
         Some(newed)
     }
 }
@@ -119,9 +95,6 @@ impl eframe::App for FitsViewerApp {
 
 fn main() {
     // tracing_subscriber::fmt::init();
-
-    // dbg!(data.len());
-    // dbg!(file_data.len());
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "Fits Viewer",

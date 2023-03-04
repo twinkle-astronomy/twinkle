@@ -1,6 +1,9 @@
 use client::device;
 use client::notify;
 use client::notify::Notify;
+use client::notify::Subscription;
+use crossbeam_channel::Receiver;
+use crossbeam_channel::Select;
 use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::events::attributes::Attribute;
@@ -10,19 +13,19 @@ use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::io::{BufReader, BufWriter};
 use std::net::TcpStream;
 
 use std::num;
 use std::num::Wrapping;
 
+use std::ops::Deref;
 use std::str;
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 
 use chrono::format::ParseError;
 use chrono::prelude::*;
@@ -74,7 +77,7 @@ pub enum BlobEnable {
 }
 
 pub trait FromParamValue {
-    fn values_from(w: &Parameter) -> Result<&Self, ()>
+    fn values_from(w: &Parameter) -> Result<&Self, TypeError>
     where
         Self: Sized;
 }
@@ -101,10 +104,10 @@ pub struct SwitchVector {
 }
 
 impl FromParamValue for HashMap<String, Switch> {
-    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+    fn values_from(p: &Parameter) -> Result<&Self, TypeError> {
         match p {
             Parameter::SwitchVector(p) => Ok(&p.values),
-            _ => Err(()),
+            _ => Err(TypeError::TypeMismatch),
         }
     }
 }
@@ -134,10 +137,10 @@ pub struct NumberVector {
 }
 
 impl FromParamValue for HashMap<String, Number> {
-    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+    fn values_from(p: &Parameter) -> Result<&Self, TypeError> {
         match p {
             Parameter::NumberVector(p) => Ok(&p.values),
-            _ => Err(()),
+            _ => Err(TypeError::TypeMismatch),
         }
     }
 }
@@ -161,10 +164,10 @@ pub struct LightVector {
 }
 
 impl FromParamValue for HashMap<String, Light> {
-    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+    fn values_from(p: &Parameter) -> Result<&Self, TypeError> {
         match p {
             Parameter::LightVector(p) => Ok(&p.values),
-            _ => Err(()),
+            _ => Err(TypeError::TypeMismatch),
         }
     }
 }
@@ -176,10 +179,10 @@ pub struct Text {
 }
 
 impl FromParamValue for HashMap<String, Text> {
-    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+    fn values_from(p: &Parameter) -> Result<&Self, TypeError> {
         match p {
             Parameter::TextVector(p) => Ok(&p.values),
-            _ => Err(()),
+            _ => Err(TypeError::TypeMismatch),
         }
     }
 }
@@ -221,10 +224,10 @@ pub struct BlobVector {
 }
 
 impl FromParamValue for HashMap<String, Blob> {
-    fn values_from(p: &Parameter) -> Result<&Self, ()> {
+    fn values_from(p: &Parameter) -> Result<&Self, TypeError> {
         match p {
             Parameter::BlobVector(p) => Ok(&p.values),
-            _ => Err(()),
+            _ => Err(TypeError::TypeMismatch),
         }
     }
 }
@@ -286,7 +289,7 @@ impl Parameter {
         }
     }
 
-    pub fn get_values<T: FromParamValue>(&self) -> Result<&T, ()> {
+    pub fn get_values<T: FromParamValue>(&self) -> Result<&T, TypeError> {
         T::values_from(self)
     }
 
@@ -310,13 +313,16 @@ impl Parameter {
         }
     }
 }
-
-pub trait TryEq<T, E> {
-    fn try_eq(&self, other: &T) -> Result<bool, E>;
+#[derive(Debug)]
+pub enum TypeError {
+    TypeMismatch,
+}
+pub trait TryEq<T> {
+    fn try_eq(&self, other: &T) -> Result<bool, TypeError>;
 }
 
-impl TryEq<Parameter, ()> for Vec<OneSwitch> {
-    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+impl TryEq<Parameter> for Vec<OneSwitch> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Switch>>()?;
 
         Ok(self.iter().all(|other_value| {
@@ -333,8 +339,8 @@ impl Into<SwitchState> for bool {
         }
     }
 }
-impl<I: Into<SwitchState> + Copy> TryEq<Parameter, ()> for Vec<(&str, I)> {
-    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+impl<I: Into<SwitchState> + Copy> TryEq<Parameter> for Vec<(&str, I)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Switch>>()?;
 
         Ok(self.iter().all(|other_value| {
@@ -343,8 +349,8 @@ impl<I: Into<SwitchState> + Copy> TryEq<Parameter, ()> for Vec<(&str, I)> {
     }
 }
 
-impl TryEq<Parameter, ()> for Vec<(&str, f64)> {
-    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+impl TryEq<Parameter> for Vec<(&str, f64)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Number>>()?;
 
         Ok(self.iter().all(|other_value| {
@@ -353,8 +359,8 @@ impl TryEq<Parameter, ()> for Vec<(&str, f64)> {
     }
 }
 
-impl TryEq<Parameter, ()> for Vec<OneNumber> {
-    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+impl TryEq<Parameter> for Vec<OneNumber> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Number>>()?;
 
         Ok(self.iter().all(|other_value| {
@@ -363,8 +369,8 @@ impl TryEq<Parameter, ()> for Vec<OneNumber> {
     }
 }
 
-impl TryEq<Parameter, ()> for Vec<(&str, &str)> {
-    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+impl TryEq<Parameter> for Vec<(&str, &str)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Text>>()?;
 
         Ok(self.iter().all(|other_value| {
@@ -373,8 +379,8 @@ impl TryEq<Parameter, ()> for Vec<(&str, &str)> {
     }
 }
 
-impl TryEq<Parameter, ()> for Vec<OneText> {
-    fn try_eq(&self, other: &Parameter) -> Result<bool, ()> {
+impl TryEq<Parameter> for Vec<OneText> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Text>>()?;
 
         Ok(self.iter().all(|other_value| {
@@ -512,8 +518,8 @@ impl From<UpdateError> for ClientErrors {
 /// track and control devices managed by an INDI server.
 pub struct Client<T: ClientConnection + 'static> {
     pub devices: Arc<Notify<MemoryDeviceStore>>,
-    pub errors: Receiver<ClientErrors>,
     pub connection: T,
+    feedback: crossbeam_channel::Sender<Command>,
 }
 
 #[derive(Debug)]
@@ -521,37 +527,183 @@ pub enum ChangeError<E> {
     NotifyError(notify::Error<E>),
     DeError(serialization::DeError),
     IoError(std::io::Error),
+    Disconnected(crossbeam_channel::SendError<Command>),
+    DisconnectedRecv(crossbeam_channel::TryRecvError),
+    DisconnectedRecvTimeout(crossbeam_channel::RecvTimeoutError),
+    Abort,
+    PropertyError,
     TypeMismatch,
 }
 
-impl<T> From<std::io::Error> for ChangeError<T> {
-    fn from(value: std::io::Error) -> Self {
-        ChangeError::<T>::IoError(value)
+impl<T> From<crossbeam_channel::RecvTimeoutError> for ChangeError<T> {
+    fn from(value: crossbeam_channel::RecvTimeoutError) -> Self {
+        ChangeError::DisconnectedRecvTimeout(value)
     }
 }
-impl<T> From<notify::Error<T>> for ChangeError<T> {
-    fn from(value: notify::Error<T>) -> Self {
+impl From<notify::Error<ChangeError<serialization::Command>>> for ChangeError<Command> {
+    fn from(value: notify::Error<ChangeError<serialization::Command>>) -> Self {
+        match value {
+            notify::Error::Timeout => ChangeError::Abort,
+            notify::Error::Canceled => ChangeError::Abort,
+            notify::Error::Abort(e) => e,
+        }
+    }
+}
+impl<E> From<std::io::Error> for ChangeError<E> {
+    fn from(value: std::io::Error) -> Self {
+        ChangeError::<E>::IoError(value)
+    }
+}
+impl<E> From<notify::Error<E>> for ChangeError<E> {
+    fn from(value: notify::Error<E>) -> Self {
         ChangeError::NotifyError(value)
     }
 }
-impl<T> From<DeError> for ChangeError<T> {
+impl<E> From<DeError> for ChangeError<E> {
     fn from(value: DeError) -> Self {
-        ChangeError::<T>::DeError(value)
+        ChangeError::<E>::DeError(value)
     }
 }
-impl<T> From<()> for ChangeError<T> {
-    fn from(_: ()) -> Self {
-        ChangeError::<T>::TypeMismatch
+impl<E> From<TypeError> for ChangeError<E> {
+    fn from(_: TypeError) -> Self {
+        ChangeError::<E>::TypeMismatch
+    }
+}
+impl<E> From<crossbeam_channel::SendError<Command>> for ChangeError<E> {
+    fn from(value: crossbeam_channel::SendError<Command>) -> Self {
+        ChangeError::Disconnected(value)
     }
 }
 
-pub fn batch<T>(
-    funcs: Vec<Box<dyn FnOnce() -> Result<Arc<Notify<Parameter>>, T>>>,
-) -> Result<(), T> {
-    for f in funcs {
-        f()?;
+impl<E> From<crossbeam_channel::TryRecvError> for ChangeError<E> {
+    fn from(value: crossbeam_channel::TryRecvError) -> Self {
+        ChangeError::DisconnectedRecv(value)
     }
-    Ok(())
+}
+
+pub trait PendingChange {
+    // fn cancel(&self);
+    fn wait(&self) -> Result<Arc<Notify<Parameter>>, ChangeError<Command>>;
+    fn remaining(&self) -> Duration;
+    fn deadline(&self) -> Instant;
+    fn receiver(&self) -> &Receiver<Arc<Parameter>>;
+    fn tick(&self, item: Arc<Parameter>) -> Result<notify::Status<Arc<Parameter>>, ChangeError<Command>>;
+    fn abort(&self);
+}
+
+pub struct PendingChangeImpl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> {
+    subscription: Subscription<Parameter>,
+    param: Arc<Notify<Parameter>>,
+    deadline: Instant,
+    values: P,
+}
+// asdfadsf
+impl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> PendingChange for PendingChangeImpl<P> {
+    fn wait(&self) -> Result<Arc<Notify<Parameter>>, ChangeError<Command>> {
+        let r = self
+            .subscription
+            .wait_fn::<Arc<Notify<Parameter>>, ChangeError<Command>, _>(
+                self.remaining(),
+                |param_lock| {
+                    if *param_lock.get_state() == PropertyState::Alert {
+                        return Err(ChangeError::PropertyError);
+                    }
+                    if self.values.try_eq(&param_lock)? {
+                        Ok(notify::Status::Complete(self.param.clone()))
+                    } else {
+                        Ok(notify::Status::Pending)
+                    }
+                },
+            )?;
+        Ok(r)
+    }
+
+    fn tick(&self, next: Arc<Parameter>) -> Result<notify::Status<Arc<Parameter>>, ChangeError<Command>> {
+        if *next.get_state() == PropertyState::Alert {
+            return Err(ChangeError::PropertyError);
+        }
+        if self.values.try_eq(&next)? {
+            Ok(notify::Status::Complete(next.clone()))
+        } else {
+            Ok(notify::Status::Pending)
+        }
+    }
+
+    fn remaining(&self) -> Duration {
+        self.deadline.duration_since(Instant::now())
+    }
+
+    fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
+    fn receiver(&self) -> &Receiver<Arc<Parameter>> {
+        self.subscription.deref()
+    }
+
+    fn abort(&self) {
+        self.param.cancel(&self.subscription);
+    }
+}
+
+pub struct PendingChangeBatch {
+    changes: Vec<Box<dyn PendingChange>>,
+}
+
+impl PendingChangeBatch {
+    pub fn new() -> PendingChangeBatch {
+        PendingChangeBatch {
+            changes: Default::default(),
+        }
+    }
+
+    pub fn add<T: PendingChange + 'static>(mut self, pending_change: T) -> PendingChangeBatch {
+        self.changes.push(Box::new(pending_change));
+        self
+    }
+
+    pub fn wait(self) -> Result<(), ChangeError<Command>> {
+        let mut sel = Select::new();
+        let mut remaining = BTreeSet::new();
+        for (i, r) in self.changes.iter().enumerate() {
+            sel.recv(r.receiver());
+            remaining.insert(i);
+        }
+
+        loop {
+            let selected = sel.select();
+            let i = selected.index();
+            let r = selected.recv(self.changes[i].receiver()).unwrap();
+            match self.changes[i].tick(r) {
+                Ok(v) => {
+                    if let notify::Status::Complete(_v) = v {
+                        remaining.remove(&i);
+                    }
+                    if remaining.is_empty() {
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    for i in &remaining {
+                        self.changes[*i].abort();
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    }
+}
+
+pub fn batch<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static>(
+    changes: Vec<PendingChangeImpl<P>>,
+) -> Result<(), crate::ChangeError<Command>> {
+    let mut batch = PendingChangeBatch::new();
+
+    for f in changes {
+        batch = batch.add(f);
+    }
+
+    batch.wait()
 }
 
 impl<T: ClientConnection> Client<T> {
@@ -568,13 +720,24 @@ impl<T: ClientConnection> Client<T> {
                 name: parameter.map(|x| String::from(x)),
             })
             .expect("Unable to write command");
-
-        let (error_tx, error_rx): (Sender<ClientErrors>, Receiver<ClientErrors>) = mpsc::channel();
+        let (feedback, incoming_commands) = crossbeam_channel::unbounded();
         let c = Client {
             devices: Arc::new(Notify::new(HashMap::new())),
-            errors: error_rx,
             connection,
+            feedback,
         };
+
+        let thread_connection = c.connection.clone_writer()?;
+        thread::spawn(move || {
+            let mut xml_writer =
+                Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
+            for command in incoming_commands.iter() {
+                command
+                    .write(&mut xml_writer)
+                    .expect("Writing command to connection");
+                xml_writer.inner().flush().expect("Flushing connection");
+            }
+        });
 
         let thread_devices = c.devices.clone();
         let connection_iter = c.connection.iter()?;
@@ -585,12 +748,11 @@ impl<T: ClientConnection> Client<T> {
                         let mut locked_devices = thread_devices.lock();
                         let update_result = locked_devices.update(command, |_param| {});
                         if let Err(e) = update_result {
-                            error_tx.send(e.into()).unwrap();
+                            dbg!(e);
                         }
                     }
                     Err(e) => {
-                        // dbg!(&e);
-                        error_tx.send(e.into()).unwrap();
+                        dbg!(&e);
                     }
                 }
             }
@@ -601,13 +763,14 @@ impl<T: ClientConnection> Client<T> {
     pub fn get_device<'a>(
         &'a self,
         name: &str,
-    ) -> Result<client::device::ActiveDevice<'a, T>, notify::Error<()>> {
-        self.devices.subscribe()
+    ) -> Result<client::device::ActiveDevice, notify::Error<()>> {
+        self.devices
+            .subscribe()
             .wait_fn::<_, (), _>(Duration::from_secs(60), |devices| {
                 if let Some(device) = devices.get(name) {
                     return Ok(notify::Status::Complete(device::ActiveDevice::new(
                         device.clone(),
-                        self,
+                        self.feedback.clone(),
                     )));
                 }
 

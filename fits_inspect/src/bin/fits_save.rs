@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::time::Duration;
 
+use indi::TypeError;
 use indi::client::notify;
 
 fn main() {
@@ -24,7 +25,7 @@ fn main() {
     let mut imager_gen = imager.lock().gen();
 
     imager.subscribe()
-        .wait_fn::<(), (), _>(Duration::MAX, |imager| {
+        .wait_fn::<(), TypeError, _>(Duration::MAX, |imager| {
             if imager.gen() == imager_gen {
                 return Ok(notify::Status::Pending);
             }
