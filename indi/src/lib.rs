@@ -1,9 +1,6 @@
 use client::device;
 use client::notify;
 use client::notify::Notify;
-use client::notify::Subscription;
-use crossbeam_channel::Receiver;
-use crossbeam_channel::Select;
 use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::events::attributes::Attribute;
@@ -13,19 +10,16 @@ use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::io::{BufReader, BufWriter};
 use std::net::TcpStream;
 
 use std::num;
 use std::num::Wrapping;
 
-use std::ops::Deref;
 use std::str;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::time::Instant;
 
 use chrono::format::ParseError;
 use chrono::prelude::*;
@@ -520,190 +514,6 @@ pub struct Client<T: ClientConnection + 'static> {
     pub devices: Arc<Notify<MemoryDeviceStore>>,
     pub connection: T,
     feedback: crossbeam_channel::Sender<Command>,
-}
-
-#[derive(Debug)]
-pub enum ChangeError<E> {
-    NotifyError(notify::Error<E>),
-    DeError(serialization::DeError),
-    IoError(std::io::Error),
-    Disconnected(crossbeam_channel::SendError<Command>),
-    DisconnectedRecv(crossbeam_channel::TryRecvError),
-    DisconnectedRecvTimeout(crossbeam_channel::RecvTimeoutError),
-    Abort,
-    PropertyError,
-    TypeMismatch,
-}
-
-impl<T> From<crossbeam_channel::RecvTimeoutError> for ChangeError<T> {
-    fn from(value: crossbeam_channel::RecvTimeoutError) -> Self {
-        ChangeError::DisconnectedRecvTimeout(value)
-    }
-}
-impl From<notify::Error<ChangeError<serialization::Command>>> for ChangeError<Command> {
-    fn from(value: notify::Error<ChangeError<serialization::Command>>) -> Self {
-        match value {
-            notify::Error::Timeout => ChangeError::Abort,
-            notify::Error::Canceled => ChangeError::Abort,
-            notify::Error::Abort(e) => e,
-        }
-    }
-}
-impl<E> From<std::io::Error> for ChangeError<E> {
-    fn from(value: std::io::Error) -> Self {
-        ChangeError::<E>::IoError(value)
-    }
-}
-impl<E> From<notify::Error<E>> for ChangeError<E> {
-    fn from(value: notify::Error<E>) -> Self {
-        ChangeError::NotifyError(value)
-    }
-}
-impl<E> From<DeError> for ChangeError<E> {
-    fn from(value: DeError) -> Self {
-        ChangeError::<E>::DeError(value)
-    }
-}
-impl<E> From<TypeError> for ChangeError<E> {
-    fn from(_: TypeError) -> Self {
-        ChangeError::<E>::TypeMismatch
-    }
-}
-impl<E> From<crossbeam_channel::SendError<Command>> for ChangeError<E> {
-    fn from(value: crossbeam_channel::SendError<Command>) -> Self {
-        ChangeError::Disconnected(value)
-    }
-}
-
-impl<E> From<crossbeam_channel::TryRecvError> for ChangeError<E> {
-    fn from(value: crossbeam_channel::TryRecvError) -> Self {
-        ChangeError::DisconnectedRecv(value)
-    }
-}
-
-pub trait PendingChange {
-    // fn cancel(&self);
-    fn wait(&self) -> Result<Arc<Notify<Parameter>>, ChangeError<Command>>;
-    fn remaining(&self) -> Duration;
-    fn deadline(&self) -> Instant;
-    fn receiver(&self) -> &Receiver<Arc<Parameter>>;
-    fn tick(&self, item: Arc<Parameter>) -> Result<notify::Status<Arc<Parameter>>, ChangeError<Command>>;
-    fn abort(&self);
-}
-
-pub struct PendingChangeImpl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> {
-    subscription: Subscription<Parameter>,
-    param: Arc<Notify<Parameter>>,
-    deadline: Instant,
-    values: P,
-}
-// asdfadsf
-impl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> PendingChange for PendingChangeImpl<P> {
-    fn wait(&self) -> Result<Arc<Notify<Parameter>>, ChangeError<Command>> {
-        let r = self
-            .subscription
-            .wait_fn::<Arc<Notify<Parameter>>, ChangeError<Command>, _>(
-                self.remaining(),
-                |param_lock| {
-                    if *param_lock.get_state() == PropertyState::Alert {
-                        return Err(ChangeError::PropertyError);
-                    }
-                    if self.values.try_eq(&param_lock)? {
-                        Ok(notify::Status::Complete(self.param.clone()))
-                    } else {
-                        Ok(notify::Status::Pending)
-                    }
-                },
-            )?;
-        Ok(r)
-    }
-
-    fn tick(&self, next: Arc<Parameter>) -> Result<notify::Status<Arc<Parameter>>, ChangeError<Command>> {
-        if *next.get_state() == PropertyState::Alert {
-            return Err(ChangeError::PropertyError);
-        }
-        if self.values.try_eq(&next)? {
-            Ok(notify::Status::Complete(next.clone()))
-        } else {
-            Ok(notify::Status::Pending)
-        }
-    }
-
-    fn remaining(&self) -> Duration {
-        self.deadline.duration_since(Instant::now())
-    }
-
-    fn deadline(&self) -> Instant {
-        self.deadline
-    }
-
-    fn receiver(&self) -> &Receiver<Arc<Parameter>> {
-        self.subscription.deref()
-    }
-
-    fn abort(&self) {
-        self.param.cancel(&self.subscription);
-    }
-}
-
-pub struct PendingChangeBatch {
-    changes: Vec<Box<dyn PendingChange>>,
-}
-
-impl PendingChangeBatch {
-    pub fn new() -> PendingChangeBatch {
-        PendingChangeBatch {
-            changes: Default::default(),
-        }
-    }
-
-    pub fn add<T: PendingChange + 'static>(mut self, pending_change: T) -> PendingChangeBatch {
-        self.changes.push(Box::new(pending_change));
-        self
-    }
-
-    pub fn wait(self) -> Result<(), ChangeError<Command>> {
-        let mut sel = Select::new();
-        let mut remaining = BTreeSet::new();
-        for (i, r) in self.changes.iter().enumerate() {
-            sel.recv(r.receiver());
-            remaining.insert(i);
-        }
-
-        loop {
-            let selected = sel.select();
-            let i = selected.index();
-            let r = selected.recv(self.changes[i].receiver()).unwrap();
-            match self.changes[i].tick(r) {
-                Ok(v) => {
-                    if let notify::Status::Complete(_v) = v {
-                        remaining.remove(&i);
-                    }
-                    if remaining.is_empty() {
-                        return Ok(());
-                    }
-                }
-                Err(e) => {
-                    for i in &remaining {
-                        self.changes[*i].abort();
-                    }
-                    return Err(e);
-                }
-            }
-        }
-    }
-}
-
-pub fn batch<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static>(
-    changes: Vec<PendingChangeImpl<P>>,
-) -> Result<(), crate::ChangeError<Command>> {
-    let mut batch = PendingChangeBatch::new();
-
-    for f in changes {
-        batch = batch.add(f);
-    }
-
-    batch.wait()
 }
 
 impl<T: ClientConnection> Client<T> {

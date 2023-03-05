@@ -5,7 +5,7 @@ use std::{
     num::Wrapping,
     ops::Deref,
     path::Path,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -13,7 +13,7 @@ use fitsio::FitsFile;
 
 use crate::*;
 
-use super::notify::{self, Notify};
+use super::{notify::{self, Notify, Subscription}, PendingChangeImpl, ChangeError, Pending, batch};
 
 #[derive(Debug, Clone)]
 pub struct Device {
@@ -277,104 +277,159 @@ impl ActiveDevice {
     }
 
     pub fn capture_image(&self, exposure: f64) -> Result<FitsImage, ChangeError<Command>> {
-        // Set imge format to something we can work with.
-        batch(vec![
-            self.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)])?,
-            self.change(
-                "CCD_TRANSFER_FORMAT",
-                vec![
-                    //            ( "FORMAT_NATIVE", true ),
-                    ("FORMAT_FITS", true),
-                ],
-            )?,
-        ])?;
-
         let image_param = self.get_parameter("CCD1")?;
+        let image_changes = image_param.changes();
+        let exposure_param = self.get_parameter("CCD_EXPOSURE")?;
+        let exposure_changes = exposure_param.changes();
 
-        // Record image generation before starting exposure
-        let image_gen = image_param.lock().gen();
+        let device_name = self.lock().name.clone();
+        let c = vec![("CCD_EXPOSURE_VALUE", exposure)]
+            .to_command(device_name, String::from("CCD_EXPOSURE"));
+        self.sender().send(c)?;
 
-        let exposure_param = self
-            .change("CCD_EXPOSURE", vec![("CCD_EXPOSURE_VALUE", exposure)])?
-            .wait()?;
+        let previous_exposure_secs = exposure;
+        let previous_tick = Instant::now();
 
-        let mut previous_exposure_secs = exposure;
-        let mut previous_tick = Instant::now();
+        let pe = PendingExposure {
+            camera: self.clone(),
+            exposure_param,
+            changes: exposure_changes,
+            deadline: Instant::now() + Duration::from_secs(exposure.ceil() as u64 + 10),
+            state: Mutex::new(PendingExposureState {
+                previous_exposure_secs,
+                previous_tick,
+            })
+        };
+        let pi = PendingImage {
+            image_param,
+            changes: image_changes,
+            deadline: Instant::now() + Duration::from_secs(60)
+        };
+        batch(vec![pe])?;
 
-        exposure_param
-            .subscribe()
-            .wait_fn::<(), ChangeError<Command>, _>(
-                Duration::from_secs(exposure.ceil() as u64 + 10),
-                |exposure_param| {
-                    // Exposure goes to idle when canceled
-                    if *exposure_param.get_state() == PropertyState::Idle {
-                        return Err(ChangeError::Abort);
-                    }
-                    let remaining_exposure = exposure_param
-                        .get_values::<HashMap<String, Number>>()?
-                        .get("CCD_EXPOSURE_VALUE")
-                        .and_then(|x| Some(x.value))
-                        .expect("Missing CCD_EXPOSURE_VALUE from CCD_EXPOSURE parameter");
-
-                    // Image is done exposing, new image data should be sent very soon
-                    if remaining_exposure == 0.0 {
-                        return Ok(notify::Status::Complete(()));
-                    }
-
-                    // remaining exposure didn't change, nothing to check
-                    if previous_exposure_secs == remaining_exposure {
-                        return Ok(notify::Status::Pending);
-                    }
-
-                    // Make sure exposure changed by a reasonable amount.
-                    // If another exposure is started before our exposure is finished
-                    //  there is a good chance the remaining exposure won't have changed
-                    //  by the amount of time since the last tick.
-                    let now = Instant::now();
-                    let exposure_change = Duration::from_millis(
-                        ((previous_exposure_secs - remaining_exposure).abs() * 1000.0) as u64,
-                    );
-                    let time_change = now - previous_tick;
-
-                    if exposure_change > time_change + Duration::from_millis(1100) {
-                        return Err(ChangeError::Abort);
-                    }
-                    previous_tick = now;
-                    previous_exposure_secs = remaining_exposure;
-
-                    // Nothing funky happened, so we're still waiting for the
-                    // exposure to finish.
-                    Ok(notify::Status::Pending)
-                },
-            )?;
-
-        // Wait for the image data to come in.
-        let image_data = image_param.subscribe().wait_fn(
-            Duration::from_secs((exposure.ceil() as u64 + 60).into()),
-            |ccd| {
-                // We've been called before the next image has come in.
-                if ccd.gen() == image_gen {
-                    return Ok(notify::Status::Pending);
-                };
-
-                if let Some(image_data) = ccd.get_values::<HashMap<String, Blob>>()?.get("CCD1") {
-                    if let Some(bytes) = &image_data.value {
-                        Ok(notify::Status::Complete(FitsImage {
-                            raw_data: bytes.clone(),
-                        }))
-                    } else {
-                        Err(ChangeError::PropertyError)
-                    }
-                } else {
-                    dbg!("Missing CCD1");
-                    Err(ChangeError::PropertyError)
-                }
-            },
-        )?;
-        Ok(image_data)
+        batch(vec![pi])
     }
 }
 
+struct PendingImage {
+    image_param: Arc<Notify<Parameter>>,
+    changes: Subscription<Parameter>,
+    deadline: Instant,
+}
+
+impl Pending for PendingImage {
+    type Item = Arc<Parameter>;
+    type Result = FitsImage;
+
+    fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
+    fn receiver(&self) -> &crossbeam_channel::Receiver<Self::Item> {
+        &self.changes
+    }
+
+    fn tick(&self, ccd: Self::Item) -> Result<notify::Status<Self::Result>, ChangeError<Command>> {
+        // We've been called before the next image has come in.
+        if let Some(image_data) = ccd.get_values::<HashMap<String, Blob>>()?.get("CCD1") {
+            if let Some(bytes) = &image_data.value {
+                Ok(notify::Status::Complete(FitsImage {
+                    raw_data: bytes.clone(),
+                }))
+            } else {
+                Err(ChangeError::PropertyError)
+            }
+        } else {
+            dbg!("Missing CCD1");
+            Err(ChangeError::PropertyError)
+        }
+    }
+
+    fn abort(&self) {
+        self.image_param.cancel(&self.changes);
+    }
+}
+
+
+struct PendingExposureState {
+    previous_exposure_secs: f64,
+    previous_tick: Instant,
+
+}
+struct PendingExposure {
+    camera: ActiveDevice,
+    exposure_param: Arc<Notify<Parameter>>,
+    changes: Subscription<Parameter>,
+    deadline: Instant,
+    state: Mutex<PendingExposureState>
+}
+
+impl Pending for PendingExposure {
+    type Item = Arc<Parameter>;
+    type Result = Arc<Parameter>;
+
+    fn deadline(&self) -> Instant {
+        self.deadline.clone()
+    }
+
+    fn receiver(&self) -> &crossbeam_channel::Receiver<Self::Item> {
+        self.changes.deref()
+    }
+
+    fn tick(&self, exposure_param: Self::Item) -> Result<notify::Status<Self::Item>, ChangeError<Command>> {
+        // Exposure goes to idle when canceled
+        if *exposure_param.get_state() == PropertyState::Idle {
+            return Err(ChangeError::Abort);
+        }
+        
+        let remaining_exposure = exposure_param
+            .get_values::<HashMap<String, Number>>()?
+            .get("CCD_EXPOSURE_VALUE")
+            .and_then(|x| Some(x.value))
+            .expect("Missing CCD_EXPOSURE_VALUE from CCD_EXPOSURE parameter");
+        dbg!(&remaining_exposure);
+        // Image is done exposing, new image data should be sent very soon
+        if remaining_exposure == 0.0 {
+            return Ok(notify::Status::Complete(exposure_param));
+        }
+        let mut state = self.state.lock().unwrap();
+
+        // remaining exposure didn't change, nothing to check
+        if state.previous_exposure_secs == remaining_exposure {
+            return Ok(notify::Status::Pending);
+        }
+
+        // Make sure exposure changed by a reasonable amount.
+        // If another exposure is started before our exposure is finished
+        //  there is a good chance the remaining exposure won't have changed
+        //  by the amount of time since the last tick.
+        let now = Instant::now();
+        let exposure_change = Duration::from_millis(
+            ((state.previous_exposure_secs - remaining_exposure).abs() * 1000.0) as u64,
+        );
+        let time_change = now - state.previous_tick;
+
+        if exposure_change > time_change + Duration::from_millis(1100) {
+            return Err(ChangeError::Abort);
+        }
+        state.previous_tick = now;
+        state.previous_exposure_secs = remaining_exposure;
+
+        // Nothing funky happened, so we're still waiting for the
+        // exposure to finish.
+        Ok(notify::Status::Pending)
+    }
+
+    fn abort(&self) {
+        let device_name = self.camera.lock().name.clone();
+        let c = vec![("CCD_ABORT_EXPOSURE", true)]
+            .to_command(device_name, String::from("CCD_ABORT_EXPOSURE"));
+        if let Err(e) = self.camera.sender().send(c) {
+            dbg!(e);
+        }
+        self.exposure_param.cancel(&self.changes);
+    }
+}
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;

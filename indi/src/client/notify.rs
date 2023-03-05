@@ -52,7 +52,7 @@ impl<T> Subscription<T> {
         Ok(f(next.deref()))
     }
 
-    pub fn wait_fn<'a, S, E, F: FnMut(&T) -> Result<Status<S>, E>>(
+    pub fn wait_fn<'a, S, E, F: FnMut(Arc<T>) -> Result<Status<S>, E>>(
         &self,
         dur: Duration,
         mut f: F,
@@ -66,7 +66,7 @@ impl<T> Subscription<T> {
                 Err(RecvTimeoutError::Disconnected) => return Err(Error::Canceled),
             };
 
-            if let Status::Complete(ret) = f(next.deref())? {
+            if let Status::Complete(ret) = f(next)? {
                 return Ok(ret);
             }
             let elapsed = start.elapsed();
@@ -194,6 +194,15 @@ impl<T: Clone + Debug> Notify<T> {
         let mut senders = self.to_notify.lock().unwrap();
         s.send(subject.deref().clone())
             .expect("sending initial value");
+        let id = ID_GENERATOR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        senders.insert(id, s);
+        Subscription { id, recv: r }
+    }
+
+    pub fn changes(&self) -> Subscription<T> {
+        let (s, r) = unbounded::<Arc<T>>();
+        let mut senders = self.to_notify.lock().unwrap();
+
         let id = ID_GENERATOR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         senders.insert(id, s);
         Subscription { id, recv: r }

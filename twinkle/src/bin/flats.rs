@@ -1,7 +1,7 @@
 use std::{collections::HashMap, env, net::TcpStream};
 
 use fits_inspect::analysis::Statistics;
-use indi::*;
+use indi::{*, client::PendingChangeBatch};
 use twinkle::*;
 
 
@@ -31,13 +31,14 @@ fn main() {
         .unwrap();
 
     PendingChangeBatch::new()
+        .add(camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]).expect("initiating change"))
+        .add(camera.change("CCD_TRANSFER_FORMAT",vec![("FORMAT_FITS", true)]).expect("initiating change"))
         .add(camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]).expect("initiating change"))
         .add(camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]).expect("initiating change"))
         .add(camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]).expect("initiating change"))
         .add(camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]).expect("initiating change"))
         .wait().expect("wating on change");
     
-
     let filter_wheel = client.get_device(&config.filter_wheel).expect("Getting filter wheel");
 
     filter_wheel.change("CONNECTION", vec![("CONNECT", true)]).expect("initiating change").wait().expect("wating on change");

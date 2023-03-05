@@ -1,6 +1,6 @@
 use std::{env, net::TcpStream, thread, time::Duration};
 
-use indi::*;
+use indi::client::ChangeError;
 
 fn main() -> Result<(), ChangeError<()>> {
     let args: Vec<String> = env::args().collect();
