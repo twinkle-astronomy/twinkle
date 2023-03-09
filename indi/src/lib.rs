@@ -579,6 +579,7 @@ impl<T: ClientConnection> Client<T> {
             .wait_fn::<_, (), _>(Duration::from_secs(60), |devices| {
                 if let Some(device) = devices.get(name) {
                     return Ok(notify::Status::Complete(device::ActiveDevice::new(
+                        String::from(name),
                         device.clone(),
                         self.feedback.clone(),
                     )));

@@ -1,9 +1,11 @@
 use std::{collections::HashMap, env, net::TcpStream};
 
 use fits_inspect::analysis::Statistics;
-use indi::{*, client::PendingChangeBatch};
+use indi::{
+    client::{PendingChangeBatch, Waitable},
+    *,
+};
 use twinkle::*;
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,7 +13,10 @@ fn main() {
 
     let config = TelescopeConfig {
         mount: String::from("EQMod Mount"),
-        imaging_optics: OpticsConfig { focal_length: 800.0, aperture: 203.0 },
+        imaging_optics: OpticsConfig {
+            focal_length: 800.0,
+            aperture: 203.0,
+        },
         imaging_camera: String::from("ZWO CCD ASI294MM Pro"),
         focuser: String::from("ASI EAF"),
         filter_wheel: String::from("ASI EFW"),
@@ -21,32 +26,73 @@ fn main() {
         TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
         None,
         None,
-    ).expect("Connecting to INDI server");
-    let camera = client.get_device(&config.imaging_camera).expect("Getting imaging camera");
+    )
+    .expect("Connecting to INDI server");
+    let camera = client
+        .get_device(&config.imaging_camera)
+        .expect("Getting imaging camera");
 
-    camera.change("CONNECTION", vec![("CONNECT", true)]).expect("initiating change").wait().expect("wating on change");
+    camera
+        .change("CONNECTION", vec![("CONNECT", true)])
+        .expect("initiating change")
+        .wait()
+        .expect("wating on change");
 
     camera
         .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
         .unwrap();
 
     PendingChangeBatch::new()
-        .add(camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]).expect("initiating change"))
-        .add(camera.change("CCD_TRANSFER_FORMAT",vec![("FORMAT_FITS", true)]).expect("initiating change"))
-        .add(camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]).expect("initiating change"))
-        .add(camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]).expect("initiating change"))
-        .add(camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]).expect("initiating change"))
-        .add(camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]).expect("initiating change"))
-        .wait().expect("wating on change");
-    
-    let filter_wheel = client.get_device(&config.filter_wheel).expect("Getting filter wheel");
+        .add(
+            camera
+                .change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)])
+                .expect("initiating change"),
+        )
+        .add(
+            camera
+                .change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)])
+                .expect("initiating change"),
+        )
+        .add(
+            camera
+                .change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)])
+                .expect("initiating change"),
+        )
+        .add(
+            camera
+                .change("FITS_HEADER", vec![("FITS_OBJECT", "")])
+                .expect("initiating change"),
+        )
+        .add(
+            camera
+                .change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)])
+                .expect("initiating change"),
+        )
+        .add(
+            camera
+                .change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)])
+                .expect("initiating change"),
+        )
+        .wait()
+        .expect("wating on change");
 
-    filter_wheel.change("CONNECTION", vec![("CONNECT", true)]).expect("initiating change").wait().expect("wating on change");
+    let filter_wheel = client
+        .get_device(&config.filter_wheel)
+        .expect("Getting filter wheel");
+
+    filter_wheel
+        .change("CONNECTION", vec![("CONNECT", true)])
+        .expect("initiating change")
+        .wait()
+        .expect("wating on change");
 
     let filter_names: HashMap<String, f64> = {
-        let filter_names_param = filter_wheel.get_parameter("FILTER_NAME").expect("getting filter names");
+        let filter_names_param = filter_wheel
+            .get_parameter("FILTER_NAME")
+            .expect("getting filter names");
         let l = filter_names_param.lock();
-        l.get_values::<HashMap<String, Text>>().expect("getting values")
+        l.get_values::<HashMap<String, Text>>()
+            .expect("getting values")
             .iter()
             .map(|(slot, name)| {
                 let slot = slot
@@ -60,16 +106,24 @@ fn main() {
     };
     // dbg!(&filter_names);
 
-    filter_wheel.change(
-        "FILTER_SLOT",
-        vec![("FILTER_SLOT_VALUE", filter_names["Luminance"])],
-    ).expect("initiating change").wait().expect("wating on change");
+    filter_wheel
+        .change(
+            "FILTER_SLOT",
+            vec![("FILTER_SLOT_VALUE", filter_names["Luminance"])],
+        )
+        .expect("initiating change")
+        .wait()
+        .expect("wating on change");
 
     let mut exposure = 1.0;
     let mut captured = 0;
     loop {
         println!("Exposing for {}s", exposure);
-        let fits_data = camera.capture_image(exposure).expect("Capturing image");
+        let fits_data = camera
+            .capture_image(exposure)
+            .expect("Capturing image")
+            .wait()
+            .expect("Capturing image");
         let image_data = fits_data.read_image().expect("Reading captured image");
         let stats = Statistics::new(&image_data.view());
 
@@ -84,8 +138,9 @@ fn main() {
             exposure = (target_median as f64) / (stats.median as f64) * exposure;
         } else {
             captured += 1;
-            fits_data.save(format!("Flat_{}.fits", captured)).expect("saving fits file");
-
+            fits_data
+                .save(format!("Flat_{}.fits", captured))
+                .expect("saving fits file");
 
             println!("Finished: {}", captured);
         }
@@ -93,7 +148,6 @@ fn main() {
             break;
         }
     }
-    
 
     // exposure = find exposure med between 1k, 50k
     // correct_exposure_time = target / exposure_med * exposure_time

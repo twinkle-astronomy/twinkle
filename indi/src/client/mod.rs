@@ -1,15 +1,18 @@
 pub mod device;
 pub mod notify;
 
-
-use std::{sync::Arc, time::Instant, ops::Deref, collections::BTreeSet};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::Deref,
+    sync::Arc,
+    time::Instant,
+};
 
 use crossbeam_channel::{Receiver, Select};
 
-use crate::{serialization, Command, DeError, TypeError, Parameter, ToCommand, TryEq, PropertyState};
+use crate::{serialization, Command, DeError, TypeError};
 
 use super::notify::{Notify, Subscription};
-
 
 #[derive(Debug)]
 pub enum ChangeError<E> {
@@ -19,7 +22,7 @@ pub enum ChangeError<E> {
     Disconnected(crossbeam_channel::SendError<Command>),
     DisconnectedRecv(crossbeam_channel::TryRecvError),
     DisconnectedRecvTimeout(crossbeam_channel::RecvTimeoutError),
-    Abort,
+    Canceled,
     PropertyError,
     TypeMismatch,
 }
@@ -32,8 +35,8 @@ impl<T> From<crossbeam_channel::RecvTimeoutError> for ChangeError<T> {
 impl From<notify::Error<ChangeError<serialization::Command>>> for ChangeError<Command> {
     fn from(value: notify::Error<ChangeError<serialization::Command>>) -> Self {
         match value {
-            notify::Error::Timeout => ChangeError::Abort,
-            notify::Error::Canceled => ChangeError::Abort,
+            notify::Error::Timeout => ChangeError::Canceled,
+            notify::Error::Canceled => ChangeError::Canceled,
             notify::Error::Abort(e) => e,
         }
     }
@@ -70,88 +73,146 @@ impl<E> From<crossbeam_channel::TryRecvError> for ChangeError<E> {
     }
 }
 
+pub trait Waitable {
+    type Result;
+    fn wait(self: Box<Self>) -> Result<Self::Result, ChangeError<Command>>;
+    fn cancel(&self);
+}
+
+impl<I, R, T: Pending<Item = I, Result = R> + ?Sized> Waitable for T {
+    type Result = R;
+
+    fn wait(self: Box<Self>) -> Result<Self::Result, ChangeError<Command>> {
+        loop {
+            let next_value = self.receiver().recv_deadline(self.deadline())?;
+            match self.tick(next_value)? {
+                notify::Status::Pending => {}
+                notify::Status::Complete(result) => return Ok(result),
+            }
+        }
+    }
+
+    fn cancel(&self) {
+        self.cancel()
+    }
+}
+
 pub trait Pending {
     type Item;
     type Result;
+
     fn deadline(&self) -> Instant;
     fn receiver(&self) -> &Receiver<Self::Item>;
     fn tick(&self, item: Self::Item) -> Result<notify::Status<Self::Result>, ChangeError<Command>>;
-    fn abort(&self);
+    fn cancel(&self);
 }
 
-pub struct PendingChangeImpl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> {
-    subscription: Subscription<Parameter>,
-    param: Arc<Notify<Parameter>>,
+pub struct PendingNotify<F, S, T>
+where
+    F: Fn(Arc<S>) -> Result<notify::Status<Arc<T>>, ChangeError<Command>>,
+{
+    subscription: Subscription<S>,
+    notifier: Arc<Notify<S>>,
     deadline: Instant,
-    values: P,
+    func: F,
 }
 
-impl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> PendingChangeImpl<P> {
-
-    pub fn wait(&self) -> Result<Arc<Parameter>, ChangeError<Command>> {
-        let r = self
-            .subscription
-            .wait_fn::<Arc<Parameter>, ChangeError<Command>, _>(
-                self.deadline() - Instant::now(),
-                |param_lock| {
-                    self.tick(param_lock)
-                },
-            )?;
-        Ok(r)
-    }
-}
-impl<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static> Pending for PendingChangeImpl<P> {
-    type Item = Arc<Parameter>;
-    type Result = Arc<Parameter>;
-    fn tick(&self, next: Arc<Parameter>) -> Result<notify::Status<Arc<Parameter>>, ChangeError<Command>> {
-        if *next.get_state() == PropertyState::Alert {
-            return Err(ChangeError::PropertyError);
-        }
-        if self.values.try_eq(&next)? {
-            Ok(notify::Status::Complete(next.clone()))
-        } else {
-            Ok(notify::Status::Pending)
-        }
+impl<F, S, T> Pending for PendingNotify<F, S, T>
+where
+    F: Fn(Arc<S>) -> Result<notify::Status<Arc<T>>, ChangeError<Command>>,
+    S: Clone + std::fmt::Debug,
+{
+    type Item = Arc<S>;
+    type Result = Arc<T>;
+    fn tick(&self, next: Self::Item) -> Result<notify::Status<Self::Result>, ChangeError<Command>> {
+        (self.func)(next)
     }
 
     fn deadline(&self) -> Instant {
         self.deadline
     }
 
-    fn receiver(&self) -> &Receiver<Arc<Parameter>> {
+    fn receiver(&self) -> &Receiver<Self::Item> {
         self.subscription.deref()
     }
 
-    fn abort(&self) {
-        self.param.cancel(&self.subscription);
+    fn cancel(&self) {
+        self.notifier.cancel(&self.subscription);
     }
 }
-// pub struct PendingSequence {
-//     pendings: Vec<Box<dyn Pending>>
-// }
+
+pub struct WaitingSequence<R1, R2, F1, F2>
+where
+    F1: FnOnce() -> Result<Box<dyn Waitable<Result = R1>>, ChangeError<Command>>,
+    F2: FnOnce(R1) -> Result<Box<dyn Waitable<Result = R2>>, ChangeError<Command>>,
+{
+    first: F1,
+    next: F2,
+}
+
+impl<R1, R2, F1, F2> WaitingSequence<R1, R2, F1, F2>
+where
+    F1: FnOnce() -> Result<Box<dyn Waitable<Result = R1>>, ChangeError<Command>>,
+    F2: FnOnce(R1) -> Result<Box<dyn Waitable<Result = R2>>, ChangeError<Command>>,
+{
+    pub fn new(first: F1, next: F2) -> WaitingSequence<R1, R2, F1, F2> {
+        WaitingSequence { first, next }
+    }
+}
+
+impl<R1, R2, F1, F2> Waitable for WaitingSequence<R1, R2, F1, F2>
+where
+    F1: FnOnce() -> Result<Box<dyn Waitable<Result = R1>>, ChangeError<Command>>,
+    F2: FnOnce(R1) -> Result<Box<dyn Waitable<Result = R2>>, ChangeError<Command>>,
+{
+    type Result = R2;
+
+    fn wait(self: Box<Self>) -> Result<Self::Result, ChangeError<Command>> {
+        let item = (self.first)()?;
+        let next = (self.next)(item.wait()?)?;
+        next.wait()
+    }
+
+    fn cancel(&self) {
+        todo!()
+    }
+}
+
 pub struct PendingChangeBatch<I, R> {
-    changes: Vec<Box<dyn Pending<Item=I, Result=R>>>,
+    changes: Vec<Box<dyn Pending<Item = I, Result = R>>>,
 }
 
 impl<I, R> PendingChangeBatch<I, R> {
-    pub fn new() -> PendingChangeBatch<I, R>  {
+    pub fn new() -> PendingChangeBatch<I, R> {
         PendingChangeBatch {
             changes: Default::default(),
         }
     }
 
-    pub fn add<T: Pending<Item=I, Result=R> + 'static>(mut self, pending_change: T) -> PendingChangeBatch<I, R>  {
-        self.changes.push(Box::new(pending_change));
+    pub fn add(
+        mut self,
+        pending_change: Box<dyn Pending<Item = I, Result = R> + 'static>,
+    ) -> PendingChangeBatch<I, R> {
+        self.changes.push(pending_change);
         self
     }
 
-    pub fn wait(self) -> Result<R, ChangeError<Command>> {
+    pub fn wait(self) -> Result<HashMap<usize, R>, ChangeError<Command>> {
+        Box::new(self).wait()
+    }
+}
+impl<I, R> Waitable for PendingChangeBatch<I, R> {
+    type Result = HashMap<usize, R>;
+    fn wait(self: Box<Self>) -> Result<Self::Result, ChangeError<Command>> {
+        // let results = Vec::with_capacity(self.changes.len());
         let mut sel = Select::new();
         let mut remaining = BTreeSet::new();
         for (i, r) in self.changes.iter().enumerate() {
             sel.recv(r.receiver());
             remaining.insert(i);
         }
+
+        let mut results = HashMap::new();
 
         loop {
             let selected = sel.select();
@@ -160,31 +221,39 @@ impl<I, R> PendingChangeBatch<I, R> {
             match self.changes[i].tick(r) {
                 Ok(v) => {
                     if let notify::Status::Complete(v) = v {
+                        results.insert(i, v);
                         remaining.remove(&i);
-                     
+
                         if remaining.is_empty() {
-                            return Ok(v);
+                            return Ok(results);
                         }
                     }
                 }
                 Err(e) => {
                     for i in &remaining {
-                        self.changes[*i].abort();
+                        self.changes[*i].cancel();
                     }
                     return Err(e);
                 }
             }
         }
     }
+
+    fn cancel(&self) {
+        for change in &self.changes {
+            change.cancel();
+        }
+    }
 }
 
-pub fn batch<T: Pending<Item=X, Result=Y> + 'static, X, Y>( changes: Vec<T> ) -> Result<Y, ChangeError<Command>> {
+pub fn batch<T: Pending<Item = X, Result = Y> + 'static, X, Y>(
+    changes: Vec<T>,
+) -> Result<HashMap<usize, Y>, ChangeError<Command>> {
     let mut batch = PendingChangeBatch::<X, Y>::new();
 
     for f in changes {
-        batch = batch.add(f);
+        batch = batch.add(Box::new(f));
     }
 
-    batch.wait()
+    Box::new(batch).wait()
 }
-

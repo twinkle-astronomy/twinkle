@@ -8,7 +8,7 @@ use std::{
 };
 
 use fits_inspect::{analysis::Statistics, egui::FitsWidget};
-use indi::{ClientConnection, client::device::FitsImage};
+use indi::{client::device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
@@ -63,7 +63,8 @@ impl FitsViewerApp {
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;
                         }
-                        let fits = FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
+                        let fits =
+                            FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
                         let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
 
                         let mut fits_widget = fits_widget.lock().unwrap();

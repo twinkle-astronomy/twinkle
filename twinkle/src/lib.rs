@@ -5,7 +5,7 @@ mod backend;
 
 pub struct OpticsConfig {
     pub focal_length: f64,
-    pub aperture: f64
+    pub aperture: f64,
 }
 
 pub struct TelescopeConfig {
