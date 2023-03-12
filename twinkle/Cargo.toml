@@ -20,3 +20,4 @@ fitsio = {version = "0.21.2", features = ["array"] }
 chrono = "0.4.23"
 ndarray = "0.15.6"
 libc = "0.2.139"
+tokio-stream = "0.1.12"

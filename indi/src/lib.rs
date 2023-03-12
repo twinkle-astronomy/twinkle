@@ -1,5 +1,6 @@
 use client::device;
 use client::notify;
+use client::notify::wait_fn;
 use client::notify::Notify;
 use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
@@ -570,23 +571,23 @@ impl<T: ClientConnection> Client<T> {
         Ok(c)
     }
 
-    pub fn get_device<'a>(
+    pub async fn get_device<'a>(
         &'a self,
         name: &str,
     ) -> Result<client::device::ActiveDevice, notify::Error<()>> {
-        self.devices
-            .subscribe()
-            .wait_fn::<_, (), _>(Duration::from_secs(60), |devices| {
-                if let Some(device) = devices.get(name) {
-                    return Ok(notify::Status::Complete(device::ActiveDevice::new(
-                        String::from(name),
-                        device.clone(),
-                        self.feedback.clone(),
-                    )));
-                }
+        let subs = self.devices.subscribe();
+        wait_fn(subs, Duration::from_secs(1), |devices| {
+            if let Some(device) = devices.get(name) {
+                return Ok(notify::Status::Complete(device::ActiveDevice::new(
+                    String::from(name),
+                    device.clone(),
+                    self.feedback.clone(),
+                )));
+            }
 
-                Ok(notify::Status::Pending)
-            })
+            Ok(notify::Status::Pending)
+        })
+        .await
     }
 }
 
