@@ -6,7 +6,7 @@ fn main() -> Result<(), ChangeError<()>> {
     let args: Vec<String> = env::args().collect();
     let addr = &args[1];
 
-    let client = indi::Client::new(
+    let client = indi::client::new(
         TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
         None,
         None,
@@ -14,6 +14,6 @@ fn main() -> Result<(), ChangeError<()>> {
 
     thread::sleep(Duration::from_secs(10));
 
-    println!("{:#?}", client.devices);
+    println!("{:#?}", client.get_devices());
     Ok(())
 }

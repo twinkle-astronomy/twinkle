@@ -12,7 +12,7 @@ eframe = "0.20.1"
 egui = "0.20.1"
 fitsio = {version = "0.21.2", features = ["array"] }
 image = "0.24.5"
-indi = {version = "1.0.0", path = "../indi" }
+indi = { path = "../indi" }
 median = "0.3.2"
 ndarray = "0.15.6"
 ndarray-conv = "0.1.3"

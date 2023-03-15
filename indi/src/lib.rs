@@ -1,30 +1,118 @@
-use client::device;
-use client::notify;
-use client::notify::wait_fn;
-use client::notify::Notify;
+//! # A general purpose library for interacting with the INDI protocol.
+//! The Instrument Neutral Distributed Interface (INDI for short) protocol is
+//! an XML-like communicatinos protocol used in the astronomical community
+//! to control and monitor astronomical equipment.  For more information on INDI see
+//! the project's website [here](https://indilib.org/).
+//!
+//! The purpose of this crate is to provide a convinent way to interact with devices
+//! using the INDI protocol.  Details on the protocol can be found [here](http://docs.indilib.org/protocol/INDI.pdf).
+//!
+//! ## Quickstart
+//! ### Prerequisites
+//! To compile this crate, you must first have the libcfitsio library installed.  For debian based linux distros this can be satisfied by running:
+//! ```shell
+//! $ sudo apt install libcfitsio-dev
+//! ```
+//!
+//! Once that's complete, using you should be able to use cargo to install the crate.
+//!
+//! ### Simple usage.
+//!
+//! The simpliest way to use this crate is to open a [TcpStream](std::net::TcpStream) and read/write INDI [commands](crate::serialization::Command).
+//! #### Example
+//! ```no_run
+//! use std::net::TcpStream;
+//! use indi::client::ClientConnection;
+//!
+//! fn main() {
+//!     // Connect to local INDI server.
+//!     let connection = TcpStream::connect("127.0.0.1:7624").expect("Connecting to INDI server");
+//!
+//!     // Write command to server instructing it to track all properties.
+//!     connection.write(&indi::serialization::GetProperties {
+//!         version: indi::INDI_PROTOCOL_VERSION.to_string(),
+//!         device: None,
+//!         name: None,
+//!     })
+//!     .expect("Sending GetProperties command");
+//!
+//!     // Loop through commands recieved from the INDI server
+//!     for command in connection.iter().expect("Creating iterator over commands") {
+//!         println!("Received from server: {:?}", command);
+//!     }
+//! }
+//! ```
+//!
+//! ### Using the Client interface
+//! The simple usage above has its uses, but if you want to track and modify the state of devices at an INDI server it is recommended to use
+//! the [client interface](crate::client::Client).  The client allows you to get [devices](crate::client::device::ActiveDevice),
+//! be [notified](crate::client::notify) of changes to those devices, and request [changes](crate::client::device::ActiveDevice::change).
+//! #### Example
+//! ```no_run
+//! use std::net::TcpStream;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     // Create a client with a connection to localhost listening for all device properties.
+//!     let client = indi::client::new(
+//!         TcpStream::connect("127.0.0.1:7624").expect("Connecting to INDI server"),
+//!         None,
+//!         None).expect("Initializing connection");
+//!
+//!     // Get an specific camera device
+//!     let camera = client
+//!         .get_device("ZWO CCD ASI294MM Pro")
+//!         .await
+//!         .expect("Getting camera device");
+//!
+//!     // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
+//!     camera
+//!         .change("CONNECTION", vec![("CONNECT", true)])
+//!         .await
+//!         .expect("Connecting to camera");
+//!
+//!     // Enabling blob transport for the camera.  
+//!     camera
+//!         .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
+//!         .await
+//!         .expect("Enabling image retrieval");
+//!
+//!     // Configuring a varienty of the camera's properties at the same time.
+//!     tokio::try_join!(
+//!         camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
+//!         camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
+//!         camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
+//!         camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
+//!         camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
+//!         camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
+//!         )
+//!         .expect("Configuring camera");
+//!
+//!     // Capture a 5 second exposure from the camera
+//!     let fits = camera.capture_image(5.0).await.expect("Capturing image");
+//!
+//!     // Save the fits file to disk.
+//!     fits.save("flat.fits").expect("Saving image");
+//! }
+
 use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Result as XmlResult;
-use quick_xml::{Reader, Writer};
+use quick_xml::Writer;
 
 use std::borrow::Cow;
-use std::io::{BufReader, BufWriter};
-use std::net::TcpStream;
 
 use std::num;
 use std::num::Wrapping;
 
 use std::str;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
 use chrono::format::ParseError;
 use chrono::prelude::*;
-use std::io::Write;
 use std::str::FromStr;
 
 use std::collections::HashMap;
@@ -32,7 +120,7 @@ use std::collections::HashMap;
 pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 
 pub mod serialization;
-pub use serialization::*;
+use serialization::*;
 
 pub mod client;
 
@@ -381,321 +469,5 @@ impl TryEq<Parameter> for Vec<OneText> {
         Ok(self.iter().all(|other_value| {
             Some(&other_value.value) == current_values.get(&other_value.name).map(|x| &x.value)
         }))
-    }
-}
-
-pub trait ToCommand<T> {
-    fn to_command(self, device_name: String, param_name: String) -> Command;
-}
-
-impl<I: Into<SwitchState> + Copy> ToCommand<Vec<(&str, I)>> for Vec<(&str, I)> {
-    fn to_command(self, device_name: String, param_name: String) -> Command {
-        Command::NewSwitchVector(NewSwitchVector {
-            device: device_name,
-            name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
-            switches: self
-                .iter()
-                .map(|x| OneSwitch {
-                    name: String::from(x.0),
-                    value: x.1.into(),
-                })
-                .collect(),
-        })
-    }
-}
-
-impl ToCommand<Vec<OneSwitch>> for Vec<OneSwitch> {
-    fn to_command(self, device_name: String, param_name: String) -> Command {
-        Command::NewSwitchVector(NewSwitchVector {
-            device: device_name,
-            name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
-            switches: self,
-        })
-    }
-}
-
-impl ToCommand<Vec<(&str, f64)>> for Vec<(&str, f64)> {
-    fn to_command(self, device_name: String, param_name: String) -> Command {
-        Command::NewNumberVector(NewNumberVector {
-            device: device_name,
-            name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
-            numbers: self
-                .iter()
-                .map(|x| OneNumber {
-                    name: String::from(x.0),
-                    value: x.1,
-                })
-                .collect(),
-        })
-    }
-}
-impl ToCommand<Vec<OneNumber>> for Vec<OneNumber> {
-    fn to_command(self, device_name: String, param_name: String) -> Command {
-        Command::NewNumberVector(NewNumberVector {
-            device: device_name,
-            name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
-            numbers: self,
-        })
-    }
-}
-
-impl ToCommand<Vec<(&str, &str)>> for Vec<(&str, &str)> {
-    fn to_command(self, device_name: String, param_name: String) -> Command {
-        Command::NewTextVector(NewTextVector {
-            device: device_name,
-            name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
-            texts: self
-                .iter()
-                .map(|x| OneText {
-                    name: String::from(x.0),
-                    value: String::from(x.1),
-                })
-                .collect(),
-        })
-    }
-}
-impl ToCommand<Vec<OneText>> for Vec<OneText> {
-    fn to_command(self, device_name: String, param_name: String) -> Command {
-        Command::NewTextVector(NewTextVector {
-            device: device_name,
-            name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
-            texts: self,
-        })
-    }
-}
-#[derive(Debug, PartialEq)]
-pub enum UpdateError {
-    ParameterMissing(String),
-    ParameterTypeMismatch(String),
-}
-
-pub enum Action {
-    Define,
-    Update,
-    Delete,
-}
-
-pub trait CommandtoParam {
-    fn get_name(&self) -> &String;
-    fn get_group(&self) -> &Option<String>;
-    fn to_param(self, gen: Wrapping<usize>) -> Parameter;
-}
-
-pub trait CommandToUpdate {
-    fn get_name(&self) -> &String;
-    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError>;
-}
-
-pub enum ClientErrors {
-    DeError(DeError),
-    UpdateError(UpdateError),
-}
-
-impl From<DeError> for ClientErrors {
-    fn from(err: DeError) -> Self {
-        ClientErrors::DeError(err)
-    }
-}
-impl From<UpdateError> for ClientErrors {
-    fn from(err: UpdateError) -> Self {
-        ClientErrors::UpdateError(err)
-    }
-}
-
-/// Struct used to keep track of a the devices and their properties.
-/// When used in conjunction with the Connection struct can be used to
-/// track and control devices managed by an INDI server.
-pub struct Client<T: ClientConnection + 'static> {
-    pub devices: Arc<Notify<MemoryDeviceStore>>,
-    pub connection: T,
-    feedback: crossbeam_channel::Sender<Command>,
-}
-
-impl<T: ClientConnection> Client<T> {
-    /// Create a new client object.
-    pub fn new(
-        connection: T,
-        device: Option<&str>,
-        parameter: Option<&str>,
-    ) -> Result<Client<T>, std::io::Error> {
-        connection
-            .write(&GetProperties {
-                version: INDI_PROTOCOL_VERSION.to_string(),
-                device: device.map(|x| String::from(x)),
-                name: parameter.map(|x| String::from(x)),
-            })
-            .expect("Unable to write command");
-        let (feedback, incoming_commands) = crossbeam_channel::unbounded();
-        let c = Client {
-            devices: Arc::new(Notify::new(HashMap::new())),
-            connection,
-            feedback,
-        };
-
-        let thread_connection = c.connection.clone_writer()?;
-        thread::spawn(move || {
-            let mut xml_writer =
-                Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
-            for command in incoming_commands.iter() {
-                command
-                    .write(&mut xml_writer)
-                    .expect("Writing command to connection");
-                xml_writer.inner().flush().expect("Flushing connection");
-            }
-        });
-
-        let thread_devices = c.devices.clone();
-        let connection_iter = c.connection.iter()?;
-        thread::spawn(move || {
-            for command in connection_iter {
-                match command {
-                    Ok(command) => {
-                        let mut locked_devices = thread_devices.lock();
-                        let update_result = locked_devices.update(command, |_param| {});
-                        if let Err(e) = update_result {
-                            dbg!(e);
-                        }
-                    }
-                    Err(e) => {
-                        dbg!(&e);
-                    }
-                }
-            }
-        });
-        Ok(c)
-    }
-
-    pub async fn get_device<'a>(
-        &'a self,
-        name: &str,
-    ) -> Result<client::device::ActiveDevice, notify::Error<()>> {
-        let subs = self.devices.subscribe();
-        wait_fn(subs, Duration::from_secs(1), |devices| {
-            if let Some(device) = devices.get(name) {
-                return Ok(notify::Status::Complete(device::ActiveDevice::new(
-                    String::from(name),
-                    device.clone(),
-                    self.feedback.clone(),
-                )));
-            }
-
-            Ok(notify::Status::Pending)
-        })
-        .await
-    }
-}
-
-pub type MemoryDeviceStore = HashMap<String, Arc<Notify<client::device::Device>>>;
-
-pub trait DeviceStore {
-    /// Update the state of the appropriate device property for a command that came from an INDI server.
-    fn update<T>(
-        &mut self,
-        command: serialization::Command,
-        f: impl FnOnce(notify::NotifyMutexGuard<Parameter>) -> T,
-    ) -> Result<Option<T>, UpdateError>;
-}
-
-impl DeviceStore for MemoryDeviceStore {
-    fn update<T>(
-        &mut self,
-        command: serialization::Command,
-        f: impl FnOnce(notify::NotifyMutexGuard<Parameter>) -> T,
-    ) -> Result<Option<T>, UpdateError> {
-        let name = command.device_name();
-        match name {
-            Some(name) => {
-                let mut device = self
-                    .entry(name.clone())
-                    .or_insert(Arc::new(Notify::new(client::device::Device::new(
-                        name.clone(),
-                    ))))
-                    .lock();
-                let param = device.update(command)?;
-                Ok(match param {
-                    Some(p) => Some(f(p)),
-                    None => None,
-                })
-            }
-            None => Ok(None),
-        }
-    }
-}
-
-pub trait ClientConnection {
-    type Read: std::io::Read + Send;
-    type Write: std::io::Write + Send;
-
-    /// Creates an interator that yields commands from the the connected INDI server.
-    /// Example usage:
-    /// ```no_run
-    /// use std::collections::HashMap;
-    /// use crate::indi::{ClientConnection, DeviceStore};
-    /// use crate::indi::client::device::Device;
-    /// use std::net::TcpStream;
-    /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
-    /// connection.write(&indi::GetProperties {
-    ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
-    ///     device: None,
-    ///     name: None,
-    /// }).unwrap();
-    ///
-    /// let mut client = HashMap::<String, Device>::new();
-    ///
-    /// for command in connection.iter().unwrap() {
-    ///     println!("Command: {:?}", command);
-    /// }
-    fn iter(&self) -> Result<serialization::CommandIter<BufReader<Self::Read>>, std::io::Error> {
-        let mut xml_reader = Reader::from_reader(BufReader::new(self.clone_reader()?));
-
-        xml_reader.trim_text(true);
-        xml_reader.expand_empty_elements(true);
-
-        let iter = serialization::CommandIter::new(xml_reader);
-        Ok(iter)
-    }
-
-    /// Sends the given INDI command to the connected server.  Consumes the command.
-    /// Example usage:
-    /// ```no_run
-    /// use crate::indi::ClientConnection;
-    /// use std::net::TcpStream;
-    /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
-    /// connection.write(&indi::GetProperties {
-    ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
-    ///     device: None,
-    ///     name: None,
-    /// }).unwrap();
-    ///
-    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>
-    where
-        <Self as ClientConnection>::Write: std::io::Write,
-    {
-        let mut xml_writer = Writer::new_with_indent(BufWriter::new(self.clone_writer()?), b' ', 2);
-
-        command.write(&mut xml_writer)?;
-        xml_writer.inner().flush()?;
-        Ok(())
-    }
-
-    fn clone_reader(&self) -> Result<Self::Read, std::io::Error>;
-    fn clone_writer(&self) -> Result<Self::Write, std::io::Error>;
-}
-
-impl ClientConnection for TcpStream {
-    type Read = TcpStream;
-    type Write = TcpStream;
-
-    fn clone_reader(&self) -> Result<TcpStream, std::io::Error> {
-        self.try_clone()
-    }
-    fn clone_writer(&self) -> Result<TcpStream, std::io::Error> {
-        self.try_clone()
     }
 }

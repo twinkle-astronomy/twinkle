@@ -18,6 +18,7 @@ use super::{
     ChangeError,
 };
 
+/// Internal representation of a device.
 #[derive(Debug, Clone)]
 pub struct Device {
     name: String,
@@ -27,6 +28,7 @@ pub struct Device {
 }
 
 impl Device {
+    /// Creates a new device named `name` with no parameters.
     pub fn new(name: String) -> Device {
         Device {
             name,
@@ -36,6 +38,7 @@ impl Device {
         }
     }
 
+    /// Updates the current device based on `command`.
     pub fn update(
         &mut self,
         command: serialization::Command,
@@ -61,14 +64,17 @@ impl Device {
         }
     }
 
+    /// Returns a `&Vec<String>` of all currently know parameter names.
     pub fn parameter_names(&self) -> &Vec<String> {
         return &self.names;
     }
 
+    /// Returns a `&Vec<Option<String>>` of all currently know parameter groups.
     pub fn parameter_groups(&self) -> &Vec<Option<String>> {
         return &self.groups;
     }
 
+    /// Returns a `&Vec<String>` of all currently parameters.
     pub fn get_parameters(&self) -> &HashMap<String, Arc<Notify<Parameter>>> {
         return &self.parameters;
     }
@@ -84,17 +90,17 @@ impl Device {
             self.groups.push(def.get_group().clone());
         }
 
-        if let Some(existing) = self.parameters.get(&name) {
-            let mut l = existing.lock();
-
-            let param = def.to_param(l.gen() + Wrapping(1));
-            *l = param;
-        } else {
+        if !self.parameters.contains_key(&name) {
             let param = def.to_param(Wrapping(0));
             self.parameters
                 .insert(name.clone(), Arc::new(Notify::new(param)));
         }
-        Ok(self.parameters.get(&name).map(|x| x.lock()))
+        let param = self.parameters.get(&name);
+        let res = match param {
+            Some(param) => Some(param.lock()?),
+            None => None,
+        };
+        Ok(res)
     }
 
     fn update_param<T: CommandToUpdate>(
@@ -103,7 +109,7 @@ impl Device {
     ) -> Result<Option<notify::NotifyMutexGuard<'_, Parameter>>, UpdateError> {
         match self.parameters.get_mut(&new_command.get_name().clone()) {
             Some(param) => {
-                let mut param = param.lock();
+                let mut param = param.lock()?;
                 *param.gen_mut() += Wrapping(1);
                 new_command.update_param(&mut param)?;
                 Ok(Some(param))
@@ -132,15 +138,19 @@ impl Device {
     }
 }
 
+/// A struct wrapping the raw bytes of a FitsImage.
 pub struct FitsImage {
     raw_data: Arc<Vec<u8>>,
 }
 
 impl FitsImage {
+    /// Returns a new FitsImage from the given raw data
     pub fn new(data: Arc<Vec<u8>>) -> FitsImage {
         FitsImage { raw_data: data }
     }
 
+    /// Returns an `ndarray::ArrayD<u16>` of the image data contained within `self`.  Currently only supports
+    ///   single-channel 16bit images.
     pub fn read_image(&self) -> fitsio::errors::Result<ndarray::ArrayD<u16>> {
         let mut ptr_size = self.raw_data.capacity();
         let mut ptr = self.raw_data.as_ptr();
@@ -170,6 +180,8 @@ impl FitsImage {
         hdu.read_image(&mut f)
     }
 
+    /// Saves the FitsImage as a fits file at the given path.  Will create all
+    ///  necessary directories if they do not exist.
     pub fn save<T: AsRef<Path>>(&self, path: T) -> Result<(), std::io::Error> {
         if let Some(dir) = path.as_ref().parent() {
             create_dir_all(dir)?;
@@ -180,12 +192,14 @@ impl FitsImage {
     }
 }
 
+/// Object representing a device connected to an INDI server.
 #[derive(Clone)]
 pub struct ActiveDevice {
     name: String,
     device: Arc<Notify<Device>>,
     command_sender: crossbeam_channel::Sender<Command>,
 }
+
 impl ActiveDevice {
     pub fn new(
         name: String,
@@ -199,6 +213,8 @@ impl ActiveDevice {
         }
     }
 
+    /// Returns the sender used to send commands
+    ///  to the associated INDI server connection.
     pub fn sender(&self) -> &crossbeam_channel::Sender<Command> {
         &self.command_sender
     }
@@ -213,11 +229,13 @@ impl Deref for ActiveDevice {
 }
 
 impl ActiveDevice {
+    /// Returns the requested parameter, waiting up to 1 second for it to be defined
+    ///  by the connected INDI server.  
     pub async fn get_parameter(
         &self,
         param_name: &str,
     ) -> Result<Arc<Notify<Parameter>>, notify::Error<Command>> {
-        let subs = self.device.subscribe();
+        let subs = self.device.subscribe()?;
         wait_fn(subs, Duration::from_secs(1), |device| {
             Ok(match device.get_parameters().get(param_name) {
                 Some(param) => notify::Status::Complete(param.clone()),
@@ -227,6 +245,31 @@ impl ActiveDevice {
         .await
     }
 
+    /// Ensures that the parameter named `param_name` has the given value with the INDI server.
+    /// If the INDI server's value does not match the `values` given, it will send the
+    /// INDI server commands necessary to change values, and wait for the server
+    /// to confirm the desired values.  This method will wait for the parameter's
+    /// `timeout` (or 60 seconds if not defined by the server) for the parameter value to match
+    ///  the desired value before timing out.
+    /// # Arguments
+    /// * `param_name` - The name of the parameter you wish to change.  If the parameter does not exist,
+    ///                  This method will wait up to 1 second for it to exist before timing out.
+    /// * `values` - The target values of the named parameter.  This argument must be of a type that
+    ///              can be compared to the named parameter, and converted into an INDI command if nessesary.
+    ///              See [crate::TryEq] and [crate::ToCommand] for type conversions.  If the given values do not
+    ///              match the parameter types nothing be communicated to the server and aa [ChangeError::TypeMismatch]
+    ///              will be returned.
+    /// # Example
+    /// ```no_run
+    /// use indi::*;
+    /// use indi::client::device::ActiveDevice;
+    /// async fn change_usage_example(filter_wheel: ActiveDevice) {
+    ///     filter_wheel.change(
+    ///         "FILTER_SLOT",
+    ///         vec![("FILTER_SLOT_VALUE", 5.0)],
+    ///     ).await.expect("Changing filter");
+    /// }
+    /// ```
     pub async fn change<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static>(
         &self,
         param_name: &str,
@@ -236,9 +279,9 @@ impl ActiveDevice {
 
         let param = self.get_parameter(param_name).await?;
 
-        let subscription = param.subscribe();
+        let subscription = param.subscribe()?;
         let timeout = {
-            let param = param.lock();
+            let param = param.lock()?;
 
             if !values.try_eq(&param)? {
                 let c = values
@@ -269,16 +312,35 @@ impl ActiveDevice {
         Ok(res)
     }
 
+    /// Sends an `EnableBlob` command to the connected INDI server for the named parameter.  This must be called
+    ///  on a Blob parameter with a value of either [crate::BlobEnable::Only] or [crate::BlobEnable::Also] for
+    ///  the server to send image data.
+    /// # Arguments
+    /// * `param_name` - The optional name of the blob parameter to configure.  If `Some(param_name)` is provided
+    ///                  and the parameter does not exist, this method will wait up to 1 second for it to exist
+    ///                  before timing out.
+    /// * `enabled` - The [crate::BlobEnable] value you wish to send to the server.
+    /// # Example
+    /// ```no_run
+    /// use indi::client::device::ActiveDevice;
+    /// use indi::BlobEnable;
+    /// async fn enable_blob_usage_example(camera: ActiveDevice) {
+    ///     // Instruct server to send blob data along with regular parameter updates
+    ///     camera.enable_blob(
+    ///         Some("CCD1"), BlobEnable::Also,
+    ///     ).await.expect("Enabling blobs");
+    /// }
+    /// ```
     pub async fn enable_blob(
         &self,
         name: Option<&str>,
-        enabled: BlobEnable,
+        enabled: crate::BlobEnable,
     ) -> Result<(), notify::Error<Command>> {
         // Wait for device and paramater to exist
         if let Some(name) = name {
             let _ = self.get_parameter(name).await?;
         }
-        let device_name = self.device.lock().name.clone();
+        let device_name = self.device.lock()?.name.clone();
         self.sender().send(Command::EnableBlob(EnableBlob {
             device: device_name,
             name: name.map(|x| String::from(x)),
@@ -286,21 +348,60 @@ impl ActiveDevice {
         }))?;
         Ok(())
     }
+
+    /// Returns a [FitsImage] after exposing the camera device for `exposure` seconds.
+    ///   Currently this method is only tested on the ZWO ASI 294MM Pro.  `enable_blob` must be
+    ///   called against the `"CCD1"` parameter prior to the usage of this method.
+    /// # Arguments
+    /// * `exposure` - How long to expose the camera in seconds.
+    /// # Example
+    /// ```no_run
+    /// use indi::client::device::ActiveDevice;
+    /// use indi::*;
+    /// async fn capture_image_usage_example(camera: ActiveDevice) {
+    ///     let image = camera.capture_image(30.0).await.expect("Capturing an image");
+    /// }
+    /// ```
     pub async fn capture_image(&self, exposure: f64) -> Result<FitsImage, ChangeError<Command>> {
-        let (image_param, exposure_param) = tokio::try_join!(
-            self.get_parameter("CCD1"),
-            self.get_parameter("CCD_EXPOSURE")
-        )?;
-        self.capture_image_from_params(exposure, image_param, exposure_param)
-            .await
+        let image_param = self.get_parameter("CCD1").await?;
+        self.capture_image_from_param(exposure, &image_param).await
     }
 
-    pub async fn capture_image_from_params(
+    /// Returns a [FitsImage] after exposing the camera device for `exposure` seconds.
+    ///   Currently this method is only tested on the ZWO ASI 294MM Pro.  `enable_blob` must be
+    ///   called against the `"CCD1"` parameter prior to the usage of this method.
+    /// # Arguments
+    /// * `exposure` - How long to expose the camera in seconds.
+    /// * `image_param` - The parameter to read the fits data from.  This does not need to be
+    ///                   from the same client connection, enabling you to use a dedicated client
+    ///                   connection for retrieving images.
+    /// # Example
+    /// ```no_run
+    /// use std::net::TcpStream;
+    /// use indi::client::Client;
+    /// use indi::client::device::{ActiveDevice, FitsImage};
+    /// use indi::*;
+    /// async fn capture_image_from_param_usage_example(client: Client<TcpStream>, blob_client: Client<TcpStream>) {
+    ///     // Get the camera device from the client dedicated to transfering blob data.
+    ///     let blob_camera = blob_client.get_device("ZWO CCD ASI294MM Pro").await.unwrap();
+    ///     // Enable blobs
+    ///     blob_camera.enable_blob(Some("CCD1"), indi::BlobEnable::Only).await.unwrap();
+    ///     // Get the parameter used to transfer images from the camera after an exposure
+    ///     let ccd_blob_param = blob_camera.get_parameter("CCD1").await.unwrap();
+    ///
+    ///     // Use the non-blob client to get the device used to control the camera
+    ///     let camera = client.get_device("ZWO CCD ASI294MM Pro").await.unwrap();
+    ///     // Capture an image, getting the blob data from a client connection dedicated
+    ///     //  to transfering blob data.
+    ///     let image: FitsImage = camera.capture_image_from_param(30.0, &ccd_blob_param).await.unwrap();
+    /// }
+    /// ```
+    pub async fn capture_image_from_param(
         &self,
         exposure: f64,
-        image_param: Arc<Notify<Parameter>>,
-        exposure_param: Arc<Notify<Parameter>>,
+        image_param: &Notify<Parameter>,
     ) -> Result<FitsImage, ChangeError<Command>> {
+        let exposure_param = self.get_parameter("CCD_EXPOSURE").await?;
         let device_name = self.name.clone();
 
         let image_changes = image_param.changes();
@@ -420,7 +521,12 @@ mod tests {
             .unwrap();
         assert_eq!(device.get_parameters().len(), 1);
         {
-            let param = device.get_parameters().get("Exposure").unwrap().lock();
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .unwrap();
             if let Parameter::SwitchVector(stored) = param.deref() {
                 assert_eq!(
                     stored,
@@ -467,7 +573,12 @@ mod tests {
         assert_eq!(device.get_parameters().len(), 1);
 
         {
-            let param = device.get_parameters().get("Exposure").unwrap().lock();
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .unwrap();
             if let Parameter::SwitchVector(stored) = param.deref() {
                 assert_eq!(
                     stored,
@@ -528,7 +639,12 @@ mod tests {
         assert_eq!(device.get_parameters().len(), 1);
 
         {
-            let param = device.get_parameters().get("Exposure").unwrap().lock();
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .unwrap();
             if let Parameter::NumberVector(stored) = param.deref() {
                 assert_eq!(
                     stored,
@@ -582,7 +698,12 @@ mod tests {
         assert_eq!(device.get_parameters().len(), 1);
 
         {
-            let param = device.get_parameters().get("Exposure").unwrap().lock();
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .unwrap();
             if let Parameter::NumberVector(stored) = param.deref() {
                 assert_eq!(
                     stored,
@@ -642,7 +763,12 @@ mod tests {
         assert_eq!(device.get_parameters().len(), 1);
 
         {
-            let param = device.get_parameters().get("Exposure").unwrap().lock();
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .unwrap();
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(
                     stored,
@@ -688,7 +814,12 @@ mod tests {
         assert_eq!(device.get_parameters().len(), 1);
 
         {
-            let param = device.get_parameters().get("Exposure").unwrap().lock();
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .unwrap();
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(
                     stored,

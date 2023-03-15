@@ -8,7 +8,7 @@ use std::{
 };
 
 use fits_inspect::{analysis::Statistics, egui::FitsWidget};
-use indi::{client::device::FitsImage, ClientConnection};
+use indi::{client::{device::FitsImage, ClientConnection}};
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
@@ -39,7 +39,7 @@ impl FitsViewerApp {
 
             let connection = TcpStream::connect(&args[1]).unwrap();
             connection
-                .write(&indi::GetProperties {
+                .write(&indi::serialization::GetProperties {
                     version: indi::INDI_PROTOCOL_VERSION.to_string(),
                     device: None,
                     name: None,
@@ -47,7 +47,7 @@ impl FitsViewerApp {
                 .unwrap();
 
             connection
-                .write(&indi::EnableBlob {
+                .write(&indi::serialization::EnableBlob {
                     device: String::from("ZWO CCD ASI294MM Pro"),
                     name: None,
                     enabled: indi::BlobEnable::Only,
@@ -58,7 +58,7 @@ impl FitsViewerApp {
 
             for command in c_iter {
                 match command {
-                    Ok(indi::Command::SetBlobVector(mut sbv)) => {
+                    Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
                         println!("Got image for: {:?}", sbv.device);
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;

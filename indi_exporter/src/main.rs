@@ -1,4 +1,4 @@
-use indi::{self, ClientConnection, DeviceStore};
+use indi::client::{DeviceStore, ClientConnection};
 use prometheus::core::GenericGaugeVec;
 use std::{collections::HashMap, env, net::TcpStream};
 
@@ -8,7 +8,7 @@ use prometheus_exporter::{
 };
 
 struct Metrics {
-    devices: indi::MemoryDeviceStore,
+    devices: indi::client::MemoryDeviceStore,
     gauge: GenericGaugeVec<AtomicF64>,
     states: GenericGaugeVec<AtomicF64>,
 }
@@ -21,7 +21,7 @@ impl Metrics {
             gauge,
         }
     }
-    fn handle_command(&mut self, command: indi::Command) {
+    fn handle_command(&mut self, command: indi::serialization::Command) {
         println!("Command: {:?}", command);
         let device_name = command.device_name().unwrap().clone();
         self.devices
@@ -75,7 +75,7 @@ fn main() {
 
     let connection = TcpStream::connect(addr).unwrap();
     connection
-        .write(&indi::GetProperties {
+        .write(&indi::serialization::GetProperties {
             version: indi::INDI_PROTOCOL_VERSION.to_string(),
             device: None,
             name: None,

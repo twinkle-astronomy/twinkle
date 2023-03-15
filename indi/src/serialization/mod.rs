@@ -1,4 +1,6 @@
 pub mod number_vector;
+use std::sync::PoisonError;
+
 pub use number_vector::DefNumberIter;
 pub use number_vector::NewNumberIter;
 pub use number_vector::SetNumberIter;
@@ -100,8 +102,140 @@ impl XmlSerialization for Command {
             Command::NewSwitchVector(c) => c.write(xml_writer),
             Command::EnableBlob(c) => c.write(xml_writer),
 
-            _ => panic!("asdf"),
+            _ => todo!(),
         }
+    }
+}
+
+pub trait ToCommand<T> {
+    fn to_command(self, device_name: String, param_name: String) -> Command;
+}
+
+impl<I: Into<SwitchState> + Copy> ToCommand<Vec<(&str, I)>> for Vec<(&str, I)> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewSwitchVector(NewSwitchVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            switches: self
+                .iter()
+                .map(|x| OneSwitch {
+                    name: String::from(x.0),
+                    value: x.1.into(),
+                })
+                .collect(),
+        })
+    }
+}
+
+impl ToCommand<Vec<OneSwitch>> for Vec<OneSwitch> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewSwitchVector(NewSwitchVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            switches: self,
+        })
+    }
+}
+
+impl ToCommand<Vec<(&str, f64)>> for Vec<(&str, f64)> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewNumberVector(NewNumberVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            numbers: self
+                .iter()
+                .map(|x| OneNumber {
+                    name: String::from(x.0),
+                    value: x.1,
+                })
+                .collect(),
+        })
+    }
+}
+impl ToCommand<Vec<OneNumber>> for Vec<OneNumber> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewNumberVector(NewNumberVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            numbers: self,
+        })
+    }
+}
+
+impl ToCommand<Vec<(&str, &str)>> for Vec<(&str, &str)> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewTextVector(NewTextVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            texts: self
+                .iter()
+                .map(|x| OneText {
+                    name: String::from(x.0),
+                    value: String::from(x.1),
+                })
+                .collect(),
+        })
+    }
+}
+impl ToCommand<Vec<OneText>> for Vec<OneText> {
+    fn to_command(self, device_name: String, param_name: String) -> Command {
+        Command::NewTextVector(NewTextVector {
+            device: device_name,
+            name: param_name,
+            timestamp: Some(chrono::offset::Utc::now()),
+            texts: self,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum UpdateError {
+    ParameterMissing(String),
+    ParameterTypeMismatch(String),
+    PoisonError,
+}
+
+impl<T> From<PoisonError<T>> for UpdateError {
+    fn from(_: PoisonError<T>) -> Self {
+        UpdateError::PoisonError
+    }
+}
+
+pub enum Action {
+    Define,
+    Update,
+    Delete,
+}
+
+pub trait CommandtoParam {
+    fn get_name(&self) -> &String;
+    fn get_group(&self) -> &Option<String>;
+    fn to_param(self, gen: Wrapping<usize>) -> Parameter;
+}
+
+pub trait CommandToUpdate {
+    fn get_name(&self) -> &String;
+    fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError>;
+}
+
+pub enum ClientErrors {
+    DeError(DeError),
+    UpdateError(UpdateError),
+}
+
+impl From<DeError> for ClientErrors {
+    fn from(err: DeError) -> Self {
+        ClientErrors::DeError(err)
+    }
+}
+impl From<UpdateError> for ClientErrors {
+    fn from(err: UpdateError) -> Self {
+        ClientErrors::UpdateError(err)
     }
 }
 

@@ -21,12 +21,11 @@ async fn main() {
         filter_wheel: String::from("ASI EFW"),
     };
 
-    let client = indi::Client::new(
+    let client = indi::client::new(
         TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
         None,
         None,
-    )
-    .expect("Connecting to INDI server");
+    ).expect("Connecting to INDI server");
 
     let camera = client
         .get_device(&config.imaging_camera)
@@ -38,10 +37,22 @@ async fn main() {
         .await
         .expect("Connecting to camera");
 
-    camera
-        .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
+
+
+    let image_client = indi::client::new(
+        TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
+        Some(&config.imaging_camera.clone()),
+        Some("CCD1"),
+    ).expect("Connecting to INDI server");
+    let image_camera = image_client
+        .get_device(&config.imaging_camera)
+        .await
+        .expect("Getting imaging camera");
+    image_camera
+        .enable_blob(Some("CCD1"), indi::BlobEnable::Only)
         .await
         .expect("enabling image retrieval");
+    let image_ccd = image_camera.get_parameter("CCD1").await.unwrap();
 
     tokio::try_join!(
         camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
@@ -68,7 +79,7 @@ async fn main() {
             .get_parameter("FILTER_NAME")
             .await
             .expect("getting filter names");
-        let l = filter_names_param.lock();
+        let l = filter_names_param.lock().unwrap();
         l.get_values::<HashMap<String, Text>>()
             .expect("getting values")
             .iter()
@@ -94,12 +105,11 @@ async fn main() {
     let mut exposure = 1.0;
     let mut captured = 0;
 
-    // let cdd =image_camera.get_parameter("CCD1").await.expect("Getting imaging ccd");
     let task = tokio::spawn( async move {
         loop {
             println!("Exposing for {}s", exposure);
             let fits_data =    camera
-                .capture_image(exposure)
+                .capture_image_from_param(exposure, &image_ccd)
                 .await
                 .expect("Capturing image");
 
