@@ -1,9 +1,9 @@
 extern crate fitsio;
 
-use fits_inspect::analysis::{Statistics, sep};
+use fits_inspect::analysis::{sep, Statistics};
 use fitsio::images::{ImageDescription, ImageType};
-use ndarray::{prelude::*, RemoveAxis, IxDynImpl};
-use std::{env, path::Path, fs};
+use ndarray::{prelude::*, IxDynImpl, RemoveAxis};
+use std::{env, fs, path::Path};
 
 trait WeightedValue {
     fn weight(&self) -> f64;
@@ -20,7 +20,7 @@ impl WeightedValue for (f64, f64) {
     }
 }
 
-fn weighted_mean<T: WeightedValue>(values: impl std::iter::Iterator<Item=T>) -> f64{
+fn weighted_mean<T: WeightedValue>(values: impl std::iter::Iterator<Item = T>) -> f64 {
     let mut total = 0 as f64;
     let mut weights = 0 as f64;
     for item in values {
@@ -32,7 +32,6 @@ fn weighted_mean<T: WeightedValue>(values: impl std::iter::Iterator<Item=T>) -> 
 }
 
 fn focal(filename: &String) -> f64 {
-
     let mut fptr = fitsio::FitsFile::open(filename).expect("Opening fits file");
     let hdu = fptr.primary_hdu().expect("Getting primary HDU");
     let data: ArrayD<u16> = hdu.read_image(&mut fptr).expect("reading image");
@@ -46,24 +45,27 @@ fn focal(filename: &String) -> f64 {
     let catalog = sep_image.extract(&bkg).unwrap();
 
     let f = catalog.iter().map(|star| {
-
         let x = center_x - star.x;
-        let y =  center_y - star.y;
+        let y = center_y - star.y;
         let position_theta = y.atan2(x);
 
-        let delta =( position_theta - star.theta as f64).abs();
-        let delta = if delta > std::f64::consts::PI / 2.0 { std::f64::consts::PI - delta } else { delta };
+        let delta = (position_theta - star.theta as f64).abs();
+        let delta = if delta > std::f64::consts::PI / 2.0 {
+            std::f64::consts::PI - delta
+        } else {
+            delta
+        };
         // println!("************************************");
         // dbg!(star.theta, star.theta as f64 * 180.0 / std::f64::consts::PI);
         // dbg!(position_theta, position_theta * 180.0 / std::f64::consts::PI);
         // dbg!((star.x, star.y));
 
         // dbg!((star.a as f64 / star.b as f64, delta * 180.0 / std::f64::consts::PI));
-    
+
         (delta, 1.0) //star.a as f64 / star.b as f64 - 1.0)
     });
 
-    weighted_mean(f) * 180.0 / std::f64::consts::PI  - 45.0 //(45.0 * std::f64::consts::PI / 180.0)
+    weighted_mean(f) * 180.0 / std::f64::consts::PI - 45.0 //(45.0 * std::f64::consts::PI / 180.0)
 }
 
 fn lines(filename: &String) {
@@ -79,14 +81,12 @@ fn lines(filename: &String) {
     let mut data: ArrayD<u16> = hdu.read_image(&mut fptr).expect("reading image");
     // dbg!(data.shape());
 
-
     let mut lines: ArrayD<u16> = Array::zeros(data.shape());
-
 
     let sep_image = sep::Image::new(data.clone()).unwrap();
     let bkg = sep_image.background().unwrap();
     let mut catalog = sep_image.extract(&bkg).unwrap();
-    catalog.sort_by(|a, b| (-a.a / a.b).partial_cmp(&(-b.a / b.b)).unwrap() );
+    catalog.sort_by(|a, b| (-a.a / a.b).partial_cmp(&(-b.a / b.b)).unwrap());
     for star in &catalog {
         // if (star.a as f64 / star.b as f64) < 1.5 {
         //     continue
@@ -98,29 +98,30 @@ fn lines(filename: &String) {
         let m = theta.tan() as f64;
         // let b = star.y - star.x * m;
         for x in 0..data.shape()[1] {
-            let y = m * (x as f64 - star.x ) + star.y;
+            let y = m * (x as f64 - star.x) + star.y;
             if y >= 0.0 && y < data.shape()[0] as f64 {
                 lines[&[y as usize, x][..]] += 1;
             }
         }
     }
-    
-    let intersections: Vec<Dim<IxDynImpl>> = lines.indexed_iter()
-        .filter(|(_pos, val)| { **val > 2 })
-        .map(|(pos, _val)| { pos }).collect();
+
+    let intersections: Vec<Dim<IxDynImpl>> = lines
+        .indexed_iter()
+        .filter(|(_pos, val)| **val > 2)
+        .map(|(pos, _val)| pos)
+        .collect();
 
     if intersections.len() > 0 {
         let x = intersections.iter().map(|dim| dim[1]).sum::<usize>() / intersections.len();
         let y = intersections.iter().map(|dim| dim[0]).sum::<usize>() / intersections.len();
-    
-    
+
         for x in x - 100..x + 100 {
-            data[&[y, x][..]] = std::u16::MAX;    
+            data[&[y, x][..]] = std::u16::MAX;
         }
-    
+
         for y in y - 100..y + 100 {
-            data[&[y, x][..]] = std::u16::MAX;    
-        }    
+            data[&[y, x][..]] = std::u16::MAX;
+        }
     } else {
         println!("No intersections");
     }
@@ -129,12 +130,13 @@ fn lines(filename: &String) {
         data_type: ImageType::UnsignedShort,
         dimensions: data.shape(),
     };
-    let mut  fptr = fitsio::FitsFile::create(target_file)
+    let mut fptr = fitsio::FitsFile::create(target_file)
         .with_custom_primary(&image_description)
-        .open().unwrap();
+        .open()
+        .unwrap();
     // let mut new_file = fitsio::FitsFile::create(target_file).open().unwrap();
 
-    let hdu = fptr.primary_hdu().unwrap();//.create_image("EXTNAME".to_string(), &image_description).unwrap();
+    let hdu = fptr.primary_hdu().unwrap(); //.create_image("EXTNAME".to_string(), &image_description).unwrap();
     let image_data = data.into_raw_vec();
     hdu.write_image(&mut fptr, &image_data).unwrap();
 

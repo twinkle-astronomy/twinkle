@@ -1,38 +1,38 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::{
-    env,
-    net::TcpStream,
-    sync::{Arc, Mutex},
-    thread,
-};
+use std::{env, net::TcpStream, sync::Arc, thread};
 
-use fits_inspect::{analysis::Statistics, egui::FitsWidget};
-use indi::{client::{device::FitsImage, ClientConnection}};
+use eframe::glow;
+use egui::mutex::Mutex;
+use fits_inspect::{
+    analysis::Statistics,
+    egui::{FitsRender, FitsWidget},
+};
+use fitsio::FitsFile;
+use indi::client::{device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
-    fits_widget: Arc<Mutex<Option<FitsWidget>>>,
-}
-
-impl Default for FitsViewerApp {
-    fn default() -> Self {
-        Self {
-            fits_widget: Arc::new(Mutex::new(None)),
-        }
-    }
+    fits_render: Arc<Mutex<FitsRender>>,
 }
 
 impl FitsViewerApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Option<Self> {
-        let newed: FitsViewerApp = Default::default();
-        {
-            let mut fits_widget = newed.fits_widget.lock().unwrap();
-            *fits_widget = FitsWidget::new(cc);
-        }
+        let mut fptr = FitsFile::open(
+            "../fits_inspect/images/NGC_281_Light_Red_15_secs_2022-11-13T01-13-00_001.fits",
+        )
+        .unwrap();
+        let hdu = fptr.primary_hdu().unwrap();
+        let image: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
 
-        let fits_widget = newed.fits_widget.clone();
+        let gl = cc.gl.as_ref()?;
+
+        let newed = FitsViewerApp {
+            fits_render: Arc::new(Mutex::new(FitsRender::new(gl, image)?)),
+        };
+
+        let fits_render = newed.fits_render.clone();
         let ctx = cc.egui_ctx.clone();
         thread::spawn(move || {
             let args: Vec<String> = env::args().collect();
@@ -67,12 +67,10 @@ impl FitsViewerApp {
                             FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
                         let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
 
-                        let mut fits_widget = fits_widget.lock().unwrap();
-                        if let Some(w) = &mut *fits_widget {
-                            let stats = Statistics::new(&data.view());
-                            w.set_fits(data, stats);
-                            ctx.request_repaint();
-                        }
+                        let mut fits_render = fits_render.lock();
+                        let stats = Statistics::new(&data.view());
+                        fits_render.set_fits(data, stats);
+                        ctx.request_repaint();
                     }
                     _ => {}
                 }
@@ -83,19 +81,21 @@ impl FitsViewerApp {
 }
 
 impl eframe::App for FitsViewerApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        let fits_widget = self.fits_widget.clone();
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let fits_render = self.fits_render.clone();
         egui::CentralPanel::default().show(ctx, move |_ui| {
-            let mut fits_widget = fits_widget.lock().unwrap();
-            if let Some(w) = &mut *fits_widget {
-                w.update(ctx, frame);
-            }
+            _ui.add(FitsWidget::new(fits_render));
         });
+    }
+
+    fn on_exit(&mut self, gl: Option<&glow::Context>) {
+        if let Some(gl) = gl {
+            self.fits_render.lock().destroy(gl);
+        }
     }
 }
 
 fn main() {
-    // tracing_subscriber::fmt::init();
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "Fits Viewer",
