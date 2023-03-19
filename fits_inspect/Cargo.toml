@@ -10,7 +10,7 @@ convolutions-rs = "0.3.4"
 csv = "1.1.6"
 eframe = "0.20.1"
 egui = "0.20.1"
-fitsio = {version = "0.21.2", features = ["array"] }
+fitsio = {version = "~0.21.0", features = ["array"] }
 image = "0.24.5"
 indi = { path = "../indi" }
 median = "0.3.2"
@@ -23,6 +23,7 @@ rmpfit = "0.2.0"
 sep-sys = "1.2.0"
 serde = { version = "1", features = ["derive"] }
 tokio = "1.26.0"
+tracing = "0.1.37"
 
 [dev-dependencies]
 criterion="0.3"

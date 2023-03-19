@@ -19,7 +19,6 @@ struct FitsRef {
 }
 
 pub struct FitsWidget {
-    /// Behind an `Arc<Mutex<…>>` so we can pass it to [`egui::PaintCallback`] and paint later.
     renderer: Arc<Mutex<FitsRender>>,
     image: Arc<Mutex<FitsRef>>,
 }
@@ -44,8 +43,8 @@ impl FitsWidget {
         let mut s = Self {
             renderer: Arc::new(Mutex::new(FitsRender::new(gl)?)),
             image: Arc::new(Mutex::new(FitsRef {
-                image: image,
-                stats: stats,
+                image,
+                stats,
                 dirty: true,
             })),
         };
@@ -78,35 +77,43 @@ impl FitsWidget {
 }
 
 impl eframe::App for FitsWidget {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
-                egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                    self.custom_painting(ui);
+
+                ui.vertical(|ui| {
+                    let mut renderer = self.renderer.lock();
+                    ui.spacing_mut().slider_width = ui.available_width() - 100.0;
+                    
+                    if ui
+                        .add(egui::Slider::new(&mut renderer.histogram_low, 0.0..=1.0).prefix("low: "))
+                        .changed()
+                    {
+                        if renderer.histogram_low > renderer.histogram_high {
+                            renderer.histogram_high = renderer.histogram_low;
+                        }
+                    }
+    
+                    ui.add(egui::Slider::new(&mut renderer.histogram_mtf, 0.0..=1.0).prefix("mid: "));
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut renderer.histogram_high, 0.0..=1.0).prefix("high: "),
+                        )
+                        .changed()
+                    {
+                        if renderer.histogram_low > renderer.histogram_high {
+                            renderer.histogram_low = renderer.histogram_high;
+                        }
+                    }
                 });
 
-                ui.spacing_mut().slider_width = ui.available_width() - 100.0;
-                let mut renderer = self.renderer.lock();
-                if ui
-                    .add(egui::Slider::new(&mut renderer.histogram_low, 0.0..=1.0).prefix("low: "))
-                    .changed()
-                {
-                    if renderer.histogram_low > renderer.histogram_high {
-                        renderer.histogram_high = renderer.histogram_low;
-                    }
-                }
 
-                ui.add(egui::Slider::new(&mut renderer.histogram_mtf, 0.0..=1.0).prefix("mid: "));
-                if ui
-                    .add(
-                        egui::Slider::new(&mut renderer.histogram_high, 0.0..=1.0).prefix("high: "),
-                    )
-                    .changed()
-                {
-                    if renderer.histogram_low > renderer.histogram_high {
-                        renderer.histogram_low = renderer.histogram_high;
-                    }
-                }
+                ui.vertical(|ui| {
+                    egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                        self.custom_painting(ui);
+                    });
+    
+                });
             });
         });
     }
@@ -119,7 +126,7 @@ impl eframe::App for FitsWidget {
 }
 
 impl FitsWidget {
-    fn custom_painting(&mut self, ui: &mut egui::Ui) {
+    fn custom_painting(&self, ui: &mut egui::Ui) {
         let iamge_ref = self.image.lock();
         let shape = iamge_ref.image.shape();
 
@@ -260,97 +267,21 @@ impl FitsRender {
     fn new(gl: &glow::Context) -> Option<Self> {
         use glow::HasContext as _;
 
-        // let shader_version = egui_glow::ShaderVersion::get(gl);
+        let shader_version = egui_glow::ShaderVersion::get(gl);
 
         unsafe {
             let program = gl.create_program().expect("Cannot create program");
 
-            // if !shader_version.is_new_shader_interface() {
-            //     tracing::warn!(
-            //         "Custom 3D painting hasn't been ported to {:?}",
-            //         shader_version
-            //     );
-            //     return None;
-            // }
+            if !shader_version.is_new_shader_interface() {
+                tracing::warn!(
+                    "Custom 3D painting hasn't been ported to {:?}",
+                    shader_version
+                );
+                return None;
+            }
 
-            let (vertex_shader_source, fragment_shader_source) = (
-                r#"
-                    const vec2 verts[6] = vec2[6](
-                        vec2(-1.0, 1.0),
-                        vec2(1.0, 1.0),
-                        vec2(1.0, -1.0),
-
-                        vec2(-1.0, 1.0),
-                        vec2(-1.0, -1.0),
-                        vec2(1.0, -1.0)
-                    );
-
-                    out vec2 UV;
-                    uniform float center_x;
-                    uniform float center_y;
-
-                    uniform float min_x;
-                    uniform float min_y;
-
-                    uniform float max_x;
-                    uniform float max_y;
-
-                    vec2 texture_verts[6] = vec2[6](
-                        vec2(min_x, max_y),
-                        vec2(max_x, max_y),
-                        vec2(max_x, min_y),
-
-                        vec2(min_x, max_y),
-                        vec2(min_x, min_y),
-                        vec2(max_x, min_y)
-                    );
-
-                    void main() {
-                        gl_Position = vec4(verts[gl_VertexID], 0.0,  1.0);
-                        UV = texture_verts[gl_VertexID];
-                    }
-                "#,
-                r#"
-                    precision highp float;
-                    in vec2 UV;
-                    out vec4 color;
-                    uniform float clip_low;
-                    uniform float clip_high;
-
-                    uniform float histogram_low;
-                    uniform float histogram_high;
-                    uniform float histogram_mtf;
-
-                    uniform sampler2D mono_fits;
-                    void main() {
-                        double x = texture( mono_fits, vec2(UV.x, 1.0-UV.y) ).r;
-                        double h_low = histogram_low;
-                        double h_high = histogram_high;
-                        double h_mtf = histogram_mtf;
-
-                        // 0.5 into [0.25 -> .75] = 0.5
-                        // 0.5 - 0.25 = 0.25
-                        // 5  = 0.5
-
-                        if (x >= clip_high) {
-                                color.r = 0.5f;
-                                color.g = 0.25f;
-                                color.b = 0.25f;
-                        } else if (x <= clip_low) {
-                            color.r = 0.25f;
-                            color.g = 0.5f;
-                            color.b = 0.25f;
-                        } else {
-
-                             x = (x - h_low) / (h_high - h_low);
-                             x =            ((h_mtf - 1.0)* x) /
-                                 ((2*h_mtf - 1.0) * x - h_mtf);
-
-                            color = vec4(x, x, x, 1.0);
-                        }
-                    }
-                "#,
-            );
+            let vertex_shader_source = include_str!("shaders/fits_vertex.glsl");
+            let fragment_shader_source = include_str!("shaders/fits_fragment.glsl");
 
             let shader_sources = [
                 (glow::VERTEX_SHADER, vertex_shader_source),
@@ -367,15 +298,14 @@ impl FitsRender {
                         shader,
                         &format!(
                             "{}\n{}",
-                            "#version 400\n",
-                            //                            shader_version.version_declaration(),
+                            shader_version.version_declaration(),
                             shader_source
                         ),
                     );
                     gl.compile_shader(shader);
                     if !gl.get_shader_compile_status(shader) {
                         panic!(
-                            "Failed to compile custom_3d_glow: {}",
+                            "Failed to compile fits_widget: {}",
                             gl.get_shader_info_log(shader)
                         );
                     }
@@ -428,11 +358,11 @@ impl FitsRender {
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RED as i32,
+                glow::R16UI as i32,
                 data.shape()[1] as i32,
                 data.shape()[0] as i32,
                 0,
-                glow::RED,
+                glow::RED_INTEGER,
                 glow::UNSIGNED_SHORT,
                 Some(std::slice::from_raw_parts(
                     data.as_ptr() as *const u8,
@@ -448,7 +378,7 @@ impl FitsRender {
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR as i32,
+                glow::NEAREST as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
@@ -466,7 +396,6 @@ impl FitsRender {
     }
 
     fn destroy(&self, gl: &glow::Context) {
-        use glow::HasContext as _;
         unsafe {
             gl.delete_program(self.program);
             gl.delete_vertex_array(self.vertex_array);

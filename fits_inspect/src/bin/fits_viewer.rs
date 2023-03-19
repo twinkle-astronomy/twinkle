@@ -83,12 +83,12 @@ impl FitsViewerApp {
 }
 
 impl eframe::App for FitsViewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let fits_widget = self.fits_widget.clone();
         egui::CentralPanel::default().show(ctx, move |_ui| {
             let mut fits_widget = fits_widget.lock().unwrap();
             if let Some(w) = &mut *fits_widget {
-                w.update(ctx, _frame);
+                w.update(ctx, frame);
             }
         });
     }
