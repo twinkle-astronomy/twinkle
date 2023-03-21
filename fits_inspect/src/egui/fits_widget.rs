@@ -65,35 +65,38 @@ impl FitsWidget {
         let space = ui.available_size();
         let space_ratio = space.x / space.y;
 
-        let size_ratio = if space_ratio < image_ratio {
+        let image_scale = if space_ratio < image_ratio {
             space.x / image_width as f32
         } else {
             space.y / image_height as f32
         };
 
-        let width = image_width as f32 * size_ratio;
-        let height = image_height as f32 * size_ratio;
+        let width = image_width as f32 * image_scale;
+        let height = image_height as f32 * image_scale;
 
         let (rect, response) = ui.allocate_exact_size(
             egui::Vec2::new(width as f32, height as f32),
             egui::Sense::click_and_drag(),
         );
 
-        if let Some(_pos) = response.hover_pos() {
+        if let Some(pos) = response.hover_pos() {
             let w = renderer.max_x - renderer.min_x;
             let h = renderer.max_y - renderer.min_y;
+
+            let pos_x = pos.x / width;
+            let pos_y = pos.y / height;
 
             let new_w = w * ui.input().zoom_delta();
             let new_h = h * ui.input().zoom_delta();
 
-            renderer.min_x = renderer.min_x - (w - new_w) / 2.0;
-            renderer.min_y = renderer.min_y - (h - new_h) / 2.0;
+            renderer.min_x = renderer.min_x - (w - new_w) * (pos_x);
+            renderer.min_y = renderer.min_y - (h - new_h) * (1.0 - pos_y);
 
-            renderer.max_x = renderer.max_x + (w - new_w) / 2.0;
-            renderer.max_y = renderer.max_y + (w - new_w) / 2.0;
+            renderer.max_x = renderer.max_x + (w - new_w) * (1.0 - pos_x);
+            renderer.max_y = renderer.max_y + (h - new_h) * (pos_y);
         }
 
-        let drag_scale = response.drag_delta().x / space.x;
+        let drag_scale = response.drag_delta().x / width;
         let drag_x = drag_scale * (renderer.max_x - renderer.min_x);
         renderer.min_x -= drag_x;
         renderer.max_x -= drag_x;
@@ -119,7 +122,7 @@ impl FitsWidget {
             renderer.max_x = 0.0;
         }
 
-        let drag_scale = response.drag_delta().y / space.y;
+        let drag_scale = response.drag_delta().y / height;
         let drag_y = drag_scale * (renderer.max_y - renderer.min_y);
         renderer.min_y += drag_y;
         renderer.max_y += drag_y;

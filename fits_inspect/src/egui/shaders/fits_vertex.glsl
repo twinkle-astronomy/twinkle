@@ -9,8 +9,6 @@
                     );
 
 out vec2 UV;
-uniform float center_x;
-uniform float center_y;
 
 uniform float min_x;
 uniform float min_y;

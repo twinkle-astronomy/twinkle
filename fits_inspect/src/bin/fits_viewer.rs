@@ -66,10 +66,11 @@ impl FitsViewerApp {
                         let fits =
                             FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
                         let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
-
-                        let mut fits_render = fits_render.lock();
                         let stats = Statistics::new(&data.view());
-                        fits_render.set_fits(data, stats);
+                        {
+                            let mut fits_render = fits_render.lock();
+                            fits_render.set_fits(data, stats);
+                        }
                         ctx.request_repaint();
                     }
                     _ => {}
