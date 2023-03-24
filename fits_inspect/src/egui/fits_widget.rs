@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
 use eframe::{egui_glow, glow::HasContext};
-use egui::mutex::Mutex;
+use egui::{mutex::Mutex, Pos2};
 use egui_glow::glow;
 use ndarray::ArrayD;
 
 use crate::analysis::Statistics;
 
 pub struct FitsRender {
-    image: FitsRef,
+    image: FitsImage,
     program: glow::Program,
-    vertex_array: glow::VertexArray,
+    vbo: glow::Buffer,
+    vao: glow::VertexArray,
     texture: glow::Texture,
 
     // Image values <= this value are clipped low
@@ -22,16 +23,26 @@ pub struct FitsRender {
     histogram_low: f32,
     histogram_mtf: f32,
     histogram_high: f32,
-    min_x: f32,
-    min_y: f32,
-    max_x: f32,
-    max_y: f32,
+
+    scale: f32,
+    translate: [f32; 2],
 }
 
-pub struct FitsRef {
+pub struct FitsImage {
     image: ArrayD<u16>,
     stats: Statistics,
     dirty: bool,
+}
+
+impl FitsImage {
+    fn new(bytes: ArrayD<u16>) -> FitsImage {
+        let stats = Statistics::new(&bytes.view());
+        FitsImage {
+            image: bytes,
+            stats,
+            dirty: true,
+        }
+    }
 }
 
 pub struct FitsWidget {
@@ -80,76 +91,39 @@ impl FitsWidget {
         );
 
         if let Some(pos) = response.hover_pos() {
-            let w = renderer.max_x - renderer.min_x;
-            let h = renderer.max_y - renderer.min_y;
+            // Calculate pointer's position in frame coordinates (0.0 to 1.0)
+            let frame_pos = Pos2 {
+                x: pos.x / width,
+                y: pos.y / height,
+            };
 
-            let pos_x = pos.x / width;
-            let pos_y = pos.y / height;
+            // Calculate pointer's position in image coordinates (0.0 to 1.0) from screen coordinates
+            let image_pos = Pos2 {
+                x: (frame_pos.x - 0.5 - renderer.translate[0]) / renderer.scale + 0.5,
+                y: (frame_pos.y - 0.5 - renderer.translate[1]) / renderer.scale + 0.5,
+            };
 
-            let new_w = w * ui.input().zoom_delta();
-            let new_h = h * ui.input().zoom_delta();
+            // Zoom in/out by `zoom_delta`
+            renderer.scale *= ui.input().zoom_delta();
+            renderer.scale = renderer.scale.max(1.0);
 
-            renderer.min_x = renderer.min_x - (w - new_w) * (pos_x);
-            renderer.min_y = renderer.min_y - (h - new_h) * (1.0 - pos_y);
-
-            renderer.max_x = renderer.max_x + (w - new_w) * (1.0 - pos_x);
-            renderer.max_y = renderer.max_y + (h - new_h) * (pos_y);
+            // Reposition image so pointer is on the same place in on the image.
+            renderer.translate[0] = (0.5 - image_pos.x) * renderer.scale + frame_pos.x - 0.5;
+            renderer.translate[1] = (0.5 - image_pos.y) * renderer.scale + frame_pos.y - 0.5;
         }
 
-        let drag_scale = response.drag_delta().x / width;
-        let drag_x = drag_scale * (renderer.max_x - renderer.min_x);
-        renderer.min_x -= drag_x;
-        renderer.max_x -= drag_x;
+        // Translate / pan image by dragged amount
+        renderer.translate[0] += response.drag_delta().x / width;
+        renderer.translate[1] += response.drag_delta().y / height;
 
-        if renderer.min_x < 0.0 && renderer.max_x > 1.0 {
-            renderer.min_x = 0.0;
-            renderer.max_x = 1.0;
-        }
+        // Limit translate / pan to edge of frame
+        let min_t = -0.5 * renderer.scale + 0.5;
+        let max_t = 0.5 * renderer.scale - 0.5;
 
-        if renderer.min_x > 1.0 {
-            renderer.max_x -= renderer.min_x - 1.0;
-            renderer.min_x = 1.0;
-        } else if renderer.min_x < 0.0 {
-            renderer.max_x -= renderer.min_x;
-            renderer.min_x = 0.0;
-        }
-
-        if renderer.max_x > 1.0 {
-            renderer.min_x -= renderer.max_x - 1.0;
-            renderer.max_x = 1.0;
-        } else if renderer.max_x < 0.0 {
-            renderer.min_x -= renderer.max_x;
-            renderer.max_x = 0.0;
-        }
-
-        let drag_scale = response.drag_delta().y / height;
-        let drag_y = drag_scale * (renderer.max_y - renderer.min_y);
-        renderer.min_y += drag_y;
-        renderer.max_y += drag_y;
-
-        if renderer.min_y < 0.0 && renderer.max_y > 1.0 {
-            renderer.min_y = 0.0;
-            renderer.max_y = 1.0;
-        }
-
-        if renderer.min_y > 1.0 {
-            renderer.max_y -= renderer.min_y - 1.0;
-            renderer.min_y = 1.0;
-        } else if renderer.min_y < 0.0 {
-            renderer.max_y -= renderer.min_y;
-            renderer.min_y = 0.0;
-        }
-
-        if renderer.max_y > 1.0 {
-            renderer.min_y -= renderer.max_y - 1.0;
-            renderer.max_y = 1.0;
-        } else if renderer.max_y < 0.0 {
-            renderer.min_y -= renderer.max_y;
-            renderer.max_y = 0.0;
-        }
+        renderer.translate[0] = renderer.translate[0].clamp(min_t, max_t);
+        renderer.translate[1] = renderer.translate[1].clamp(min_t, max_t);
 
         let renderer = self.renderer.clone();
-
         let cb = egui_glow::CallbackFn::new(move |_info, painter| {
             let mut r = renderer.lock();
             let gl = painter.gl();
@@ -175,9 +149,13 @@ impl FitsRender {
         use glow::HasContext as _;
 
         let shader_version = egui_glow::ShaderVersion::get(gl);
+        let vbo;
+        let vao;
+        let texture;
+        let program;
 
         unsafe {
-            let program = gl.create_program().expect("Cannot create program");
+            program = gl.create_program().expect("Cannot create program");
 
             if !shader_version.is_new_shader_interface() {
                 tracing::warn!(
@@ -226,50 +204,60 @@ impl FitsRender {
                 panic!("{}", gl.get_program_info_log(program));
             }
 
-            let vertex_array = gl
-                .create_vertex_array()
-                .expect("Cannot create vertex array");
-            gl.bind_vertex_array(Some(vertex_array));
+            let triangle_vertices: [f32; 12] =
+                [0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+            let triangle_vertices_u8: &[u8] = core::slice::from_raw_parts(
+                triangle_vertices.as_ptr() as *const u8,
+                triangle_vertices.len() * core::mem::size_of::<f32>(),
+            );
 
-            let texture = gl.create_texture().expect("Cannot create texture");
+            vbo = gl.create_buffer().unwrap();
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, triangle_vertices_u8, glow::STATIC_DRAW);
 
-            let stats = Statistics::new(&image.view());
+            vao = gl.create_vertex_array().unwrap();
+            gl.bind_vertex_array(Some(vao));
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, 8, 0);
 
-            let clip_low = stats.clip_low.value as f32 / std::u16::MAX as f32;
-            let clip_high = stats.clip_high.value as f32 / std::u16::MAX as f32;
-            let histogram_high = stats.clip_high.value as f32 / std::u16::MAX as f32;
-            let histogram_low = stats.clip_low.value as f32 / std::u16::MAX as f32;
-            let histogram_mtf =
-                (stats.median as f32 - 2.8 * stats.mad as f32) / std::u16::MAX as f32;
-
-            Some(Self {
-                image: FitsRef {
-                    image,
-                    stats,
-                    dirty: true,
-                },
-                program,
-                vertex_array,
-                texture,
-                clip_low,
-                clip_high,
-                histogram_low,
-                histogram_mtf,
-                histogram_high,
-                min_x: 0.0,
-                min_y: 0.0,
-                max_x: 1.0,
-                max_y: 1.0,
-            })
+            texture = gl.create_texture().expect("Cannot create texture");
         }
+        let fits_image = FitsImage::new(image);
+
+        let clip_low = fits_image.stats.clip_low.value as f32 / std::u16::MAX as f32;
+        let clip_high = fits_image.stats.clip_high.value as f32 / std::u16::MAX as f32;
+        let histogram_high = fits_image.stats.clip_high.value as f32 / std::u16::MAX as f32;
+        let histogram_low = fits_image.stats.clip_low.value as f32 / std::u16::MAX as f32;
+        let histogram_mtf = (fits_image.stats.median as f32 - 2.8 * fits_image.stats.mad as f32)
+            / std::u16::MAX as f32;
+
+        Some(Self {
+            image: fits_image,
+            program,
+            vbo,
+            vao,
+            texture,
+            clip_low,
+            clip_high,
+            histogram_low,
+            histogram_mtf,
+            histogram_high,
+            scale: 1.0,
+            translate: [0.0, 0.0],
+        })
     }
 
-    pub fn set_fits(&mut self, data: ArrayD<u16>, stats: Statistics) {
+    pub fn set_fits(&mut self, data: ArrayD<u16>) {
         println!("set_fits");
 
-        self.image.image = data;
-        self.image.stats = stats;
-        self.image.dirty = true;
+        self.image = FitsImage::new(data);
+
+        self.clip_low = self.image.stats.clip_low.value as f32 / std::u16::MAX as f32;
+        self.clip_high = self.image.stats.clip_high.value as f32 / std::u16::MAX as f32;
+        self.histogram_high = self.image.stats.clip_high.value as f32 / std::u16::MAX as f32;
+        self.histogram_low = self.image.stats.clip_low.value as f32 / std::u16::MAX as f32;
+        self.histogram_mtf = (self.image.stats.median as f32 - 2.8 * self.image.stats.mad as f32)
+            / std::u16::MAX as f32;
     }
 
     // https://en.wikipedia.org/wiki/Median_absolute_deviation
@@ -315,15 +303,14 @@ impl FitsRender {
                 glow::TEXTURE_WRAP_T,
                 glow::CLAMP_TO_BORDER as i32,
             );
-
-            // gl.generate_mipmap(glow::TEXTURE_2D);
         }
     }
 
     pub fn destroy(&self, gl: &glow::Context) {
         unsafe {
             gl.delete_program(self.program);
-            gl.delete_vertex_array(self.vertex_array);
+            gl.delete_vertex_array(self.vao);
+            gl.delete_buffer(self.vbo);
             gl.delete_texture(self.texture);
         }
     }
@@ -336,6 +323,48 @@ impl FitsRender {
             gl.uniform_1_i32(
                 gl.get_uniform_location(self.program, "mono_fits").as_ref(),
                 0,
+            );
+            gl.uniform_1_f32(
+                gl.get_uniform_location(self.program, "scale").as_ref(),
+                self.scale,
+            );
+            gl.uniform_2_f32_slice(
+                gl.get_uniform_location(self.program, "translate").as_ref(),
+                &self.translate,
+            );
+
+            // Convert image cordinates (0.0-1.0, +y -> down) to opengl coordinates (-1.0, 1.0, +y -> up)
+            gl.uniform_matrix_4_f32_slice(
+                gl.get_uniform_location(self.program, "M").as_ref(),
+                false,
+                &[
+                    2.0, 0.0, 0.0, 0.0, 0.0, -2.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0,
+                    1.0,
+                ],
+            );
+
+            // Apply visual zoom and pan.
+            gl.uniform_matrix_4_f32_slice(
+                gl.get_uniform_location(self.program, "V").as_ref(),
+                false,
+                &[
+                    self.scale,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    self.scale,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    2.0 * self.translate[0],
+                    -2.0 * self.translate[1],
+                    0.0,
+                    1.0,
+                ],
             );
 
             gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
@@ -366,25 +395,8 @@ impl FitsRender {
                 self.histogram_mtf as f32,
             );
 
-            gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "min_x").as_ref(),
-                self.min_x as f32,
-            );
-            gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "min_y").as_ref(),
-                self.min_y as f32,
-            );
-
-            gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "max_x").as_ref(),
-                self.max_x as f32,
-            );
-            gl.uniform_1_f32(
-                gl.get_uniform_location(self.program, "max_y").as_ref(),
-                self.max_y as f32,
-            );
-
-            gl.bind_vertex_array(Some(self.vertex_array));
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
+            gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays(glow::TRIANGLES, 0, 6);
 
             match gl.get_error() {

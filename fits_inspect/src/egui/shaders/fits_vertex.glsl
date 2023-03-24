@@ -1,32 +1,11 @@
- const vec2 verts[6] = vec2[6](
-                        vec2(-1.0, 1.0),
-                        vec2(1.0, 1.0),
-                        vec2(1.0, -1.0),
 
-                        vec2(-1.0, 1.0),
-                        vec2(-1.0, -1.0),
-                        vec2(1.0, -1.0)
-                    );
-
+in vec2 vertex;
 out vec2 UV;
 
-uniform float min_x;
-uniform float min_y;
-
-uniform float max_x;
-uniform float max_y;
-
-vec2 texture_verts[6] = vec2[6](
-    vec2(min_x, max_y),
-    vec2(max_x, max_y),
-    vec2(max_x, min_y),
-
-    vec2(min_x, max_y),
-    vec2(min_x, min_y),
-    vec2(max_x, min_y)
-);
+uniform mat4 M;
+uniform mat4 V;
 
 void main() {
-    gl_Position = vec4(verts[gl_VertexID], 0.0,  1.0);
-    UV = texture_verts[gl_VertexID];
+    gl_Position = V*M*vec4(vertex, 0.0,  1.0);
+    UV = vertex;
 }
