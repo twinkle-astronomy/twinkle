@@ -1,4 +1,4 @@
-use std::{env, net::TcpStream, thread, time::Duration};
+use std::{env, net::TcpStream, ops::Deref, thread, time::Duration};
 
 use indi::client::ChangeError;
 
@@ -14,6 +14,7 @@ fn main() -> Result<(), ChangeError<()>> {
 
     thread::sleep(Duration::from_secs(10));
 
-    println!("{:#?}", client.get_devices());
+    let devices = client.get_devices().unwrap();
+    println!("{:#?}", devices.deref());
     Ok(())
 }

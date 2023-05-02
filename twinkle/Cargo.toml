@@ -8,16 +8,12 @@ edition = "2021"
 [dependencies]
 eframe = { version = "0.20.1"}
 egui = "0.20.1"
-serde = { version = "1", features = ["derive"] } # You only need this if you want app persistence
+serde = { version = "1", features = ["derive"] }
 indi = { path = "../indi" }
 
 tracing-subscriber = "0.3.16"
-tracing = "0.1.37"
 tokio = {version = "1.21.2", features = ["full"]}
-image = "0.24.4"
-fits_inspect = { version = "0.1.0", path = "../fits_inspect" }
+fits_inspect = { path = "../fits_inspect" }
 fitsio = {version = "0.21.2", features = ["array"] }
-chrono = "0.4.23"
-ndarray = "0.15.6"
-libc = "0.2.139"
 tokio-stream = "0.1.12"
+ndarray = "0.15.6"

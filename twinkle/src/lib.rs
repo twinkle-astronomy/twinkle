@@ -1,7 +1,99 @@
+use std::{
+    fmt::Display,
+    net::{TcpStream, ToSocketAddrs},
+    ops::Deref,
+    sync::Arc,
+    time::Duration,
+};
+
+use indi::{
+    client::{device::ActiveDevice, notify::Notify},
+    Parameter,
+};
+use tokio_stream::wrappers::BroadcastStream;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 mod backend;
+pub mod flat;
 
-// use fits_inspect::egui::FitsWidget;
+pub trait Action<T> {
+    fn status(&self) -> BroadcastStream<std::sync::Arc<T>>;
+}
+
+pub struct Telescope {
+    pub config: TelescopeConfig,
+    pub client: indi::client::Client<TcpStream>,
+    pub image_client: indi::client::Client<TcpStream>,
+    runtime: tokio::runtime::Runtime,
+}
+
+impl Telescope {
+    pub fn new(addr: impl ToSocketAddrs + Copy + Display, config: TelescopeConfig) -> Telescope {
+        let client = indi::client::new(
+            TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
+            None,
+            None,
+        )
+        .expect("Connecting to INDI server");
+
+        let image_client = indi::client::new(
+            TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
+            Some(&config.primary_camera.clone()),
+            Some("CCD1"),
+        )
+        .expect("Connecting to INDI server");
+
+        Telescope {
+            config,
+            client,
+            image_client,
+            runtime: tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+        }
+    }
+    pub async fn get_primary_camera(
+        &self,
+    ) -> Result<ActiveDevice, indi::client::notify::Error<()>> {
+        self.client.get_device(&self.config.primary_camera).await
+    }
+
+    pub async fn get_primary_camera_ccd(
+        &self,
+    ) -> Result<Arc<Notify<Parameter>>, indi::client::ChangeError<indi::serialization::Command>>
+    {
+        let image_camera = self
+            .image_client
+            .get_device::<indi::serialization::Command>(&self.config.primary_camera)
+            .await?;
+        image_camera
+            .enable_blob(Some("CCD1"), indi::BlobEnable::Only)
+            .await?;
+        Ok(image_camera.get_parameter("CCD1").await?)
+    }
+
+    pub async fn get_filter_wheel(&self) -> Result<ActiveDevice, indi::client::notify::Error<()>> {
+        self.client.get_device(&self.config.filter_wheel).await
+    }
+
+    pub async fn get_focuser(&self) -> Result<ActiveDevice, indi::client::notify::Error<()>> {
+        self.client.get_device(&self.config.focuser).await
+    }
+
+    pub fn root_path(&self) -> String {
+        // String::from("~/AstroDMx_DATA/Flat/")
+        String::from("./Flat/")
+    }
+}
+
+impl Deref for Telescope {
+    type Target = tokio::runtime::Runtime;
+
+    fn deref(&self) -> &Self::Target {
+        &self.runtime
+    }
+}
 
 pub struct OpticsConfig {
     pub focal_length: f64,
@@ -10,12 +102,18 @@ pub struct OpticsConfig {
 
 pub struct TelescopeConfig {
     pub mount: String,
-    pub imaging_optics: OpticsConfig,
-    pub imaging_camera: String,
+    pub primary_optics: OpticsConfig,
+    pub primary_camera: String,
     pub focuser: String,
     pub filter_wheel: String,
 }
 
+pub struct AutoFocusConfig {
+    pub exposure: Duration,
+    pub filter: String,
+    pub step: f64,
+    pub start_position: f64,
+}
 pub struct TwinkleApp {
     // // backend: Backend,
 

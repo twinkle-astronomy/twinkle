@@ -1,154 +1,245 @@
-use std::{collections::HashMap, env, net::TcpStream};
+use std::{
+    collections::{BTreeMap, HashMap},
+    env,
+    sync::Arc,
+    time::Duration,
+};
 
-use fits_inspect::analysis::Statistics;
-use indi::*;
-use twinkle::*;
-use tokio::signal;
+use egui::{mutex::Mutex, ProgressBar};
+use fits_inspect::egui::{FitsRender, FitsWidget};
+use indi::Number;
+use tokio::runtime::Runtime;
+use tokio_stream::StreamExt;
 
-#[tokio::main]
-async fn main() {
-    let args: Vec<String> = env::args().collect();
-    let addr = &args[1];
+use ndarray::{Array2, ArrayD};
+use twinkle::{
+    flat::{self, SetConfig, Status},
+    Action, OpticsConfig, Telescope, TelescopeConfig,
+};
 
-    let config = TelescopeConfig {
-        mount: String::from("EQMod Mount"),
-        imaging_optics: OpticsConfig {
-            focal_length: 800.0,
-            aperture: 203.0,
-        },
-        imaging_camera: String::from("ZWO CCD ASI294MM Pro"),
-        focuser: String::from("ASI EAF"),
-        filter_wheel: String::from("ASI EFW"),
-    };
+pub struct FlatApp {
+    config: SetConfig,
+    telescope: Arc<Telescope>,
+    runner: Option<flat::Runner>,
+    fits_widget: Arc<Mutex<FitsWidget>>,
+    status: Arc<Mutex<Status>>,
+}
 
-    let client = indi::client::new(
-        TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
-        None,
-        None,
-    ).expect("Connecting to INDI server");
+impl FlatApp {
+    /// Called once before the first frame.
+    fn new(_cc: &eframe::CreationContext<'_>) -> Option<Self> {
+        let args: Vec<String> = env::args().collect();
+        let addr = &args[1];
 
-    let camera = client
-        .get_device(&config.imaging_camera)
-        .await
-        .expect("Getting imaging camera");
+        let config = TelescopeConfig {
+            mount: String::from("EQMod Mount"),
+            primary_optics: OpticsConfig {
+                focal_length: 800.0,
+                aperture: 203.0,
+            },
+            primary_camera: String::from("ZWO CCD ASI294MM Pro"),
+            focuser: String::from("ASI EAF"),
+            filter_wheel: String::from("ASI EFW"),
+        };
+        let telescope = Arc::new(Telescope::new(addr, config));
 
-    camera
-        .change("CONNECTION", vec![("CONNECT", true)])
-        .await
-        .expect("Connecting to camera");
+        let flat_config = SetConfig {
+            count: 10,
+            filters: HashMap::default(),
+            adu_target: 1000, //u16::MAX / 2,
+            adu_margin: 1000,
+            binnings: HashMap::default(),
+            gain: 240.0,
+            offset: 10.0,
+        };
 
+        let blank_image = Array2::<u16>::zeros([10, 10]).into_dyn();
+        let newed: FlatApp = FlatApp {
+            config: flat_config,
+            telescope,
+            runner: None,
+            fits_widget: Arc::new(Mutex::new(FitsWidget::new(
+                _cc.gl.as_ref().unwrap(),
+                blank_image,
+            ))),
+            status: Arc::new(Mutex::new(Status::default())),
+        };
 
+        Some(newed)
+    }
+}
 
-    let image_client = indi::client::new(
-        TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
-        Some(&config.imaging_camera.clone()),
-        Some("CCD1"),
-    ).expect("Connecting to INDI server");
-    let image_camera = image_client
-        .get_device(&config.imaging_camera)
-        .await
-        .expect("Getting imaging camera");
-    image_camera
-        .enable_blob(Some("CCD1"), indi::BlobEnable::Only)
-        .await
-        .expect("enabling image retrieval");
-    let image_ccd = image_camera.get_parameter("CCD1").await.unwrap();
+impl FlatApp {
+    fn config_ui(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::Grid::new("config")
+            .num_columns(2)
+            // .spacing([40.0, 40.0])
+            .striped(false)
+            .show(ui, |ui| {
+                ui.label("Count");
+                ui.add(egui::DragValue::new(&mut self.config.count).clamp_range(0u16..=u16::MAX));
+                ui.end_row();
 
-    tokio::try_join!(
-        camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
-        camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
-        camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
-        camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
-        camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
-        camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
-    )
-    .expect("Configuring camera");
+                ui.label("Filter");
 
-    let filter_wheel = client
-        .get_device(&config.filter_wheel)
-        .await
-        .expect("Getting filter wheel");
+                let filters = self.telescope.block_on(async {
+                    let efw = self.telescope.get_filter_wheel().await.unwrap();
 
-    filter_wheel
-        .change("CONNECTION", vec![("CONNECT", true)])
-        .await
-        .expect("wating on change");
+                    efw.change("CONNECTION", vec![("CONNECT", true)])
+                        .await
+                        .expect("Connecting to devices");
 
-    let filter_names: HashMap<String, f64> = {
-        let filter_names_param = filter_wheel
-            .get_parameter("FILTER_NAME")
-            .await
-            .expect("getting filter names");
-        let l = filter_names_param.lock().unwrap();
-        l.get_values::<HashMap<String, Text>>()
-            .expect("getting values")
-            .iter()
-            .map(|(slot, name)| {
-                let slot = slot
-                    .split("_")
-                    .last()
-                    .map(|x| x.parse::<f64>().unwrap())
-                    .unwrap();
-                (name.value.clone(), slot)
-            })
-            .collect()
-    };
+                    self.telescope
+                        .get_filter_wheel()
+                        .await
+                        .unwrap()
+                        .filter_names()
+                        .await
+                        .unwrap()
+                });
 
-    filter_wheel
-        .change(
-            "FILTER_SLOT",
-            vec![("FILTER_SLOT_VALUE", filter_names["Luminance"])],
-        )
-        .await
-        .expect("Changing filter");
+                // Make sure we only have filters in the UI that exist
+                self.config.filters.retain(|k, _v| filters.contains_key(k));
 
-    let mut exposure = 1.0;
-    let mut captured = 0;
+                let filters: BTreeMap<&usize, &String> =
+                    filters.iter().map(|(k, v)| (v, k)).collect();
+                for (_index, filter) in filters {
+                    let entry = self
+                        .config
+                        .filters
+                        .entry(filter.clone())
+                        .or_insert_with(|| false);
 
-    let task = tokio::spawn( async move {
-        loop {
-            println!("Exposing for {}s", exposure);
-            let fits_data =    camera
-                .capture_image_from_param(exposure, &image_ccd)
-                .await
-                .expect("Capturing image");
+                    ui.toggle_value(entry, filter);
+                }
+                ui.end_row();
 
-            let image_data = fits_data.read_image().expect("Reading captured image");
-            let stats = Statistics::new(&image_data.view());
+                ui.label("Target ADU");
+                ui.add(
+                    egui::DragValue::new(&mut self.config.adu_target).clamp_range(0u16..=u16::MAX),
+                );
+                ui.end_row();
 
-            dbg!(&stats.median);
+                ui.label("Binning");
+                let bins = self.telescope.block_on(async {
+                    let camera = self.telescope.get_primary_camera().await.unwrap();
+                    let bin_param = camera.get_parameter("CCD_BINNING").await.unwrap();
+                    let lock = bin_param.lock().unwrap();
+                    let values = lock.get_values::<HashMap<String, Number>>().unwrap();
+                    (values["HOR_BIN"].min as u8)..=(values["HOR_BIN"].max as u8)
+                });
+                for bin in bins {
+                    let entry = self.config.binnings.entry(bin).or_insert_with(|| false);
 
-            let target_median = u16::MAX / 2;
-            if stats.median as f32 > 0.8 * 2.0_f32.powf(16.0) {
-                exposure = exposure / 2.0;
-            } else if (stats.median as f32) < { 0.1 * 2.0_f32.powf(16.0) } {
-                exposure = exposure * 2.0;
-            } else if target_median.abs_diff(stats.median) > 1000 {
-                exposure = (target_median as f64) / (stats.median as f64) * exposure;
-            } else {
-                captured += 1;
-                fits_data
-                    .save(format!("Flat_{}.fits", captured))
-                    .expect("saving fits file");
+                    ui.toggle_value(entry, format!("bin{}", bin)); //egui::DragValue::new(&mut self.config.binning).clamp_range(0..=8));
+                }
+                // ui.add(egui::DragValue::new(&mut self.config.binning).clamp_range(0..=8));
+                ui.end_row();
 
-                println!("Finished: {}", captured);
-            }
-            if captured > 0 {
-                break;
-            }
-        }
-    });
-    
-    tokio::select! {
-        _ = signal::ctrl_c() => {
-            println!("Aborting");
-            return;
-        },
-        _ = task => {
-            
-        }
-    };
+                ui.label("Gain");
+                ui.add(egui::DragValue::new(&mut self.config.gain).clamp_range(0..=500));
+                ui.end_row();
 
-    // exposure = find exposure med between 1k, 50k
-    // correct_exposure_time = target / exposure_med * exposure_time
+                ui.label("Offset");
+                ui.add(egui::DragValue::new(&mut self.config.offset).clamp_range(0..=500));
+                ui.end_row();
+            });
+    }
+}
+
+impl eframe::App for FlatApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::SidePanel::left("Left").show(ctx, |ui| {
+            ui.vertical(|ui| {
+                let running = self
+                    .runner
+                    .as_ref()
+                    .map_or(false, |runner| !runner.task.is_finished());
+                ui.add_enabled_ui(!running, |ui| {
+                    self.config_ui(ui, ctx, _frame);
+                });
+
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(!running, |ui| {
+                        if ui.button("Run").clicked() {
+                            let runner =
+                                flat::Runner::new_set(self.config.clone(), self.telescope.clone());
+                            let mut recv = runner.status();
+                            let spawn_ctx = ctx.clone();
+                            let fits_widget = self.fits_widget.clone();
+                            let app_status = self.status.clone();
+                            tokio::spawn(async move {
+                                loop {
+                                    match recv.next().await {
+                                        Some(Ok(status)) => {
+                                            {
+                                                {
+                                                    let mut lock = app_status.lock();
+                                                    lock.complete = status.complete;
+                                                }
+                                                // let fits = status.image;
+                                                if let Some(fits) = &status.image {
+                                                    let data: ArrayD<u16> = fits
+                                                        .read_image()
+                                                        .expect("Reading captured imager");
+                                                    let mut fits_widget = fits_widget.lock();
+                                                    fits_widget.set_fits(data);
+                                                    spawn_ctx.request_repaint();
+                                                }
+                                            }
+                                            // dbg!(status);
+                                        }
+                                        Some(Err(e)) => {
+                                            dbg!(e);
+                                        }
+                                        None => {
+                                            println!("Done");
+                                            break;
+                                        }
+                                    }
+                                }
+                            });
+                            self.runner = Some(runner);
+                        }
+                    });
+
+                    ui.add_enabled_ui(running, |ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.runner
+                                .as_ref()
+                                .and_then(|runner| Some(runner.task.abort()));
+                            self.runner = None;
+                        }
+                        if running {
+                            ui.spinner();
+                        }
+                    });
+                });
+
+                ui.add(ProgressBar::new(
+                    (self.status.lock().complete as f32) / (self.config.expected_total() as f32),
+                ));
+            });
+            // dbg!(&self.config);
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let mut fits_widget = self.fits_widget.lock();
+
+            fits_widget.update(ctx, _frame);
+        });
+    }
+}
+
+fn main() {
+    let native_options = eframe::NativeOptions::default();
+    let rt = Runtime::new().expect("Unable to create Runtime");
+
+    // Enter the runtime so that `tokio::spawn` is available immediately.
+    let _enter = rt.enter();
+    eframe::run_native(
+        "Flats",
+        native_options,
+        Box::new(move |cc| Box::new(FlatApp::new(cc).unwrap())),
+    );
 }
