@@ -1,4 +1,4 @@
-use indi::client::{DeviceStore, ClientConnection};
+use indi::client::{ClientConnection, DeviceStore};
 use prometheus::core::GenericGaugeVec;
 use std::{collections::HashMap, env, net::TcpStream};
 
@@ -107,9 +107,13 @@ fn main() {
             Ok(command) => {
                 metrics.handle_command(command);
             }
-            Err(e) => match e {
-                e => println!("error: {:?}", e),
-            },
+            Err(e) => {
+                println!("{:?}", e);
+
+                if let indi::serialization::DeError::IoError(_) = e {
+                    return;
+                }
+            }
         }
     }
 }
