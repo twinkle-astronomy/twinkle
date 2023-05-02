@@ -6,3 +6,6 @@ members = [
 	"twinkle",
 	"fits_inspect",
 ]
+
+[profile.dev.package.fits_inspect]
+opt-level=3
