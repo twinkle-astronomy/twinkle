@@ -13,7 +13,7 @@ use indi::client::{device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
-    fits_render: Arc<Mutex<FitsRender>>,
+    fits_widget: Arc<Mutex<FitsWidget>>,
 }
 
 impl FitsViewerApp {
@@ -29,10 +29,10 @@ impl FitsViewerApp {
         let gl = cc.gl.as_ref()?;
 
         let newed = FitsViewerApp {
-            fits_render: Arc::new(Mutex::new(FitsRender::new(gl, image)?)),
+            fits_widget: Arc::new(Mutex::new(FitsWidget::new(gl, image))),
         };
 
-        let fits_render = newed.fits_render.clone();
+        let fits_widget = newed.fits_widget.clone();
         let ctx = cc.egui_ctx.clone();
         thread::spawn(move || {
             let args: Vec<String> = env::args().collect();
@@ -67,8 +67,8 @@ impl FitsViewerApp {
                             FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
                         let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
                         {
-                            let mut fits_render = fits_render.lock();
-                            fits_render.set_fits(data);
+                            let mut fits_widget = fits_widget.lock();
+                            fits_widget.set_fits(data);
                         }
                         ctx.request_repaint();
                     }
@@ -81,17 +81,12 @@ impl FitsViewerApp {
 }
 
 impl eframe::App for FitsViewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let fits_render = self.fits_render.clone();
-        egui::CentralPanel::default().show(ctx, move |_ui| {
-            _ui.add(FitsWidget::new(fits_render));
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        let fits_widget = self.fits_widget.clone();
+        egui::CentralPanel::default().show(ctx, move |ui| {
+            let mut lock = fits_widget.lock();
+            lock.update(ctx, frame);
         });
-    }
-
-    fn on_exit(&mut self, gl: Option<&glow::Context>) {
-        if let Some(gl) = gl {
-            self.fits_render.lock().destroy(gl);
-        }
     }
 }
 

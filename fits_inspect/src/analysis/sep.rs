@@ -95,6 +95,24 @@ impl<'a> Image {
         }
     }
 
+    pub fn sub(&mut self, background: &Background) -> Result<(), SepApiStatus> {
+        let status: SepApiStatus = unsafe {
+            let data: *mut c_void = self.image.as_mut_ptr() as *mut c_void;
+
+            sep_sys::sep_bkg_subarray(
+                background.sep_sys_background,
+                data,
+                self.sep_sys_image.dtype,
+            )
+        }
+        .into();
+
+        match status {
+            SepApiStatus::ReturnOk => Ok(()),
+            error => Err(error),
+        }
+    }
+
     pub fn extract(&self, _background: &Background) -> Result<Vec<CatalogEntry>, SepApiStatus> {
         let mut catalog: *mut sep_sys::sep_catalog = std::ptr::null_mut();
         let status: SepApiStatus = unsafe {

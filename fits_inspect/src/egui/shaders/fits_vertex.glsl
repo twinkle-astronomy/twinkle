@@ -7,5 +7,5 @@ uniform mat4 V;
 
 void main() {
     gl_Position = V*M*vec4(vertex, 0.0,  1.0);
-    UV = vertex;
+    UV = clamp(vertex, 0.0, 1.0);
 }

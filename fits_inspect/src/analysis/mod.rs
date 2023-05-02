@@ -108,6 +108,10 @@ impl HyperbolicFit {
     pub fn expected_y(&self, x: f64) -> f64 {
         HyperbolicPoints::expected_y(x, &[self.a, self.b, self.c, self.d])
     }
+
+    pub fn middle_x(&self) -> f64 {
+        self.c
+    }
 }
 struct HyperbolicPoints<'a> {
     points: &'a Vec<[f64; 2]>,

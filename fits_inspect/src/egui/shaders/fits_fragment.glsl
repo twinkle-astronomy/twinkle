@@ -24,14 +24,15 @@ void main() {
 
 
     if (x >= clip_high) {
-        color.r = 0.5f;
-        color.g = 0.25f;
-        color.b = 0.25f;
+        color.r = 1.0f;
+        color.g = 0.9f;
+        color.b = 0.9f;
     } else if (x <= clip_low) {
-        color.r = 0.25f;
-        color.g = 0.5f;
-        color.b = 0.25f;
-    } else {
+        color.r = 0.0f;
+        color.g = 0.2f;
+        color.b = 0.0f;
+    } else 
+    {
         x = (x - h_low) / (h_high - h_low);
         x =            ((h_mtf - 1.0)* x) /
             ((2*h_mtf - 1.0) * x - h_mtf);

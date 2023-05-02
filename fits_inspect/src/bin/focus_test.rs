@@ -27,8 +27,9 @@ fn load_focus_events<T: AsRef<Path>>(
             let hdu = fptr.primary_hdu().unwrap();
             let image: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
 
-            let sep_image = sep::Image::new(image).unwrap();
+            let mut sep_image = sep::Image::new(image).unwrap();
             let bkg = sep_image.background().unwrap();
+            sep_image.sub(&bkg);
             let catalog = sep_image.extract(&bkg).unwrap();
 
             println!("Found: {} stars", catalog.len());

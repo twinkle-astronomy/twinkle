@@ -14,14 +14,17 @@ async fn main() {
 
     let client = indi::client::new(TcpStream::connect(&args[1]).unwrap(), None, None)
         .expect("connecting to indi server");
-    let camera = client.get_device("ZWO CCD ASI294MM Pro").await.unwrap();
+    let camera = client
+        .get_device::<()>("ZWO CCD ASI294MM Pro")
+        .await
+        .unwrap();
     camera
         .enable_blob(None, indi::BlobEnable::Also)
         .await
         .expect("enabling image delivery");
     let imager = camera.get_parameter("CCD1").await.unwrap();
 
-    let eaf = client.get_device("ASI EAF").await.unwrap();
+    let eaf = client.get_device::<()>("ASI EAF").await.unwrap();
 
     let mut image_number = 0;
     let mut imager_gen = imager.lock().unwrap().gen();
