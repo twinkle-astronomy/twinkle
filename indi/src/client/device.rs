@@ -143,6 +143,14 @@ pub struct FitsImage {
     raw_data: Arc<Vec<u8>>,
 }
 
+impl std::fmt::Debug for FitsImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FitsImage")
+            .field("raw_data", &self.raw_data.len())
+            .finish()
+    }
+}
+
 impl FitsImage {
     /// Returns a new FitsImage from the given raw data
     pub fn new(data: Arc<Vec<u8>>) -> FitsImage {
@@ -356,13 +364,17 @@ impl ActiveDevice {
     /// * `exposure` - How long to expose the camera in seconds.
     /// # Example
     /// ```no_run
+    /// use std::time::Duration;
     /// use indi::client::device::ActiveDevice;
     /// use indi::*;
     /// async fn capture_image_usage_example(camera: ActiveDevice) {
-    ///     let image = camera.capture_image(30.0).await.expect("Capturing an image");
+    ///     let image = camera.capture_image(Duration::from_secs(30)).await.expect("Capturing an image");
     /// }
     /// ```
-    pub async fn capture_image(&self, exposure: f64) -> Result<FitsImage, ChangeError<Command>> {
+    pub async fn capture_image(
+        &self,
+        exposure: Duration,
+    ) -> Result<FitsImage, ChangeError<Command>> {
         let image_param = self.get_parameter("CCD1").await?;
         self.capture_image_from_param(exposure, &image_param).await
     }
@@ -377,30 +389,32 @@ impl ActiveDevice {
     ///                   connection for retrieving images.
     /// # Example
     /// ```no_run
+    /// use std::time::Duration;
     /// use std::net::TcpStream;
     /// use indi::client::Client;
     /// use indi::client::device::{ActiveDevice, FitsImage};
     /// use indi::*;
     /// async fn capture_image_from_param_usage_example(client: Client<TcpStream>, blob_client: Client<TcpStream>) {
     ///     // Get the camera device from the client dedicated to transfering blob data.
-    ///     let blob_camera = blob_client.get_device("ZWO CCD ASI294MM Pro").await.unwrap();
+    ///     let blob_camera = blob_client.get_device::<()>("ZWO CCD ASI294MM Pro").await.unwrap();
     ///     // Enable blobs
     ///     blob_camera.enable_blob(Some("CCD1"), indi::BlobEnable::Only).await.unwrap();
     ///     // Get the parameter used to transfer images from the camera after an exposure
     ///     let ccd_blob_param = blob_camera.get_parameter("CCD1").await.unwrap();
     ///
     ///     // Use the non-blob client to get the device used to control the camera
-    ///     let camera = client.get_device("ZWO CCD ASI294MM Pro").await.unwrap();
+    ///     let camera = client.get_device::<()>("ZWO CCD ASI294MM Pro").await.unwrap();
     ///     // Capture an image, getting the blob data from a client connection dedicated
     ///     //  to transfering blob data.
-    ///     let image: FitsImage = camera.capture_image_from_param(30.0, &ccd_blob_param).await.unwrap();
+    ///     let image: FitsImage = camera.capture_image_from_param(Duration::from_secs(30), &ccd_blob_param).await.unwrap();
     /// }
     /// ```
     pub async fn capture_image_from_param(
         &self,
-        exposure: f64,
+        exposure: Duration,
         image_param: &Notify<Parameter>,
     ) -> Result<FitsImage, ChangeError<Command>> {
+        let exposure = exposure.as_secs_f64();
         let exposure_param = self.get_parameter("CCD_EXPOSURE").await?;
         let device_name = self.name.clone();
 
@@ -471,9 +485,7 @@ impl ActiveDevice {
             // We've been called before the next image has come in.
             if let Some(image_data) = ccd.get_values::<HashMap<String, Blob>>()?.get("CCD1") {
                 if let Some(bytes) = &image_data.value {
-                    Ok(notify::Status::Complete(FitsImage {
-                        raw_data: bytes.clone(),
-                    }))
+                    Ok(notify::Status::Complete(FitsImage::new(bytes.clone())))
                 } else {
                     dbg!("No image data");
                     Err(ChangeError::PropertyError)
@@ -484,6 +496,65 @@ impl ActiveDevice {
             }
         })
         .await?)
+    }
+
+    pub async fn pixel_scale(&self) -> f64 {
+        let ccd_info = self.get_parameter("CCD_INFO").await.unwrap();
+
+        let ccd_binning = self.get_parameter("CCD_BINNING").await.unwrap();
+
+        let binning = {
+            let ccd_binning_lock = ccd_binning.lock().unwrap();
+            ccd_binning_lock
+                .get_values::<HashMap<String, Number>>()
+                .unwrap()
+                .get("HOR_BIN")
+                .unwrap()
+                .value
+        };
+        let pixel_scale = {
+            let ccd_info_lock = ccd_info.lock().unwrap();
+            let ccd_pixel_size = ccd_info_lock
+                .get_values::<HashMap<String, Number>>()
+                .unwrap()
+                .get("CCD_PIXEL_SIZE")
+                .unwrap()
+                .value;
+            binning * ccd_pixel_size / 800.0 * 180.0 / std::f64::consts::PI * 3.6
+        };
+
+        pixel_scale
+    }
+
+    pub async fn filter_names(&self) -> Result<HashMap<String, usize>, ChangeError<Command>> {
+        let filter_names: HashMap<String, usize> = {
+            let filter_names_param = self.get_parameter("FILTER_NAME").await?;
+            let l = filter_names_param.lock().unwrap();
+            l.get_values::<HashMap<String, Text>>()?
+                .iter()
+                .map(|(slot, name)| {
+                    let slot = slot
+                        .split("_")
+                        .last()
+                        .map(|x| x.parse::<usize>().unwrap())
+                        .unwrap();
+                    (name.value.clone(), slot)
+                })
+                .collect()
+        };
+        Ok(filter_names)
+    }
+
+    pub async fn change_filter(&self, filter_name: &str) -> Result<(), ChangeError<Command>> {
+        let filter_names: HashMap<String, usize> = self.filter_names().await?;
+        match filter_names.get(filter_name) {
+            Some(slot) => {
+                self.change("FILTER_SLOT", vec![("FILTER_SLOT_VALUE", *slot as f64)])
+                    .await?;
+                Ok(())
+            }
+            None => Err(ChangeError::PropertyError),
+        }
     }
 }
 #[cfg(test)]

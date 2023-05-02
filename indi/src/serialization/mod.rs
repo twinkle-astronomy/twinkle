@@ -668,6 +668,7 @@ impl<T: std::io::BufRead> CommandIter<T> {
     }
 
     fn next_command(&mut self) -> Result<Option<Command>, DeError> {
+        self.buf.truncate(0);
         let event = self.xml_reader.read_event_into(&mut self.buf)?;
         match event {
             Event::Start(e) => match e.name() {

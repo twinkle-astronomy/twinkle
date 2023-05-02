@@ -44,6 +44,7 @@ impl<T> From<notify::Error<ChangeError<T>>> for ChangeError<T> {
         }
     }
 }
+
 impl<E> From<std::io::Error> for ChangeError<E> {
     fn from(value: std::io::Error) -> Self {
         ChangeError::<E>::IoError(value)
@@ -104,7 +105,7 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 ///     // Retrieve the camera and set BlobEnable to `Only` to ensure this connection
 ///     //  is only used for transfering images.
 ///     let image_camera = image_client
-///         .get_device("ZWO CCD ASI294MM Pro")
+///         .get_device::<()>("ZWO CCD ASI294MM Pro")
 ///         .await
 ///         .expect("Getting imaging camera");
 ///     image_camera
@@ -193,16 +194,16 @@ impl<T: ClientConnection> Client<T> {
     /// let client = indi::client::new(TcpStream::connect("localhost:7624").expect("Connecting to server"), None, None).expect("Initializing connection to INDI server");
     /// async {
     /// let filter_wheel = client
-    ///     .get_device("ASI EFW")
+    ///     .get_device::<()>("ASI EFW")
     ///     .await
     ///     .expect("Getting filter wheel");
     ///
     /// };
     /// ```
-    pub async fn get_device<'a>(
+    pub async fn get_device<'a, E>(
         &'a self,
         name: &str,
-    ) -> Result<device::ActiveDevice, notify::Error<()>> {
+    ) -> Result<device::ActiveDevice, notify::Error<E>> {
         let subs = self.devices.subscribe()?;
         wait_fn(subs, Duration::from_secs(1), |devices| {
             if let Some(device) = devices.get(name) {

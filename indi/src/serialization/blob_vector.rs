@@ -305,6 +305,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                             QName(b"format") => format = Ok(attr_value),
                             QName(b"size") => size = Ok(attr_value.parse::<u64>()?),
                             QName(b"enclen") => enclen = Some(attr_value.parse::<u64>()?),
+                            QName(b"len") => (),
                             key => {
                                 return Err(DeError::UnexpectedAttr(format!(
                                     "Unexpected attribute {}",
@@ -340,7 +341,6 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         Event::End(_) => (),
                         e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                     }
-
                     Ok(Some(OneBlob {
                         name: name?,
                         size: size?,

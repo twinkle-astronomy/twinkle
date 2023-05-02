@@ -49,6 +49,7 @@
 //! be [notified](crate::client::notify) of changes to those devices, and request [changes](crate::client::device::ActiveDevice::change).
 //! #### Example
 //! ```no_run
+//! use std::time::Duration;
 //! use std::net::TcpStream;
 //!
 //! #[tokio::main]
@@ -61,7 +62,7 @@
 //!
 //!     // Get an specific camera device
 //!     let camera = client
-//!         .get_device("ZWO CCD ASI294MM Pro")
+//!         .get_device::<()>("ZWO CCD ASI294MM Pro")
 //!         .await
 //!         .expect("Getting camera device");
 //!
@@ -89,7 +90,7 @@
 //!         .expect("Configuring camera");
 //!
 //!     // Capture a 5 second exposure from the camera
-//!     let fits = camera.capture_image(5.0).await.expect("Capturing image");
+//!     let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
 //!
 //!     // Save the fits file to disk.
 //!     fits.save("flat.fits").expect("Saving image");

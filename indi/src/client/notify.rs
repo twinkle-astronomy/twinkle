@@ -314,7 +314,7 @@ impl<'a, T> Deref for NotifyMutexGuard<'a, T> {
     }
 }
 
-impl<'a, T: Debug + Clone> DerefMut for NotifyMutexGuard<'a, T> {
+impl<'a, T: Clone> DerefMut for NotifyMutexGuard<'a, T> {
     /// Mutably dereferences the value.  If the value is currently holding
     /// a previous value then the wrapped value T will be cloned.
     /// See [`Arc::make_mut`](std::sync::Arc::make_mut) for more details.
