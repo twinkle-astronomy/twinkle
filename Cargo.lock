@@ -1103,7 +1103,7 @@ dependencies = [
  "egui",
  "fitsio",
  "image",
- "indi",
+ "indi 3.0.0",
  "median",
  "ndarray",
  "ndarray-conv",
@@ -1480,7 +1480,7 @@ dependencies = [
 
 [[package]]
 name = "indi"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "base64",
  "bytes",
@@ -1499,10 +1499,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "indi"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dc60fc3d761ee7cb5760c7723ff2361f1a63b70d12372ee8fde5a6fe0a4ced8"
+dependencies = [
+ "base64",
+ "chrono",
+ "crossbeam-channel",
+ "derivative",
+ "encoding",
+ "fitsio",
+ "libc",
+ "log",
+ "ndarray",
+ "once_cell",
+ "quick-xml",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "indi_exporter"
 version = "0.1.0"
 dependencies = [
- "indi",
+ "indi 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "prometheus",
  "prometheus_exporter",
 ]
@@ -3129,7 +3150,7 @@ dependencies = [
  "egui",
  "fits_inspect",
  "fitsio",
- "indi",
+ "indi 3.0.0",
  "ndarray",
  "serde",
  "tokio",
