@@ -16,6 +16,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+
     let filenames = args.filenames;
 
     for filename in filenames {
@@ -45,7 +46,6 @@ fn main() {
                         println!("{}/{}: Adding '{}'.", &filename, &args.name, &args.value);
                         hdu.write_key(&mut fptr, &args.name, args.value.clone())
                             .expect("Writing header");
-                        continue;
                     } else {
                         eprintln!("{}/{}: Error '{}'.", &filename, &args.name, e.message);
                     }

@@ -2,6 +2,8 @@ mod statistics;
 pub use statistics::*;
 pub mod sep;
 
+pub mod astigmatism;
+
 use ndarray::Array;
 use ndarray_stats::CorrelationExt;
 use rmpfit::{MPFitter, MPResult};

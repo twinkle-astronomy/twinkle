@@ -1,8 +1,8 @@
 extern crate fitsio;
 
-use fits_inspect::analysis::{sep, Statistics};
+use fits_inspect::analysis::{astigmatism, sep};
 use fitsio::images::{ImageDescription, ImageType};
-use ndarray::{prelude::*, IxDynImpl, RemoveAxis};
+use ndarray::{prelude::*, IxDynImpl};
 use std::{env, fs, path::Path};
 
 trait WeightedValue {
@@ -36,36 +36,7 @@ fn focal(filename: &String) -> f64 {
     let hdu = fptr.primary_hdu().expect("Getting primary HDU");
     let data: ArrayD<u16> = hdu.read_image(&mut fptr).expect("reading image");
     // dbg!(data.shape());
-
-    let center_x = data.shape()[1] as f64;
-    let center_y = data.shape()[0] as f64;
-
-    let sep_image = sep::Image::new(data).unwrap();
-    let bkg = sep_image.background().unwrap();
-    let catalog = sep_image.extract(&bkg).unwrap();
-
-    let f = catalog.iter().map(|star| {
-        let x = center_x - star.x;
-        let y = center_y - star.y;
-        let position_theta = y.atan2(x);
-
-        let delta = (position_theta - star.theta as f64).abs();
-        let delta = if delta > std::f64::consts::PI / 2.0 {
-            std::f64::consts::PI - delta
-        } else {
-            delta
-        };
-        // println!("************************************");
-        // dbg!(star.theta, star.theta as f64 * 180.0 / std::f64::consts::PI);
-        // dbg!(position_theta, position_theta * 180.0 / std::f64::consts::PI);
-        // dbg!((star.x, star.y));
-
-        // dbg!((star.a as f64 / star.b as f64, delta * 180.0 / std::f64::consts::PI));
-
-        (delta, 1.0) //star.a as f64 / star.b as f64 - 1.0)
-    });
-
-    weighted_mean(f) * 180.0 / std::f64::consts::PI - 45.0 //(45.0 * std::f64::consts::PI / 180.0)
+    return astigmatism::focus(data);
 }
 
 fn lines(filename: &String) {
@@ -147,6 +118,6 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     for filename in &args[1..] {
-        dbg!(filename, lines(filename));
+        dbg!(filename, focal(filename));
     }
 }
