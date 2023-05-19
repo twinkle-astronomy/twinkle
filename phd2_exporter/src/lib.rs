@@ -1,16 +1,15 @@
 pub mod serialization;
 
-use std::net::TcpStream;
 use std::fs::File;
+use std::net::TcpStream;
 
-use serde_json::{Deserializer, StreamDeserializer, de::IoRead};
 use crate::serialization::Event;
-
+use serde_json::{de::IoRead, Deserializer, StreamDeserializer};
 
 pub trait Connection {
     type Read: std::io::Read + Send;
 
-    fn iter(&self) -> StreamDeserializer<'_, IoRead<<Self as Connection>::Read>, Event>{
+    fn iter(&self) -> StreamDeserializer<'_, IoRead<<Self as Connection>::Read>, Event> {
         let deser = Deserializer::from_reader(self.clone_reader().unwrap());
         deser.into_iter::<Event>()
     }
@@ -37,18 +36,14 @@ impl Connection for File {
 #[cfg(test)]
 mod tests {
 
-
-
     use super::*;
 
     #[test]
     fn test_read_session() {
-
         let file = File::open("./src/test_data/session.log").unwrap();
 
         for _event in file.iter() {
             dbg!(_event);
         }
-
     }
 }
