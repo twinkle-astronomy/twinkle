@@ -3,6 +3,7 @@
 members = [
 	"indi",
 	"indi_exporter",
+	"phd2_exporter",
 	"twinkle",
 	"fits_inspect",
 ]
