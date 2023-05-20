@@ -1,49 +1,77 @@
 pub mod serialization;
-
-use std::fs::File;
-use std::net::TcpStream;
-
-use crate::serialization::Event;
+pub mod metrics;
 use serde_json::{de::IoRead, Deserializer, StreamDeserializer};
+use serialization::ServerEvent;
+
+pub trait WithMiddleware<T: std::io::Read> {
+    fn middleware<F>(self, func: F) -> ReadMiddleware<T, F>
+    where
+        F: Fn(&[u8]);
+}
+
+impl<T: std::io::Read> WithMiddleware<T> for T {
+    fn middleware<F>(self, func: F) -> ReadMiddleware<T, F>
+    where
+        F: Fn(&[u8]),
+    {
+        ReadMiddleware { read: self, func }
+    }
+}
+
+pub struct ReadMiddleware<T, F>
+where
+    T: std::io::Read,
+    F: Fn(&[u8]),
+{
+    read: T,
+    func: F,
+}
+
+impl<T, F> ReadMiddleware<T, F>
+where
+    T: std::io::Read,
+    F: Fn(&[u8]),
+{
+    pub fn new(read: T, func: F) -> Self {
+        ReadMiddleware { read, func }
+    }
+}
+
+impl<T, F> std::io::Read for ReadMiddleware<T, F>
+where
+    T: std::io::Read,
+    F: Fn(&[u8]),
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = self.read.read(buf)?;
+        (self.func)(&buf[0..len]);
+        Ok(len)
+    }
+}
 
 pub trait Connection {
-    type Read: std::io::Read + Send;
-
-    fn iter(&self) -> StreamDeserializer<'_, IoRead<<Self as Connection>::Read>, Event> {
-        let deser = Deserializer::from_reader(self.clone_reader().unwrap());
-        deser.into_iter::<Event>()
-    }
-
-    fn clone_reader(&self) -> Result<Self::Read, std::io::Error>;
-}
-
-impl Connection for TcpStream {
-    type Read = TcpStream;
-
-    fn clone_reader(&self) -> Result<Self::Read, std::io::Error> {
-        self.try_clone()
+    fn iter(self) -> StreamDeserializer<'static, IoRead<Self>, ServerEvent>
+    where
+        Self: Sized + std::io::Read,
+    {
+        Deserializer::from_reader(self).into_iter::<ServerEvent>()
     }
 }
 
-impl Connection for File {
-    type Read = File;
-
-    fn clone_reader(&self) -> Result<Self::Read, std::io::Error> {
-        self.try_clone()
-    }
-}
+impl<T: std::io::Read> Connection for T {}
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+
+    use std::fs::File;
 
     #[test]
     fn test_read_session() {
         let file = File::open("./src/test_data/session.log").unwrap();
 
         for _event in file.iter() {
-            dbg!(_event);
+            dbg!(_event.unwrap());
         }
     }
 }

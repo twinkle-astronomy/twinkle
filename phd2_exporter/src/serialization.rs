@@ -1,8 +1,5 @@
 use serde::Deserialize;
 
-trait CommonEvent {
-    fn get_timestamp(&self) -> f64;
-}
 #[derive(Deserialize, Debug)]
 pub struct Common {
     #[serde(alias = "Timestamp")]
@@ -14,8 +11,8 @@ pub struct Common {
 }
 #[derive(Deserialize, Debug)]
 pub struct Version {
-    #[serde(flatten)]
-    pub common: Common,
+    // #[serde(flatten)]
+    // pub common: Common,
     #[serde(alias = "PHDVersion")]
     pub phd_version: String,
     #[serde(alias = "PHDSubver")]
@@ -28,12 +25,6 @@ pub struct Version {
 
 #[derive(Deserialize, Debug)]
 pub struct LockPositionSet {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "X")]
     pub x: f64,
     #[serde(alias = "Y")]
@@ -42,12 +33,6 @@ pub struct LockPositionSet {
 
 #[derive(Deserialize, Debug)]
 pub struct Calibrating {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Mount")]
     pub mount: String,
     pub dir: String,
@@ -61,24 +46,12 @@ pub struct Calibrating {
 
 #[derive(Deserialize, Debug)]
 pub struct CalibrationComplete {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Mount")]
     pub mount: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct StarSelected {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "X")]
     pub x: f64,
     #[serde(alias = "Y")]
@@ -86,33 +59,13 @@ pub struct StarSelected {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct StartGuiding {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct StartGuiding {}
 
 #[derive(Deserialize, Debug)]
-pub struct Paused {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct Paused {}
 
 #[derive(Deserialize, Debug)]
 pub struct StartCalibration {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Mount")]
     pub mount: String,
 }
@@ -130,12 +83,6 @@ pub enum State {
 
 #[derive(Deserialize, Debug)]
 pub struct AppState {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "State")]
     pub state: State,
 }
@@ -143,77 +90,33 @@ pub struct AppState {
 #[derive(Deserialize, Debug)]
 pub struct CalibrationFailed {
     #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Reason")]
     pub reason: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct CalibrationDataFlipped {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Mount")]
     pub mount: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LockPositionShiftLimitReached {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct LockPositionShiftLimitReached {}
 
 #[derive(Deserialize, Debug)]
 pub struct LoopingExposures {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Frame")]
     pub frame: u32,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LoopingExposuresStopped {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct LoopingExposuresStopped {}
 
 #[derive(Deserialize, Debug)]
-pub struct SettleBegin {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct SettleBegin {}
 
 #[derive(Deserialize, Debug)]
 pub struct Settling {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Distance")]
     pub distance: f64,
     #[serde(alias = "Time")]
@@ -226,11 +129,6 @@ pub struct Settling {
 
 #[derive(Deserialize, Debug)]
 pub struct SettleDone {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
     pub inst: u32,
     #[serde(alias = "Status")]
     pub status: u32,
@@ -244,12 +142,6 @@ pub struct SettleDone {
 
 #[derive(Deserialize, Debug)]
 pub struct StarLost {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Frame")]
     pub frame: u32,
     #[serde(alias = "Time")]
@@ -267,24 +159,10 @@ pub struct StarLost {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct GuidingStopped {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct GuidingStopped {}
 
 #[derive(Deserialize, Debug)]
-pub struct Resumed {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct Resumed {}
 
 #[derive(Deserialize, Debug)]
 pub enum NorthSouth {
@@ -299,12 +177,6 @@ pub enum EastWest {
 
 #[derive(Deserialize, Debug)]
 pub struct GuideStep {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Frame")]
     pub frame: u32,
     #[serde(alias = "Time")]
@@ -347,34 +219,15 @@ pub struct GuideStep {
 
 #[derive(Deserialize, Debug)]
 pub struct GuidingDithered {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     pub dx: f64,
     pub dy: f64,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LockPositionLost {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct LockPositionLost {}
 
 #[derive(Deserialize, Debug)]
 pub struct Alert {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Msg")]
     pub msg: String,
     #[serde(alias = "Type")]
@@ -383,12 +236,6 @@ pub struct Alert {
 
 #[derive(Deserialize, Debug)]
 pub struct GuideParamChange {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
     #[serde(alias = "Name")]
     pub name: String,
     #[serde(alias = "Value")]
@@ -396,14 +243,7 @@ pub struct GuideParamChange {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ConfigurationChange {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
+pub struct ConfigurationChange {}
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "Event")]
@@ -434,4 +274,17 @@ pub enum Event {
     Alert(Alert),
     GuideParamChange(GuideParamChange),
     ConfigurationChange(ConfigurationChange),
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ServerEvent {
+    #[serde(alias = "Timestamp")]
+    pub timestamp: f64,
+    #[serde(alias = "Host")]
+    pub host: String,
+    #[serde(alias = "Inst")]
+    pub inst: u32,
+
+    #[serde(flatten)]
+    pub event: Event,
 }
