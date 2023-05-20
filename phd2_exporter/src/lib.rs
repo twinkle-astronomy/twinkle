@@ -1,5 +1,5 @@
-pub mod serialization;
 pub mod metrics;
+pub mod serialization;
 use serde_json::{de::IoRead, Deserializer, StreamDeserializer};
 use serialization::ServerEvent;
 
@@ -48,9 +48,10 @@ where
         Ok(len)
     }
 }
+pub type ConnectionIter<T> = StreamDeserializer<'static, IoRead<T>, ServerEvent>;
 
 pub trait Connection {
-    fn iter(self) -> StreamDeserializer<'static, IoRead<Self>, ServerEvent>
+    fn iter(self) -> ConnectionIter<Self>
     where
         Self: Sized + std::io::Read,
     {

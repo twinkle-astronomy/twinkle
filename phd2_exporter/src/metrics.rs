@@ -1,9 +1,8 @@
-use std::{thread, time::Duration};
+use prometheus_exporter::prometheus::{
+    histogram_opts, linear_buckets, opts, register_gauge_vec, register_histogram_vec,
+};
 
-use prometheus_exporter::prometheus::{register_gauge_vec, register_histogram_vec, opts, histogram_opts, linear_buckets};
-
-use crate::{serialization::{ServerEvent, Event}, Connection};
-
+use crate::serialization::{Event, ServerEvent};
 
 pub struct Metrics {
     // guide_distance: GenericGaugeVec<AtomicF64>,
@@ -15,12 +14,10 @@ pub struct Metrics {
 
     guide_hfd: prometheus_exporter::prometheus::GaugeVec,
     guide_hfd_histo: prometheus_exporter::prometheus::HistogramVec,
-
-    pause: bool,
 }
 
 impl Metrics {
-    pub fn new(pause: bool) -> Self {
+    pub fn new() -> Self {
         let guide_snr =
             register_gauge_vec!(opts!("phd2_guide_snr", "Guide snr"), &["host", "mount",]).unwrap();
 
@@ -67,7 +64,6 @@ impl Metrics {
         .unwrap();
 
         Metrics {
-            pause,
             guide_snr,
             guide_snr_histo,
             guide_star_mass,
@@ -77,54 +73,43 @@ impl Metrics {
         }
     }
 
-    fn handle_event(&self, event: ServerEvent) {
-        // println!("Event: {:?}", event);
-        match event.event {
-            Event::GuideStep(guide) => {
-                let snr = guide.snr;
-                dbg!(snr);
-                self.guide_snr
-                    .with_label_values(&[&event.host, &guide.mount])
-                    .set(snr);
+    pub fn run<T: Iterator<Item = Result<ServerEvent, serde_json::Error>>>(self, iter: T) {
+        for event in iter {
+            let event = event.unwrap();
+            match event.event {
+                Event::GuideStep(guide) => {
+                    let snr = guide.snr;
+                    // dbg!(snr);
+                    self.guide_snr
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .set(snr);
 
-                self.guide_snr_histo
-                    .with_label_values(&[&event.host, &guide.mount])
-                    .observe(snr);
+                    self.guide_snr_histo
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .observe(snr);
 
-                let star_mass = guide.star_mass;
-                dbg!(star_mass);
-                self.guide_star_mass
-                    .with_label_values(&[&event.host, &guide.mount])
-                    .set(star_mass);
+                    let star_mass = guide.star_mass;
+                    // dbg!(star_mass);
+                    self.guide_star_mass
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .set(star_mass);
 
-                self.guide_star_mass_histo
-                    .with_label_values(&[&event.host, &guide.mount])
-                    .observe(star_mass);
+                    self.guide_star_mass_histo
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .observe(star_mass);
 
-                let hfd = guide.hfd;
-                dbg!(hfd);
-                self.guide_hfd
-                    .with_label_values(&[&event.host, &guide.mount])
-                    .set(hfd);
+                    let hfd = guide.hfd;
+                    // dbg!(hfd);
+                    self.guide_hfd
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .set(hfd);
 
-                self.guide_hfd_histo
-                    .with_label_values(&[&event.host, &guide.mount])
-                    .observe(hfd);
-
-                if self.pause {
-                    thread::sleep(Duration::from_secs(1));
+                    self.guide_hfd_histo
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .observe(hfd);
                 }
+                _ => {}
             }
-            _ => {}
-        }
-    }
-
-    pub fn run<T: Connection + std::io::Read>(self, phd2_connection: T) {
-        let i = phd2_connection.iter();
-        // let iter = i.into_iter();
-        for event in i {
-            let e = event.unwrap();
-            self.handle_event(e);
         }
     }
 }
