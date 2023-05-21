@@ -30,10 +30,29 @@ services:
   indi_exporter:
     image: indi_exporter
     restart: always
-    build: .
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
     command:
-      "cargo run --release -- host.docker.internal:7624"
+      "cargo run --bin indi_exporter -- ${INDI_ARGS:-host.docker.internal:7624}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - 9186:9186
+
+  phd2_exporter:
+    image: phd2_exporter
+    restart: always
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+    command:
+      "cargo run --bin phd2_exporter -- ${PHD2_ARGS:-host.docker.internal:4400}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 9187:9187

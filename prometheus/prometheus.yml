@@ -1,0 +1,20 @@
+
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+         - targets: ['localhost:9090']
+
+  - job_name: 'indi_exporter'
+    scrape_interval: 15s
+    static_configs:
+         - targets: ['indi_exporter:9186']
+
+  - job_name: 'phd2_exporter'
+    scrape_interval: 15s
+    static_configs:
+         - targets: ['phd2_exporter:9187']
