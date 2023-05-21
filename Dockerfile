@@ -1,6 +1,6 @@
 FROM rust as dev
 
-RUN apt-get update && apt install -y --no-install-recommends libcfitsio-dev
+RUN apt-get update && apt-get install -y --no-install-recommends libcfitsio-dev && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /app
 ENV HOME="/app"
@@ -18,3 +18,13 @@ RUN groupadd -g ${GROUP_ID} ${USER} && \
 RUN chown ${USER}:${USER} /app
 USER ${USER}
 
+from dev as builder
+COPY . /app
+RUN cargo install --path ./phd2_exporter
+RUN cargo install --path ./indi_exporter
+
+FROM debian:bullseye-slim as release
+# RUN apt-get update && apt-get install -y extra-runtime-dependencies && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/cargo/bin/phd2_exporter /usr/local/bin/
+COPY --from=builder /usr/local/cargo/bin/indi_exporter /usr/local/bin/

@@ -1,3 +1,6 @@
-automation/
+./automation/
+./fits_inspect/images
+./target/
+./.git/
 *.fits
-target/
+.bash_history

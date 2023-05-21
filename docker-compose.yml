@@ -36,7 +36,7 @@ services:
     volumes:
       - .:/app
     command:
-      "cargo run --bin indi_exporter -- ${INDI_ARGS:-host.docker.internal:7624}"
+      "cargo run --bin indi_exporter -- ${INDI_EXPORTER_ARGS:-host.docker.internal:7624}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -51,7 +51,7 @@ services:
     volumes:
       - .:/app
     command:
-      "cargo run --bin phd2_exporter -- ${PHD2_ARGS:-host.docker.internal:4400}"
+      "cargo run --bin phd2_exporter -- ${PHD2_EXPORTER_ARGS:-host.docker.internal:4400}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
