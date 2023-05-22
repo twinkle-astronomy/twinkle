@@ -1,5 +1,6 @@
 use prometheus_exporter::prometheus::{
-    histogram_opts, linear_buckets, opts, register_gauge_vec, register_histogram_vec, exponential_buckets,
+    exponential_buckets, histogram_opts, linear_buckets, opts, register_gauge_vec,
+    register_histogram_vec,
 };
 
 use crate::serialization::{Event, ServerEvent};
@@ -14,6 +15,12 @@ pub struct Metrics {
 
     guide_hfd: prometheus_exporter::prometheus::GaugeVec,
     guide_hfd_histo: prometheus_exporter::prometheus::HistogramVec,
+
+    ra_distance_raw: prometheus_exporter::prometheus::GaugeVec,
+    de_distance_raw: prometheus_exporter::prometheus::GaugeVec,
+
+    total_distance_raw: prometheus_exporter::prometheus::GaugeVec,
+    total_distance_raw_histo: prometheus_exporter::prometheus::HistogramVec,
 }
 
 impl Metrics {
@@ -63,6 +70,43 @@ impl Metrics {
         )
         .unwrap();
 
+        let ra_distance_raw = register_gauge_vec!(
+            opts!(
+                "phd2_ra_distance_raw",
+                "The RA distance in pixels of the guide offset vector"
+            ),
+            &["host", "mount",]
+        )
+        .unwrap();
+
+        let de_distance_raw = register_gauge_vec!(
+            opts!(
+                "phd2_de_distance_raw",
+                "The DEC distance in pixels of the guide offset vector"
+            ),
+            &["host", "mount",]
+        )
+        .unwrap();
+
+        let total_distance_raw = register_gauge_vec!(
+            opts!(
+                "phd2_total_distance_raw",
+                "The total distance in pixels of the guide offset vector"
+            ),
+            &["host", "mount",]
+        )
+        .unwrap();
+
+        let total_distance_raw_histo = register_histogram_vec!(
+            histogram_opts!(
+                "phd2_total_distance_raw_histo",
+                "Histogram of the total distance in pixels of the guide offset vector",
+                exponential_buckets(0.01, 1.1, 100).unwrap()
+            ),
+            &["host", "mount",]
+        )
+        .unwrap();
+
         Metrics {
             guide_snr,
             guide_snr_histo,
@@ -70,6 +114,10 @@ impl Metrics {
             guide_star_mass_histo,
             guide_hfd,
             guide_hfd_histo,
+            ra_distance_raw,
+            de_distance_raw,
+            total_distance_raw,
+            total_distance_raw_histo,
         }
     }
 
@@ -107,6 +155,27 @@ impl Metrics {
                     self.guide_hfd_histo
                         .with_label_values(&[&event.host, &guide.mount])
                         .observe(hfd);
+
+                    let ra_distance_raw = guide.ra_distance_raw;
+                    self.ra_distance_raw
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .set(ra_distance_raw);
+
+                    let de_distance_raw = guide.de_distance_raw;
+                    self.de_distance_raw
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .set(de_distance_raw);
+
+                    let total_distance_raw = (guide.ra_distance_raw * guide.ra_distance_raw
+                        + guide.de_distance_raw * guide.de_distance_raw)
+                        .sqrt();
+                    self.total_distance_raw
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .set(total_distance_raw);
+
+                    self.total_distance_raw_histo
+                        .with_label_values(&[&event.host, &guide.mount])
+                        .observe(total_distance_raw);
                 }
                 _ => {}
             }
