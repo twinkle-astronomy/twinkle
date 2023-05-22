@@ -1,5 +1,5 @@
 use prometheus_exporter::prometheus::{
-    histogram_opts, linear_buckets, opts, register_gauge_vec, register_histogram_vec,
+    histogram_opts, linear_buckets, opts, register_gauge_vec, register_histogram_vec, exponential_buckets,
 };
 
 use crate::serialization::{Event, ServerEvent};
@@ -41,7 +41,7 @@ impl Metrics {
             histogram_opts!(
                 "phd2_guide_star_mass_histo",
                 "Histogram of snr",
-                linear_buckets(10.0, 5.0, 50).unwrap()
+                exponential_buckets(10_000.0, 1.1, 50).unwrap()
             ),
             &["host", "mount",]
         )
@@ -57,7 +57,7 @@ impl Metrics {
             histogram_opts!(
                 "phd2_guide_hfd_histo",
                 "Histogram of guide hfd",
-                linear_buckets(10.0, 5.0, 50).unwrap()
+                linear_buckets(1.0, 0.1, 50).unwrap()
             ),
             &["host", "mount",]
         )
