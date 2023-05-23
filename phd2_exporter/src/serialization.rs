@@ -1,15 +1,6 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
-pub struct Common {
-    #[serde(alias = "Timestamp")]
-    pub timestamp: f64,
-    #[serde(alias = "Host")]
-    pub host: String,
-    #[serde(alias = "Inst")]
-    pub inst: u32,
-}
-#[derive(Deserialize, Debug)]
 pub struct Version {
     // #[serde(flatten)]
     // pub common: Common,
@@ -129,7 +120,6 @@ pub struct Settling {
 
 #[derive(Deserialize, Debug)]
 pub struct SettleDone {
-    pub inst: u32,
     #[serde(alias = "Status")]
     pub status: u32,
     #[serde(alias = "Error")]
