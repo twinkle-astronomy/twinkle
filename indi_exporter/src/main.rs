@@ -21,48 +21,106 @@ impl Metrics {
             gauge,
         }
     }
+
     fn handle_command(&mut self, command: indi::serialization::Command) {
-        println!("Command: {:?}", command);
         let device_name = command.device_name().unwrap().clone();
-        self.devices
-            .update(command, |param_enum| {
-                state_metric(&self.states, &device_name, &param_enum);
-                match param_enum.as_ref() {
-                    indi::Parameter::NumberVector(param) => {
-                        for (value_name, value) in &param.values {
-                            self.gauge
-                                .with_label_values(&[
-                                    device_name.as_str(),
-                                    param.name.as_str(),
-                                    param.label.as_ref().unwrap_or(&"".to_string()).as_str(),
-                                    value_name.as_str(),
-                                    value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
-                                ])
-                                .set(value.value);
+        let update_result = self.devices.update(command, |update| {
+            match update {
+                indi::client::device::ParamUpdateResult::NoUpdate => {}
+                indi::client::device::ParamUpdateResult::ExistingParam(param_enum) => {
+                    state_metric(&self.states, &device_name, &param_enum);
+                    match param_enum.as_ref() {
+                        indi::Parameter::NumberVector(param) => {
+                            for (value_name, value) in &param.values {
+                                self.gauge
+                                    .with_label_values(&[
+                                        device_name.as_str(),
+                                        param.name.as_str(),
+                                        param.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                        value_name.as_str(),
+                                        value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                    ])
+                                    .set(value.value);
+                            }
                         }
-                    }
-                    indi::Parameter::SwitchVector(param) => {
-                        for (value_name, value) in &param.values {
-                            let v = if value.value == indi::SwitchState::On {
-                                1.0
-                            } else {
-                                0.0
-                            };
-                            self.gauge
-                                .with_label_values(&[
-                                    device_name.as_str(),
-                                    param.name.as_str(),
-                                    param.label.as_ref().unwrap_or(&"".to_string()).as_str(),
-                                    value_name.as_str(),
-                                    value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
-                                ])
-                                .set(v);
+                        indi::Parameter::SwitchVector(param) => {
+                            for (value_name, value) in &param.values {
+                                let v = if value.value == indi::SwitchState::On {
+                                    1.0
+                                } else {
+                                    0.0
+                                };
+                                self.gauge
+                                    .with_label_values(&[
+                                        device_name.as_str(),
+                                        param.name.as_str(),
+                                        param.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                        value_name.as_str(),
+                                        value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
+                                    ])
+                                    .set(v);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            })
-            .unwrap();
+                indi::client::device::ParamUpdateResult::DeletedParams(deleted_params) => {
+                    for param in deleted_params {
+                        let param = param.lock().unwrap();
+                        remove_state_metric(&self.states, &device_name, &param);
+                        match param.as_ref() {
+                            indi::Parameter::NumberVector(param) => {
+                                for (value_name, value) in &param.values {
+                                    self.gauge
+                                        .remove_label_values(&[
+                                            // .with_label_values(&[
+                                            device_name.as_str(),
+                                            param.name.as_str(),
+                                            param
+                                                .label
+                                                .as_ref()
+                                                .unwrap_or(&"".to_string())
+                                                .as_str(),
+                                            value_name.as_str(),
+                                            value
+                                                .label
+                                                .as_ref()
+                                                .unwrap_or(&"".to_string())
+                                                .as_str(),
+                                        ])
+                                        .unwrap();
+                                }
+                            }
+                            indi::Parameter::SwitchVector(param) => {
+                                for (value_name, value) in &param.values {
+                                    self.gauge
+                                        .remove_label_values(&[
+                                            device_name.as_str(),
+                                            param.name.as_str(),
+                                            param
+                                                .label
+                                                .as_ref()
+                                                .unwrap_or(&"".to_string())
+                                                .as_str(),
+                                            value_name.as_str(),
+                                            value
+                                                .label
+                                                .as_ref()
+                                                .unwrap_or(&"".to_string())
+                                                .as_str(),
+                                        ])
+                                        .unwrap();
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        });
+        if let Err(e) = update_result {
+            dbg!(e);
+        }
     }
 }
 
@@ -115,6 +173,28 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+fn remove_state_metric(states: &GaugeVec, device_name: &String, param: &indi::Parameter) {
+    for state in &[
+        indi::PropertyState::Idle,
+        indi::PropertyState::Ok,
+        indi::PropertyState::Busy,
+        indi::PropertyState::Alert,
+    ] {
+        states
+            .remove_label_values(&[
+                device_name.as_str(),
+                param.get_name().as_str(),
+                param
+                    .get_label()
+                    .as_ref()
+                    .unwrap_or(&"".to_string())
+                    .as_str(),
+                format!("{:?}", state).as_str(),
+            ])
+            .unwrap();
     }
 }
 

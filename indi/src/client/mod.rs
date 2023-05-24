@@ -13,11 +13,11 @@ use std::{
 use quick_xml::{Reader, Writer};
 
 use crate::{
-    serialization, Command, DeError, GetProperties, Parameter, TypeError, UpdateError,
+    serialization, Command, DeError, GetProperties, TypeError, UpdateError,
     XmlSerialization, INDI_PROTOCOL_VERSION,
 };
 
-use self::notify::{wait_fn, Notify, NotifyMutexGuard};
+use self::{notify::{wait_fn, Notify, NotifyMutexGuard}, device::ParamUpdateResult};
 
 #[derive(Debug)]
 pub enum ChangeError<E> {
@@ -235,7 +235,7 @@ pub trait DeviceStore {
     fn update<T>(
         &mut self,
         command: serialization::Command,
-        f: impl FnOnce(notify::NotifyMutexGuard<Parameter>) -> T,
+        f: impl FnOnce(ParamUpdateResult) -> T,
     ) -> Result<Option<T>, UpdateError>;
 }
 
@@ -243,7 +243,7 @@ impl DeviceStore for MemoryDeviceStore {
     fn update<T>(
         &mut self,
         command: serialization::Command,
-        f: impl FnOnce(notify::NotifyMutexGuard<Parameter>) -> T,
+        f: impl FnOnce(ParamUpdateResult) -> T,
     ) -> Result<Option<T>, UpdateError> {
         let name = command.device_name();
         match name {
@@ -253,10 +253,7 @@ impl DeviceStore for MemoryDeviceStore {
                     .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))))
                     .lock()?;
                 let param = device.update(command)?;
-                Ok(match param {
-                    Some(p) => Some(f(p)),
-                    None => None,
-                })
+                Ok(Some(f(param)))
             }
             None => Ok(None),
         }

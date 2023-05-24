@@ -39,28 +39,28 @@ impl Device {
     }
 
     /// Updates the current device based on `command`.
-    pub fn update(
-        &mut self,
+    pub fn update<'a>(
+        &'a mut self,
         command: serialization::Command,
-    ) -> Result<Option<notify::NotifyMutexGuard<'_, Parameter>>, UpdateError> {
+    ) -> Result<ParamUpdateResult<'a>, UpdateError> {
         match command {
-            Command::Message(_) => Ok(None),
-            Command::GetProperties(_) => Ok(None),
+            Command::Message(_) => Ok(ParamUpdateResult::NoUpdate),
+            Command::GetProperties(_) => Ok(ParamUpdateResult::NoUpdate),
             Command::DefSwitchVector(command) => self.new_param(command),
             Command::SetSwitchVector(command) => self.update_param(command),
-            Command::NewSwitchVector(_) => Ok(None),
+            Command::NewSwitchVector(_) => Ok(ParamUpdateResult::NoUpdate),
             Command::DefNumberVector(command) => self.new_param(command),
             Command::SetNumberVector(command) => self.update_param(command),
-            Command::NewNumberVector(_) => Ok(None),
+            Command::NewNumberVector(_) => Ok(ParamUpdateResult::NoUpdate),
             Command::DefTextVector(command) => self.new_param(command),
             Command::SetTextVector(command) => self.update_param(command),
-            Command::NewTextVector(_) => Ok(None),
+            Command::NewTextVector(_) => Ok(ParamUpdateResult::NoUpdate),
             Command::DefBlobVector(command) => self.new_param(command),
             Command::SetBlobVector(command) => self.update_param(command),
             Command::DefLightVector(command) => self.new_param(command),
             Command::SetLightVector(command) => self.update_param(command),
             Command::DelProperty(command) => self.delete_param(command.name),
-            Command::EnableBlob(_) => Ok(None),
+            Command::EnableBlob(_) => Ok(ParamUpdateResult::NoUpdate),
         }
     }
 
@@ -79,10 +79,10 @@ impl Device {
         return &self.parameters;
     }
 
-    fn new_param<T: CommandtoParam + std::fmt::Debug>(
-        &mut self,
+    fn new_param<'a, T: CommandtoParam + std::fmt::Debug>(
+        &'a mut self,
         def: T,
-    ) -> Result<Option<notify::NotifyMutexGuard<'_, Parameter>>, UpdateError> {
+    ) -> Result<ParamUpdateResult<'a>, UpdateError> {
         let name = def.get_name().clone();
 
         self.names.push(name.clone());
@@ -95,24 +95,20 @@ impl Device {
             self.parameters
                 .insert(name.clone(), Arc::new(Notify::new(param)));
         }
-        let param = self.parameters.get(&name);
-        let res = match param {
-            Some(param) => Some(param.lock()?),
-            None => None,
-        };
-        Ok(res)
+        let param = self.parameters.get(&name).unwrap();
+        Ok(ParamUpdateResult::ExistingParam(param.lock().unwrap()))
     }
 
-    fn update_param<T: CommandToUpdate>(
-        &mut self,
+    fn update_param<'a, T: CommandToUpdate>(
+        &'a mut self,
         new_command: T,
-    ) -> Result<Option<notify::NotifyMutexGuard<'_, Parameter>>, UpdateError> {
+    ) -> Result<ParamUpdateResult<'a>, UpdateError> {
         match self.parameters.get_mut(&new_command.get_name().clone()) {
             Some(param) => {
                 let mut param = param.lock()?;
                 *param.gen_mut() += Wrapping(1);
                 new_command.update_param(&mut param)?;
-                Ok(Some(param))
+                Ok(ParamUpdateResult::ExistingParam(param))
             }
             None => Err(UpdateError::ParameterMissing(
                 new_command.get_name().clone(),
@@ -123,19 +119,29 @@ impl Device {
     fn delete_param(
         &mut self,
         name: Option<String>,
-    ) -> Result<Option<notify::NotifyMutexGuard<'_, Parameter>>, UpdateError> {
-        match name {
+    ) -> Result<ParamUpdateResult<'_>, UpdateError> {
+        Ok(ParamUpdateResult::DeletedParams(match name {
             Some(name) => {
                 self.names.retain(|n| *n != name);
-                self.parameters.remove(&name);
+                let removed = self.parameters.remove(&name);
+                if let Some(removed) = removed {
+                    vec![removed]
+                } else {
+                    vec![]
+                }
             }
             None => {
                 self.names.clear();
-                self.parameters.drain();
+                self.parameters.drain().map(|(_, v)| v).collect()
             }
-        };
-        Ok(None)
+        }))
     }
+}
+
+pub enum ParamUpdateResult<'a> {
+    NoUpdate,
+    ExistingParam(notify::NotifyMutexGuard<'a, Parameter>),
+    DeletedParams(Vec<Arc<Notify<Parameter>>>)
 }
 
 /// A struct wrapping the raw bytes of a FitsImage.
