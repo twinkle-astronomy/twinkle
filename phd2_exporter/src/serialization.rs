@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub struct Version {
@@ -71,7 +71,25 @@ pub enum State {
     Paused,
     Looping,
 }
+#[derive(Debug)]
+pub struct InvalidState(String);
 
+impl TryFrom<&str> for State {
+    type Error = InvalidState;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Stoppped" => Ok(State::Stopped),
+            "Selected" => Ok(State::Selected),
+            "Calibrating" => Ok(State::Calibrating),
+            "Guiding" => Ok(State::Guiding),
+            "LostLock" => Ok(State::LostLock),
+            "Paused" => Ok(State::Paused),
+            "Looping" => Ok(State::Looping),
+            other => Err(InvalidState(String::from(other))),
+        }
+    }
+}
 #[derive(Deserialize, Debug)]
 pub struct AppState {
     #[serde(alias = "State")]
@@ -277,4 +295,27 @@ pub struct ServerEvent {
 
     #[serde(flatten)]
     pub event: Event,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct JsonRpcResponse {
+    pub jsonrpc: String,
+    pub id: u64,
+
+    pub result: Option<serde_json::Value>,
+    pub error: Option<serde_json::Value>,
+}
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub enum ServerMessage {
+    ServerEvent(ServerEvent),
+    JsonRpcResponse(JsonRpcResponse),
+}
+
+#[derive(Serialize, Debug)]
+pub struct JsonRpcRequest {
+    pub id: u64,
+    pub method: String,
+
+    pub params: Vec<serde_json::Value>,
 }

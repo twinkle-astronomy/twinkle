@@ -1,14 +1,17 @@
 use std::{
     fs::File,
     io::Write,
-    net::TcpStream,
     thread,
     time::{Duration, SystemTime},
 };
 
-use phd2_exporter::{metrics::Metrics, serialization::ServerEvent, Connection, WithMiddleware};
+use phd2_exporter::{
+    async_middleware::WithAsyncMiddleware, metrics::Metrics, serialization::ServerEvent,
+    Connection, IntoPhd2Connection, WithMiddleware,
+};
 
 use clap::Parser;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -81,7 +84,30 @@ where
         Some(next)
     }
 }
-fn main() {
+
+// #[tokio::main]
+// async fn main() {
+//     let args = Args::parse();
+//     let mut con = tokio::net::TcpStream::connect(args.address).await.expect("Connecting").phd2();
+
+//     let req = serialization::JsonRpcRequest {
+//         id: 1,
+//         method: String::from("get_exposure"),
+//         params: vec![]
+//     };
+
+//     dbg!(&req);
+
+//     // dbg!(con.call(&req).await);
+
+// }
+
+async fn async_log(buf: &[u8]) {
+    tokio::io::stdout().write_all(buf).await.unwrap();
+}
+
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
     prometheus_exporter::start(args.listen.parse().unwrap()).unwrap();
@@ -98,10 +124,11 @@ fn main() {
         let iter = File::open(logfile).unwrap().middleware(mf).iter();
         metrics.run(DelayIter::new(iter));
     } else {
-        let iter = TcpStream::connect(args.address)
-            .expect("Connecting to phd2")
+        let con = tokio::net::TcpStream::connect(&args.address)
+            .await
+            .expect(format!("Connecting to '{}'", args.address).as_str())
             .middleware(mf)
-            .iter();
-        metrics.run(iter);
+            .phd2();
+        metrics.async_run(con).await.unwrap();
     }
 }

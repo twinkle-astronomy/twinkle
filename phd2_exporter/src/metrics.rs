@@ -2,8 +2,12 @@ use prometheus_exporter::prometheus::{
     exponential_buckets, histogram_opts, linear_buckets, opts, register_gauge_vec,
     register_histogram_vec,
 };
+use tokio::sync::broadcast::error::RecvError;
 
-use crate::serialization::{Event, ServerEvent};
+use crate::{
+    serialization::{Event, ServerEvent},
+    Phd2Connection,
+};
 
 pub struct Metrics {
     // guide_distance: GenericGaugeVec<AtomicF64>,
@@ -21,6 +25,8 @@ pub struct Metrics {
 
     total_distance_raw: prometheus_exporter::prometheus::GaugeVec,
     total_distance_raw_histo: prometheus_exporter::prometheus::HistogramVec,
+
+    pixel_scale: prometheus_exporter::prometheus::GaugeVec,
 }
 
 impl Metrics {
@@ -107,6 +113,12 @@ impl Metrics {
         )
         .unwrap();
 
+        let pixel_scale = register_gauge_vec!(
+            opts!("phd2_pixel_scale", "Guider image scale in arc-sec/pixel."),
+            &[]
+        )
+        .unwrap();
+
         Metrics {
             guide_snr,
             guide_snr_histo,
@@ -118,67 +130,104 @@ impl Metrics {
             de_distance_raw,
             total_distance_raw,
             total_distance_raw_histo,
+            pixel_scale,
+        }
+    }
+
+    fn handle_event(&self, event: &ServerEvent) {
+        match &event.event {
+            Event::GuideStep(guide) => {
+                let snr = guide.snr;
+                // dbg!(snr);
+                self.guide_snr
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .set(snr);
+
+                self.guide_snr_histo
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .observe(snr);
+
+                let star_mass = guide.star_mass;
+                // dbg!(star_mass);
+                self.guide_star_mass
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .set(star_mass);
+
+                self.guide_star_mass_histo
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .observe(star_mass);
+
+                let hfd = guide.hfd;
+                // dbg!(hfd);
+                self.guide_hfd
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .set(hfd);
+
+                self.guide_hfd_histo
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .observe(hfd);
+
+                let ra_distance_raw = guide.ra_distance_raw;
+                self.ra_distance_raw
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .set(ra_distance_raw);
+
+                let de_distance_raw = guide.de_distance_raw;
+                self.de_distance_raw
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .set(de_distance_raw);
+
+                let total_distance_raw = (guide.ra_distance_raw * guide.ra_distance_raw
+                    + guide.de_distance_raw * guide.de_distance_raw)
+                    .sqrt();
+                self.total_distance_raw
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .set(total_distance_raw);
+
+                self.total_distance_raw_histo
+                    .with_label_values(&[&event.host, &guide.mount])
+                    .observe(total_distance_raw);
+            }
+            _ => {}
+        }
+    }
+
+    pub async fn async_run<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite>(
+        self,
+        mut connection: Phd2Connection<T>,
+    ) -> Result<(), tokio::sync::broadcast::error::RecvError> {
+        let mut recv = connection.subscribe();
+
+        if let Ok(scale) = connection.get_pixel_scale().await {
+            self.pixel_scale.with_label_values(&[]).set(scale);
+        }
+
+        loop {
+            let event = recv.recv().await;
+            match event {
+                Ok(event) => {
+                    self.handle_event(&event);
+
+                    match &event.event {
+                        Event::ConfigurationChange(_) => {
+                            if let Ok(scale) = connection.get_pixel_scale().await {
+                                self.pixel_scale.with_label_values(&[]).set(scale);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Err(RecvError::Closed) => return Ok(()),
+                Err(e) => return Err(e),
+            }
         }
     }
 
     pub fn run<T: Iterator<Item = Result<ServerEvent, serde_json::Error>>>(self, iter: T) {
         for event in iter {
             let event = event.unwrap();
-            match event.event {
-                Event::GuideStep(guide) => {
-                    let snr = guide.snr;
-                    // dbg!(snr);
-                    self.guide_snr
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .set(snr);
 
-                    self.guide_snr_histo
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .observe(snr);
-
-                    let star_mass = guide.star_mass;
-                    // dbg!(star_mass);
-                    self.guide_star_mass
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .set(star_mass);
-
-                    self.guide_star_mass_histo
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .observe(star_mass);
-
-                    let hfd = guide.hfd;
-                    // dbg!(hfd);
-                    self.guide_hfd
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .set(hfd);
-
-                    self.guide_hfd_histo
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .observe(hfd);
-
-                    let ra_distance_raw = guide.ra_distance_raw;
-                    self.ra_distance_raw
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .set(ra_distance_raw);
-
-                    let de_distance_raw = guide.de_distance_raw;
-                    self.de_distance_raw
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .set(de_distance_raw);
-
-                    let total_distance_raw = (guide.ra_distance_raw * guide.ra_distance_raw
-                        + guide.de_distance_raw * guide.de_distance_raw)
-                        .sqrt();
-                    self.total_distance_raw
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .set(total_distance_raw);
-
-                    self.total_distance_raw_histo
-                        .with_label_values(&[&event.host, &guide.mount])
-                        .observe(total_distance_raw);
-                }
-                _ => {}
-            }
+            self.handle_event(&event);
         }
     }
 }
