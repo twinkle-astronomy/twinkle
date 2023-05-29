@@ -204,6 +204,7 @@ impl Metrics {
 
         loop {
             let event = recv.recv().await;
+            dbg!(&event);
             match event {
                 Ok(event) => {
                     self.handle_event(&event);

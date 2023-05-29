@@ -317,5 +317,5 @@ pub struct JsonRpcRequest {
     pub id: u64,
     pub method: String,
 
-    pub params: Vec<serde_json::Value>,
+    pub params: serde_json::Value,
 }

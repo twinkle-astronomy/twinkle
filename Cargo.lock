@@ -80,6 +80,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "addr2line"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76fd60b23679b7d19bd066031410fb7e458ccc5e958eb5c325888ce4baedc97"
+dependencies = [
+ "gimli",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -235,6 +244,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aef8da1805e028a172334c3b680f93e71126f2327622faef2ec3d893c0a4ad77"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "backtrace"
+version = "0.3.67"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233d376d6d185f2a3093e58f283f60f880315b6c60075b01f36b3b85154564ca"
+dependencies = [
+ "addr2line",
+ "cc",
+ "cfg-if",
+ "libc",
+ "miniz_oxide",
+ "object",
+ "rustc-demangle",
 ]
 
 [[package]]
@@ -1247,7 +1271,7 @@ dependencies = [
  "rmpfit",
  "sep-sys",
  "serde",
- "tokio",
+ "tokio 1.28.1",
  "tracing",
 ]
 
@@ -1507,6 +1531,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimli"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad0a93d233ebf96623465aad4046a8d3aa4da22d4f4beba5388838c8a434bbb4"
+
+[[package]]
 name = "gl_generator"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1717,8 +1747,8 @@ dependencies = [
  "ndarray",
  "once_cell",
  "quick-xml",
- "tokio",
- "tokio-stream",
+ "tokio 1.28.1",
+ "tokio-stream 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2373,6 +2403,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.30.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea86265d3d3dcb6a27fc51bd29a4bf387fae9d2986b823079d4986af253eb439"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2490,10 +2529,10 @@ dependencies = [
  "prometheus_exporter",
  "serde",
  "serde_json",
- "tokio",
+ "tokio 1.28.2",
  "tokio-serde",
- "tokio-stream",
- "tokio-util",
+ "tokio-stream 0.1.14",
+ "tokio-util 0.7.8",
 ]
 
 [[package]]
@@ -2807,6 +2846,12 @@ name = "rmpfit"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "292ca209f924acb845a877923865db60c7e27b41c5fa532a02fa5601e0f65d37"
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
 
 [[package]]
 name = "rustdct"
@@ -3299,8 +3344,35 @@ dependencies = [
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
- "tokio-macros",
+ "tokio-macros 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "tokio"
+version = "1.28.2"
+dependencies = [
+ "autocfg",
+ "backtrace",
+ "bytes",
+ "libc",
+ "mio",
+ "num_cpus",
+ "parking_lot",
+ "pin-project-lite",
+ "signal-hook-registry",
+ "socket2",
+ "tokio-macros 2.1.0",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.12",
 ]
 
 [[package]]
@@ -3329,13 +3401,34 @@ dependencies = [
 [[package]]
 name = "tokio-stream"
 version = "0.1.14"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio 1.28.2",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
 dependencies = [
  "futures-core",
  "pin-project-lite",
- "tokio",
- "tokio-util",
+ "tokio 1.28.1",
+ "tokio-util 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tokio-util"
+version = "0.7.8"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "pin-project-lite",
+ "tokio 1.28.2",
+ "tracing",
 ]
 
 [[package]]
@@ -3348,8 +3441,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "pin-project-lite",
- "tokio",
- "tracing",
+ "tokio 1.28.1",
 ]
 
 [[package]]
@@ -3454,8 +3546,8 @@ dependencies = [
  "indi",
  "ndarray",
  "serde",
- "tokio",
- "tokio-stream",
+ "tokio 1.28.1",
+ "tokio-stream 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "tracing-subscriber",
 ]
 
