@@ -6,8 +6,9 @@ use std::{
     time::Duration,
 };
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use serde_json::json;
+use serde_tuple::Deserialize_tuple;
 use serialization::{
     DurationSeconds, InvalidState, JsonRpcRequest, JsonRpcResponse, ServerEvent, ServerMessage,
     State,
@@ -131,6 +132,12 @@ impl Settle {
         }
     }
 }
+
+#[derive(Deserialize_tuple, Debug)]
+pub struct LockPosition {
+    pub x: f64,
+    pub y: f64,
+}
 impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Arc<ServerEvent>> {
         self.events.subscribe()
@@ -177,10 +184,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             })
             .await?;
 
-        match result.as_i64() {
-            Some(s) => Ok(s),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
-        }
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn clear_calibration(
@@ -197,10 +201,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             })
             .await?;
 
-        match result.as_i64() {
-            Some(s) => Ok(s),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
-        }
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn dither(
@@ -219,13 +220,11 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             })
             .await?;
 
-        match result.as_i64() {
-            Some(s) => Ok(s),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
-        }
+
+        Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn find_star(&mut self, roi: Option<[u64; 4]>) -> Result<bool, ClientError> {
+    pub async fn find_star(&mut self, roi: Option<[u64; 4]>) -> Result<LockPosition, ClientError> {
         let id = self.next_id();
         let mut params = json!({});
 
@@ -240,11 +239,26 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
                 params: params,
             })
             .await?;
+        Ok(serde_json::from_value(result)?)
+    }
 
-        match result.as_bool() {
-            Some(s) => Ok(s),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
+    pub async fn flip_calibration(&mut self, roi: Option<[u64; 4]>) -> Result<i64, ClientError> {
+        let id = self.next_id();
+        let mut params = json!({});
+
+        if let Some(roi) = roi {
+            params["roi"] = serde_json::to_value(roi).unwrap();
         }
+
+        let result = self
+            .call(JsonRpcRequest {
+                id,
+                method: String::from("flip_calibration"),
+                params: json!([])
+            })
+            .await?;
+
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn get_app_state(&mut self) -> Result<State, ClientError> {
@@ -257,10 +271,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             })
             .await?;
 
-        match result.as_str() {
-            Some(s) => Ok(s.try_into()?),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
-        }
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn get_calibrated(&mut self) -> Result<bool, ClientError> {
@@ -273,10 +284,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             })
             .await?;
 
-        match result.as_bool() {
-            Some(s) => Ok(s),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
-        }
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn get_pixel_scale(&mut self) -> Result<f64, ClientError> {
@@ -289,10 +297,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             })
             .await?;
 
-        match result.as_f64() {
-            Some(s) => Ok(s),
-            None => Err(ClientError::RpcUnexpectedResponse(result)),
-        }
+        Ok(serde_json::from_value(result)?)
     }
 }
 
