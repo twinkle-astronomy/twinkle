@@ -225,6 +225,28 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         }
     }
 
+    pub async fn find_star(&mut self, roi: Option<[u64; 4]>) -> Result<bool, ClientError> {
+        let id = self.next_id();
+        let mut params = json!({});
+
+        if let Some(roi) = roi {
+            params["roi"] = serde_json::to_value(roi).unwrap();
+        }
+
+        let result = self
+            .call(JsonRpcRequest {
+                id,
+                method: String::from("find_star"),
+                params: params,
+            })
+            .await?;
+
+        match result.as_bool() {
+            Some(s) => Ok(s),
+            None => Err(ClientError::RpcUnexpectedResponse(result)),
+        }
+    }
+
     pub async fn get_app_state(&mut self) -> Result<State, ClientError> {
         let id = self.next_id();
         let result = self
