@@ -6,9 +6,11 @@ use std::{
     time::Duration,
 };
 
+use serde::Serialize;
 use serde_json::json;
 use serialization::{
-    InvalidState, JsonRpcRequest, JsonRpcResponse, ServerEvent, ServerMessage, State,
+    DurationSeconds, InvalidState, JsonRpcRequest, JsonRpcResponse, ServerEvent, ServerMessage,
+    State,
 };
 
 use tokio::{
@@ -102,6 +104,33 @@ pub struct Phd2Connection<T> {
     last_id: std::sync::atomic::AtomicU64,
 }
 
+#[derive(Serialize, Debug)]
+pub enum ClearCalibrationParam {
+    #[serde(rename = "mount")]
+    Mount,
+    #[serde(rename = "ao")]
+    Ao,
+    #[serde(rename = "both")]
+    Both,
+}
+
+#[derive(Serialize, Debug)]
+pub struct Settle {
+    pub pixels: f64,
+
+    pub time: DurationSeconds,
+
+    pub timeout: DurationSeconds,
+}
+impl Settle {
+    pub fn new(pixels: f64, time: Duration, timeout: Duration) -> Settle {
+        Settle {
+            pixels,
+            time: time.into(),
+            timeout: timeout.into(),
+        }
+    }
+}
 impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Arc<ServerEvent>> {
         self.events.subscribe()
@@ -145,6 +174,48 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
                 id,
                 method: String::from("capture_single_frame"),
                 params: params,
+            })
+            .await?;
+
+        match result.as_i64() {
+            Some(s) => Ok(s),
+            None => Err(ClientError::RpcUnexpectedResponse(result)),
+        }
+    }
+
+    pub async fn clear_calibration(
+        &mut self,
+        target: ClearCalibrationParam,
+    ) -> Result<i64, ClientError> {
+        let id = self.next_id();
+
+        let result = self
+            .call(JsonRpcRequest {
+                id,
+                method: String::from("clear_calibration"),
+                params: json!([target]),
+            })
+            .await?;
+
+        match result.as_i64() {
+            Some(s) => Ok(s),
+            None => Err(ClientError::RpcUnexpectedResponse(result)),
+        }
+    }
+
+    pub async fn dither(
+        &mut self,
+        amount: f64,
+        ra_only: bool,
+        settle: Settle,
+    ) -> Result<i64, ClientError> {
+        let id = self.next_id();
+
+        let result = self
+            .call(JsonRpcRequest {
+                id,
+                method: String::from("dither"),
+                params: json!({"amount": amount, "raOnly": ra_only, "settle": settle}),
             })
             .await?;
 

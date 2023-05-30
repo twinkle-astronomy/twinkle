@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
@@ -318,4 +320,21 @@ pub struct JsonRpcRequest {
     pub method: String,
 
     pub params: serde_json::Value,
+}
+
+#[derive(Debug)]
+pub struct DurationSeconds(Duration);
+
+impl From<Duration> for DurationSeconds {
+    fn from(value: Duration) -> Self {
+        DurationSeconds(value)
+    }
+}
+impl Serialize for DurationSeconds {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_f64(self.0.as_secs_f64())
+    }
 }
