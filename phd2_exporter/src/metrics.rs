@@ -196,7 +196,10 @@ impl Metrics {
         self,
         mut connection: Phd2Connection<T>,
     ) -> Result<(), tokio::sync::broadcast::error::RecvError> {
-        let mut recv = connection.subscribe();
+        let mut recv = match connection.subscribe().await {
+            Some(recv) => recv,
+            None => return Err(tokio::sync::broadcast::error::RecvError::Closed),
+        };
 
         if let Ok(scale) = connection.get_pixel_scale().await {
             self.pixel_scale.with_label_values(&[]).set(scale);

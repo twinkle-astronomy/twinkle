@@ -9,8 +9,9 @@ use std::{
 use serde::Serialize;
 use serde_json::json;
 use serialization::{
-    DurationMillis, InvalidState, JsonRpcRequest, JsonRpcResponse, ServerEvent,
-    ServerMessage, State, ClearCalibrationParam, Settle, Axis, WhichDevice, Calibration, CoolerStatus, DecGuideMode, Equipment, LockShiftParams, Profile, StarImage, PulseDirection,
+    Axis, Calibration, ClearCalibrationParam, CoolerStatus, DecGuideMode, DurationMillis,
+    Equipment, InvalidState, JsonRpcRequest, JsonRpcResponse, LockShiftParams, Profile,
+    PulseDirection, ServerEvent, ServerMessage, Settle, StarImage, State, WhichDevice,
 };
 
 use tokio::{
@@ -60,6 +61,8 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
         let pending_requests = Arc::new(Mutex::new(HashMap::default()));
         let pending_responses = pending_requests.clone();
         let (events, _) = tokio::sync::broadcast::channel(1024);
+        let events = Arc::new(Mutex::new(Some(events)));
+        let new_events = events.clone();
         let client = Phd2Connection {
             events,
             pending_requests,
@@ -67,7 +70,6 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
             last_id: std::sync::atomic::AtomicU64::new(0),
         };
 
-        let new_events = client.events.clone();
         tokio::spawn(async move {
             let mut read = BufReader::new(read);
 
@@ -75,7 +77,8 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
             loop {
                 buf.clear();
                 if read.read_line(&mut buf).await.unwrap() == 0 {
-                    dbg!("break");
+                    let mut lock = new_events.lock().await;
+                    *lock = None;
                     break;
                 }
                 let obj = serde_json::from_str::<ServerMessage>(&buf);
@@ -83,7 +86,10 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
                 match obj {
                     Ok(obj) => match obj {
                         ServerMessage::ServerEvent(event) => {
-                            new_events.send(Arc::new(event)).ok();
+                            let lock = new_events.lock().await;
+                            if let Some(sender) = lock.as_ref() {
+                                sender.send(Arc::new(event)).ok();
+                            }
                         }
                         ServerMessage::JsonRpcResponse(rpc) => {
                             let mut lock = pending_responses.lock().await;
@@ -104,7 +110,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
 }
 
 pub struct Phd2Connection<T> {
-    events: tokio::sync::broadcast::Sender<Arc<ServerEvent>>,
+    events: Arc<Mutex<Option<tokio::sync::broadcast::Sender<Arc<ServerEvent>>>>>,
     pending_requests: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<JsonRpcResponse>>>>,
     write: tokio::io::WriteHalf<T>,
 
@@ -112,8 +118,9 @@ pub struct Phd2Connection<T> {
 }
 
 impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
-    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Arc<ServerEvent>> {
-        self.events.subscribe()
+    pub async fn subscribe(&self) -> Option<tokio::sync::broadcast::Receiver<Arc<ServerEvent>>> {
+        let lock = self.events.lock().await;
+        Some(lock.as_ref()?.subscribe())
     }
 
     async fn call(&mut self, request: JsonRpcRequest) -> Result<serde_json::Value, ClientError> {
@@ -829,7 +836,7 @@ mod tests {
             .await
             .unwrap()
             .into();
-        let mut sub = file.subscribe();
+        let mut sub = file.subscribe().await.unwrap();
         while let Ok(event) = sub.recv().await {
             dbg!(event);
         }

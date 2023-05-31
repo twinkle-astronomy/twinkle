@@ -388,7 +388,6 @@ impl<'de> Deserialize<'de> for DurationMillis {
     }
 }
 
-
 #[derive(Serialize, Debug)]
 pub enum ClearCalibrationParam {
     #[serde(rename = "mount")]
