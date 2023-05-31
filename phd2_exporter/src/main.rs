@@ -1,56 +1,10 @@
-use std::{io::Write, time::Duration};
+use std::io::Write;
 
 use phd2_exporter::{metrics::Metrics, Phd2Connection};
 
 use clap::Parser;
 use tokio::net::TcpStream;
 use tokio_util::io::{InspectReader, InspectWriter};
-
-// struct DelayIter<T: Iterator<Item = Result<ServerEvent, serde_json::Error>>> {
-//     started_at: SystemTime,
-//     iter_started_at: Option<f64>,
-//     iter: T,
-// }
-
-// impl<T> DelayIter<T>
-// where
-//     T: Iterator<Item = Result<ServerEvent, serde_json::Error>>,
-// {
-//     pub fn new(iter: T) -> Self {
-//         DelayIter {
-//             iter,
-//             started_at: SystemTime::now(),
-//             iter_started_at: None,
-//         }
-//     }
-// }
-
-// impl<T> Iterator for DelayIter<T>
-// where
-//     T: Iterator<Item = Result<ServerEvent, serde_json::Error>>,
-// {
-//     type Item = Result<ServerEvent, serde_json::Error>;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         let next = self.iter.next()?;
-
-//         if let Ok(next) = &next {
-//             if let Some(iter_started_at) = self.iter_started_at {
-//                 let system_runtime = self.started_at.elapsed().unwrap().as_secs_f64();
-//                 let log_runtime = next.timestamp - iter_started_at;
-
-//                 let delay = log_runtime - system_runtime;
-//                 if delay > 0.0 {
-//                     thread::sleep(Duration::from_secs(delay as u64));
-//                 }
-//             } else {
-//                 self.iter_started_at = Some(next.timestamp);
-//             }
-//         }
-
-//         Some(next)
-//     }
-// }
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -61,11 +15,6 @@ struct Args {
     /// Listen address and port
     #[arg(short, long, default_value = "0.0.0.0:9187")]
     listen: String,
-
-    /// Use named log of server messages to use instead of connecting to phd2.  For debugging purposes only.
-    /// To generate this log file use `nc <PHD2 IP> 4400 | tee phd2-events-"`date +"%d-%m-%YT%H-%M-%S"`".log`
-    #[arg(short, long)]
-    debug_logfile: Option<String>,
 
     /// Verbose logging.
     #[arg(short, long)]
@@ -96,7 +45,7 @@ async fn main() {
         regular_log
     };
 
-    let mut phd2: Phd2Connection<_> = TcpStream::connect(&args.address)
+    let phd2: Phd2Connection<_> = TcpStream::connect(&args.address)
         .await
         .expect(format!("Connecting to '{}'", args.address).as_str())
         .inspect_read(move |buf: &[u8]| mf("-> ", buf))

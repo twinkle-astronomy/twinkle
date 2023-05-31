@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Serialize, Serializer};
 
 #[derive(Deserialize, Debug)]
 pub struct Version {
@@ -337,4 +337,189 @@ impl Serialize for DurationSeconds {
     {
         serializer.serialize_f64(self.0.as_secs_f64())
     }
+}
+
+#[derive(Debug)]
+pub struct DurationMillis(pub Duration);
+
+impl From<DurationMillis> for Duration {
+    fn from(value: DurationMillis) -> Self {
+        value.0
+    }
+}
+
+impl From<u64> for DurationMillis {
+    fn from(value: u64) -> Self {
+        DurationMillis(Duration::from_millis(value))
+    }
+}
+
+impl Serialize for DurationMillis {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u128(self.0.as_millis())
+    }
+}
+struct DurationMillisVisitor;
+
+impl<'de> Visitor<'de> for DurationMillisVisitor {
+    type Value = u64;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a float number of milliseconds")
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(v)
+    }
+}
+impl<'de> Deserialize<'de> for DurationMillis {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let millis = deserializer.deserialize_u64(DurationMillisVisitor)?;
+        Ok(DurationMillis(Duration::from_millis(millis)))
+    }
+}
+
+
+#[derive(Serialize, Debug)]
+pub enum ClearCalibrationParam {
+    #[serde(rename = "mount")]
+    Mount,
+    #[serde(rename = "ao")]
+    Ao,
+    #[serde(rename = "both")]
+    Both,
+}
+
+#[derive(Serialize, Debug)]
+pub struct Settle {
+    pub pixels: f64,
+    pub time: DurationSeconds,
+    pub timeout: DurationSeconds,
+}
+
+impl Settle {
+    pub fn new(pixels: f64, time: Duration, timeout: Duration) -> Settle {
+        Settle {
+            pixels,
+            time: time.into(),
+            timeout: timeout.into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub enum Axis {
+    #[serde(rename = "ra")]
+    Ra,
+    #[serde(rename = "dec")]
+    Dec,
+    #[serde(rename = "x")]
+    X,
+    #[serde(rename = "y")]
+    Y,
+}
+
+#[derive(Serialize, Debug)]
+pub enum WhichDevice {
+    Mount,
+    #[serde(rename = "AO")]
+    Ao,
+}
+#[derive(Deserialize, Debug)]
+pub struct Calibration {
+    pub calibrated: bool,
+    #[serde(flatten)]
+    pub data: Option<CalibrationData>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CalibrationData {
+    #[serde(alias = "xAngle")]
+    pub x_angle: f64,
+    #[serde(alias = "xRate")]
+    pub x_rate: f64,
+    #[serde(alias = "xParity")]
+    pub x_parity: Parity,
+    #[serde(alias = "yAngle")]
+    pub y_angle: f64,
+    #[serde(alias = "yRate")]
+    pub y_rate: f64,
+    #[serde(alias = "yParity")]
+    pub y_parity: Parity,
+}
+
+#[derive(Deserialize, Debug)]
+pub enum Parity {
+    #[serde(rename = "+")]
+    Pos,
+    #[serde(rename = "-")]
+    Neg,
+    #[serde(rename = "?")]
+    Unknown,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CoolerStatus {
+    #[serde(alias = "coolerOn")]
+    pub cooler_on: bool,
+    pub temperature: f64,
+    pub setpoint: Option<f64>,
+    pub power: Option<f64>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Equipment {
+    pub connected: bool,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum DecGuideMode {
+    Off,
+    Auto,
+    North,
+    South,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct LockShiftParams {
+    pub axes: String,
+    pub enabled: bool,
+    pub units: String,
+    pub rate: [f64; 2],
+}
+#[derive(Deserialize, Debug)]
+pub struct Profile {
+    pub id: isize,
+    pub name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct StarImage {
+    pub frame: usize,
+    pub width: usize,
+    pub height: usize,
+    pub star_pos: [f64; 2],
+    pub pixels: Vec<u8>,
+}
+
+#[derive(Serialize, Debug)]
+pub enum PulseDirection {
+    N,
+    S,
+    E,
+    W,
+    Up,
+    Down,
+    Left,
+    Right,
 }
