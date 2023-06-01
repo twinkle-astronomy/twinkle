@@ -63,7 +63,7 @@ pub struct StartCalibration {
     pub mount: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub enum State {
     Stopped,
     Selected,
@@ -100,7 +100,6 @@ pub struct AppState {
 
 #[derive(Deserialize, Debug)]
 pub struct CalibrationFailed {
-    #[serde(alias = "Timestamp")]
     #[serde(alias = "Reason")]
     pub reason: String,
 }
@@ -143,7 +142,7 @@ pub struct SettleDone {
     #[serde(alias = "Status")]
     pub status: u32,
     #[serde(alias = "Error")]
-    pub error: String,
+    pub error: Option<String>,
     #[serde(alias = "TotalFrames")]
     pub total_frames: u32,
     #[serde(alias = "DroppedFrames")]
@@ -322,7 +321,7 @@ pub struct JsonRpcRequest {
     pub params: serde_json::Value,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DurationSeconds(Duration);
 
 impl From<Duration> for DurationSeconds {
@@ -339,7 +338,7 @@ impl Serialize for DurationSeconds {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DurationMillis(pub Duration);
 
 impl From<DurationMillis> for Duration {
@@ -388,7 +387,7 @@ impl<'de> Deserialize<'de> for DurationMillis {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub enum ClearCalibrationParam {
     #[serde(rename = "mount")]
     Mount,
@@ -398,7 +397,7 @@ pub enum ClearCalibrationParam {
     Both,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq, Clone, Copy)]
 pub struct Settle {
     pub pixels: f64,
     pub time: DurationSeconds,
@@ -415,7 +414,7 @@ impl Settle {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub enum Axis {
     #[serde(rename = "ra")]
     Ra,
@@ -427,20 +426,20 @@ pub enum Axis {
     Y,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub enum WhichDevice {
     Mount,
     #[serde(rename = "AO")]
     Ao,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub struct Calibration {
     pub calibrated: bool,
     #[serde(flatten)]
     pub data: Option<CalibrationData>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub struct CalibrationData {
     #[serde(alias = "xAngle")]
     pub x_angle: f64,
@@ -456,7 +455,7 @@ pub struct CalibrationData {
     pub y_parity: Parity,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub enum Parity {
     #[serde(rename = "+")]
     Pos,
@@ -475,13 +474,13 @@ pub struct CoolerStatus {
     pub power: Option<f64>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub struct Equipment {
     pub connected: bool,
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum DecGuideMode {
     Off,
     Auto,
@@ -496,7 +495,7 @@ pub struct LockShiftParams {
     pub units: String,
     pub rate: [f64; 2],
 }
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub struct Profile {
     pub id: isize,
     pub name: String,
@@ -511,7 +510,7 @@ pub struct StarImage {
     pub pixels: Vec<u8>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub enum PulseDirection {
     N,
     S,

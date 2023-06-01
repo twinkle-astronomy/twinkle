@@ -19,3 +19,6 @@ tokio = { path="/home/cconstantine/workspace/tokio/tokio", features = ["full"] }
 tokio-serde = "0.8.0"
 tokio-stream = { path="/home/cconstantine/workspace/tokio/tokio-stream" }
 tokio-util = { path="/home/cconstantine/workspace/tokio/tokio-util", features = ["codec", "io"] }
+
+[features]
+test_phd2_simulator=[]
