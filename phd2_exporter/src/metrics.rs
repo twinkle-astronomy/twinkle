@@ -1,13 +1,9 @@
+use phd2::{serialization::{ServerEvent, Event}, Phd2Connection};
 use prometheus_exporter::prometheus::{
     exponential_buckets, histogram_opts, linear_buckets, opts, register_gauge_vec,
     register_histogram_vec,
 };
 use tokio::sync::broadcast::error::RecvError;
-
-use crate::{
-    serialization::{Event, ServerEvent},
-    Phd2Connection,
-};
 
 pub struct Metrics {
     // guide_distance: GenericGaugeVec<AtomicF64>,
@@ -224,14 +220,6 @@ impl Metrics {
                 Err(RecvError::Closed) => return Ok(()),
                 Err(e) => return Err(e),
             }
-        }
-    }
-
-    pub fn run<T: Iterator<Item = Result<ServerEvent, serde_json::Error>>>(self, iter: T) {
-        for event in iter {
-            let event = event.unwrap();
-
-            self.handle_event(&event);
         }
     }
 }

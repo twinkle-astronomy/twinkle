@@ -6,21 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.21.2"
 clap = { version = "4.2.7", features = ["derive"] }
-derive = "1.0.0"
-features = "0.10.0"
-futures = "0.3.28"
-itertools = "0.10.5"
-pin-project = "1.1.0"
 prometheus_exporter = "0.8.5"
-serde = { version = "1.0.163", features = ["derive"] }
-serde_json = "1.0.96"
-serde_tuple = "0.5.0"
 tokio = { path="/home/cconstantine/workspace/tokio/tokio", features = ["full"] }
-tokio-serde = "0.8.0"
-tokio-stream = { path="/home/cconstantine/workspace/tokio/tokio-stream" }
 tokio-util = { path="/home/cconstantine/workspace/tokio/tokio-util", features = ["codec", "io"] }
+phd2 = { path="/home/cconstantine/workspace/twinkle/phd2" }
 
-[features]
-test_phd2_simulator=[]

@@ -1,4 +1,3 @@
-pub mod metrics;
 pub mod serialization;
 use std::{
     collections::HashMap,
@@ -867,8 +866,9 @@ impl<T: tokio::io::AsyncWrite> WithInspectWriter<T> for T {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::serialization::Event;
+
+    use super::*;
     use std::io::Write;
 
     use tokio::{fs::File, net::TcpStream};
@@ -893,7 +893,7 @@ mod tests {
         std::io::stdout().write(&[b'\n']).unwrap();
     }
 
-    #[cfg(feature = "test_phd2_simulator")]
+    // #[cfg(feature = "test_phd2_simulator")]
     #[tokio::test]
     async fn test_integration_phd2_simulator() -> Result<(), ClientError> {
         println!("Starting phd2");

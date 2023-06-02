@@ -1,8 +1,10 @@
 use std::io::Write;
+mod metrics;
 
-use phd2_exporter::{metrics::Metrics, Phd2Connection};
+use metrics::Metrics;
 
 use clap::Parser;
+use phd2::Phd2Connection;
 use tokio::net::TcpStream;
 use tokio_util::io::{InspectReader, InspectWriter};
 
