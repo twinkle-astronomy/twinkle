@@ -544,6 +544,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     /// Phd2 simulator is giving me an invalid string for the pixels causing a parse error for the response.
+    /// PR to resolve this issue: https://github.com/OpenPHDGuiding/phd2/pull/1076
     pub async fn get_star_image(&mut self) -> Result<StarImage, ClientError> {
         let id = self.next_id();
         let result = self
@@ -866,7 +867,6 @@ impl<T: tokio::io::AsyncWrite> WithInspectWriter<T> for T {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::serialization::Event;
     use std::io::Write;
@@ -1013,6 +1013,7 @@ mod tests {
             phd2.set_guide_output_enabled(true).await?;
 
             phd2.get_lock_position().await?;
+            phd2.get_star_image().await?;
 
             println!("Dither!");
             phd2.dither(10.0, false, settle).await?;

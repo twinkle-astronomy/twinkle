@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use base64::Engine;
+use itertools::Itertools;
 use serde::{de::Visitor, Deserialize, Serialize, Serializer};
 
 #[derive(Deserialize, Debug)]
@@ -501,13 +503,55 @@ pub struct Profile {
     pub name: String,
 }
 
+#[derive(Debug)]
+pub struct Base64Image(Vec<u16>);
+
+struct Base64ImageVisitor;
+impl<'de> Visitor<'de> for Base64ImageVisitor {
+    type Value = Vec<u16>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a base64 encoded string")
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match base64::engine::general_purpose::STANDARD_NO_PAD.decode(v) {
+            Ok(bytes) => {
+                let bytes = bytes
+                    .iter()
+                    .tuples()
+                    .map(|(high, low)| {
+                        let high = (*high as u16) << 8;
+                        let low = *low as u16;
+                        high + low
+                    })
+                    .collect();
+                Ok(bytes)
+            }
+            Err(e) => Err(serde::de::Error::custom(e.to_string())),
+        }
+    }
+}
+impl<'de> Deserialize<'de> for Base64Image {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = deserializer.deserialize_string(Base64ImageVisitor)?;
+        Ok(Base64Image(bytes))
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct StarImage {
     pub frame: usize,
     pub width: usize,
     pub height: usize,
     pub star_pos: [f64; 2],
-    pub pixels: Vec<u8>,
+    pub pixels: Base64Image,
 }
 
 #[derive(Serialize, Debug, PartialEq)]

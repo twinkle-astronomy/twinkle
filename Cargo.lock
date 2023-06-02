@@ -268,6 +268,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
+name = "base64"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
+
+[[package]]
 name = "bit_field"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1735,7 +1741,7 @@ dependencies = [
 name = "indi"
 version = "3.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "bytes",
  "chrono",
  "crossbeam-channel",
@@ -2521,10 +2527,12 @@ dependencies = [
 name = "phd2_exporter"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.2",
  "clap 4.3.0",
  "derive",
  "features",
  "futures",
+ "itertools",
  "pin-project",
  "prometheus_exporter",
  "serde",
