@@ -1,4 +1,7 @@
-use phd2::{serialization::{ServerEvent, Event}, Phd2Connection};
+use phd2::{
+    serialization::{Event, ServerEvent},
+    Phd2Connection,
+};
 use prometheus_exporter::prometheus::{
     exponential_buckets, histogram_opts, linear_buckets, opts, register_gauge_vec,
     register_histogram_vec,

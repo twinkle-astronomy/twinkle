@@ -1,9 +1,9 @@
-//! # A general purpose library for interacting phd2.
+//! # A general purpose library for interacting with phd2.
 //! PHD2 is telescope guiding software that simplifies the process of tracking a guide
 //! star, letting you concentrate on other aspects of deep-sky imaging or spectroscopy.
 //! For more information on phd2 see the project's website [here](https://openphdguiding.org/).
 //!
-//! The purpose of this crate is to provide a convinent way to interact with phd2 using the 
+//! The purpose of this crate is to provide a convinent way to interact with phd2 using the
 //! using the EventMonitoring protocol.  Details on the protocol can be found [here](https://github.com/OpenPHDGuiding/phd2/wiki/EventMonitoring).
 //!
 //! ### Simple usage.
@@ -22,7 +22,7 @@
 //!     let mut pixel_scale = phd2.get_pixel_scale().await.expect("Getting pixel scale.");
 //!     
 //!     let mut sub = phd2.subscribe().await.expect("Subscribing to events");
-//! 
+//!
 //!     while let Ok(event) = sub.recv().await {
 //!         if let Event::GuideStep(guide) = &event.event {
 //!             let delta = pixel_scale * (guide.dx.powi(2) + guide.dy.powi(2)).sqrt();
@@ -55,7 +55,6 @@ use tokio::{
     sync::Mutex,
     time::error::Elapsed,
 };
-use tokio_util::io::{InspectReader, InspectWriter};
 
 #[cfg(test)]
 mod tests;
@@ -871,35 +870,5 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             .await?;
 
         Ok(serde_json::from_value(result)?)
-    }
-}
-
-pub trait WithInspectReader<R: tokio::io::AsyncRead> {
-    fn inspect_read<F>(self, func: F) -> InspectReader<R, F>
-    where
-        F: FnMut(&[u8]);
-}
-
-impl<T: tokio::io::AsyncRead> WithInspectReader<T> for T {
-    fn inspect_read<F>(self, func: F) -> InspectReader<T, F>
-    where
-        F: FnMut(&[u8]),
-    {
-        InspectReader::new(self, func)
-    }
-}
-
-pub trait WithInspectWriter<R: tokio::io::AsyncWrite> {
-    fn inspect_write<F>(self, func: F) -> InspectWriter<R, F>
-    where
-        F: FnMut(&[u8]);
-}
-
-impl<T: tokio::io::AsyncWrite> WithInspectWriter<T> for T {
-    fn inspect_write<F>(self, func: F) -> InspectWriter<T, F>
-    where
-        F: FnMut(&[u8]),
-    {
-        InspectWriter::new(self, func)
     }
 }
