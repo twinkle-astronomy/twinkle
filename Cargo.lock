@@ -1617,7 +1617,7 @@ dependencies = [
 
 [[package]]
 name = "indi"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "base64 0.13.1",
  "bytes",
@@ -2394,7 +2394,7 @@ dependencies = [
 
 [[package]]
 name = "phd2"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.21.2",
  "itertools",

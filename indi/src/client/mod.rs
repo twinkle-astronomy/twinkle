@@ -13,11 +13,14 @@ use std::{
 use quick_xml::{Reader, Writer};
 
 use crate::{
-    serialization, Command, DeError, GetProperties, TypeError, UpdateError,
-    XmlSerialization, INDI_PROTOCOL_VERSION,
+    serialization, Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
+    INDI_PROTOCOL_VERSION,
 };
 
-use self::{notify::{wait_fn, Notify, NotifyMutexGuard}, device::ParamUpdateResult};
+use self::{
+    device::ParamUpdateResult,
+    notify::{wait_fn, Notify, NotifyMutexGuard},
+};
 
 #[derive(Debug)]
 pub enum ChangeError<E> {

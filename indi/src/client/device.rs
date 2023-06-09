@@ -116,10 +116,7 @@ impl Device {
         }
     }
 
-    fn delete_param(
-        &mut self,
-        name: Option<String>,
-    ) -> Result<ParamUpdateResult<'_>, UpdateError> {
+    fn delete_param(&mut self, name: Option<String>) -> Result<ParamUpdateResult<'_>, UpdateError> {
         Ok(ParamUpdateResult::DeletedParams(match name {
             Some(name) => {
                 self.names.retain(|n| *n != name);
@@ -141,7 +138,7 @@ impl Device {
 pub enum ParamUpdateResult<'a> {
     NoUpdate,
     ExistingParam(notify::NotifyMutexGuard<'a, Parameter>),
-    DeletedParams(Vec<Arc<Notify<Parameter>>>)
+    DeletedParams(Vec<Arc<Notify<Parameter>>>),
 }
 
 /// A struct wrapping the raw bytes of a FitsImage.
