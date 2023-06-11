@@ -3,7 +3,7 @@ use eframe::glow::{self, HasContext};
 use super::{fits_render::Elipse, fits_widget::Drawable, FitsRender};
 
 pub struct LineMesh {
-    pub stars: Vec<Elipse>,
+    pub elipses: Vec<Elipse>,
     pub program: glow::Program,
     pub vbo: glow::Buffer,
     pub vao: glow::VertexArray,
@@ -45,11 +45,7 @@ impl Drawable for LineMesh {
         let mut vertices = Vec::new();
 
         let points = 20;
-        for star in &self.stars {
-            // dbg!(star.flag);
-            // if star.flag != 0 {
-            //     continue;
-            // }
+        for star in &self.elipses {
             let delta_theta = 2.0 * std::f64::consts::PI / (points as f64);
             for i in 0..points {
                 let theta = delta_theta * (i as f64);

@@ -158,7 +158,7 @@ impl FitsRender {
             let vbo = gl.create_buffer().unwrap();
             let vao = gl.create_vertex_array().unwrap();
             circles_mesh = LineMesh {
-                stars: vec![],
+                elipses: vec![],
                 program,
                 vbo,
                 vao,
@@ -182,7 +182,7 @@ impl FitsRender {
     }
 
     pub fn set_elipses(&mut self, stars: impl IntoIterator<Item = impl Into<Elipse>>) {
-        self.circles_mesh.stars = stars.into_iter().map(|x| x.into()).collect();
+        self.circles_mesh.elipses = stars.into_iter().map(|x| x.into()).collect();
         self.circles_mesh.dirty = true;
     }
 

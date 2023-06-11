@@ -40,7 +40,7 @@ impl FitsViewerApp {
             let stars = sep_image.extract(&bkg).unwrap();
 
             lock.set_fits(data);
-            lock.set_elipses(stars);
+            lock.set_elipses(stars.into_iter().filter(|x| x.flag == 0));
             lock.auto_stretch(&stats);
         }
 
@@ -89,7 +89,7 @@ impl FitsViewerApp {
                         {
                             let mut fits_widget = fits_widget.lock();
                             fits_widget.set_fits(data);
-                            fits_widget.set_elipses(stars);
+                            fits_widget.set_elipses(stars.into_iter().filter(|x| x.flag == 0));
                             fits_widget.auto_stretch(&stats);
                         }
                         ctx.request_repaint();
