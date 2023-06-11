@@ -2,7 +2,6 @@
 
 use std::{env, net::TcpStream, sync::Arc, thread};
 
-use eframe::glow;
 use egui::mutex::Mutex;
 use fits_inspect::{
     analysis::Statistics,
@@ -13,24 +12,37 @@ use indi::client::{device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
-    fits_widget: Arc<Mutex<FitsWidget>>,
+    fits_widget: Arc<Mutex<FitsRender>>,
 }
 
 impl FitsViewerApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Option<Self> {
-        let mut fptr = FitsFile::open(
-            "../fits_inspect/images/NGC_281_Light_Red_15_secs_2022-11-13T01-13-00_001.fits",
-        )
-        .unwrap();
-        let hdu = fptr.primary_hdu().unwrap();
-        let image: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
-
         let gl = cc.gl.as_ref()?;
 
         let newed = FitsViewerApp {
-            fits_widget: Arc::new(Mutex::new(FitsWidget::new(gl, image))),
+            fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
         };
+
+        {
+            let mut lock = newed.fits_widget.lock();
+            let mut fptr = FitsFile::open(
+                "../fits_inspect/images/NGC_281_Light_Red_15_secs_2022-11-13T01-13-00_001.fits",
+            )
+            .unwrap();
+            let hdu = fptr.primary_hdu().unwrap();
+            let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
+            let stats = Statistics::new(&data.view());
+
+            let mut sep_image = fits_inspect::analysis::sep::Image::new(data.clone()).unwrap();
+            let bkg = sep_image.background().unwrap();
+            sep_image.sub(&bkg).expect("Subtract background");
+            let stars = sep_image.extract(&bkg).unwrap();
+
+            lock.set_fits(data);
+            lock.set_elipses(stars);
+            lock.auto_stretch(&stats);
+        }
 
         let fits_widget = newed.fits_widget.clone();
         let ctx = cc.egui_ctx.clone();
@@ -66,9 +78,19 @@ impl FitsViewerApp {
                         let fits =
                             FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
                         let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
+                        let stats = Statistics::new(&data.view());
+
+                        let mut sep_image =
+                            fits_inspect::analysis::sep::Image::new(data.clone()).unwrap();
+                        let bkg = sep_image.background().unwrap();
+                        sep_image.sub(&bkg).expect("Subtract background");
+                        let stars = sep_image.extract(&bkg).unwrap();
+
                         {
                             let mut fits_widget = fits_widget.lock();
                             fits_widget.set_fits(data);
+                            fits_widget.set_elipses(stars);
+                            fits_widget.auto_stretch(&stats);
                         }
                         ctx.request_repaint();
                     }
@@ -81,11 +103,10 @@ impl FitsViewerApp {
 }
 
 impl eframe::App for FitsViewerApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let fits_widget = self.fits_widget.clone();
         egui::CentralPanel::default().show(ctx, move |ui| {
-            let mut lock = fits_widget.lock();
-            lock.update(ctx, frame);
+            ui.add(FitsWidget::new(fits_widget));
         });
     }
 }

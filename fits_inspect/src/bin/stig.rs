@@ -5,7 +5,7 @@ use fitsio::images::{ImageDescription, ImageType};
 use ndarray::{prelude::*, IxDynImpl};
 use std::{env, fs, path::Path};
 
-trait WeightedValue {
+pub trait WeightedValue {
     fn weight(&self) -> f64;
     fn value(&self) -> f64;
 }
@@ -20,7 +20,7 @@ impl WeightedValue for (f64, f64) {
     }
 }
 
-fn weighted_mean<T: WeightedValue>(values: impl std::iter::Iterator<Item = T>) -> f64 {
+pub fn weighted_mean<T: WeightedValue>(values: impl std::iter::Iterator<Item = T>) -> f64 {
     let mut total = 0 as f64;
     let mut weights = 0 as f64;
     for item in values {
@@ -39,12 +39,12 @@ fn focal(filename: &String) -> f64 {
     return astigmatism::focus(data);
 }
 
-fn lines(filename: &String) {
+pub fn lines(filename: &String) {
     let file = Path::new(filename).file_name().unwrap();
     let dir = Path::new(filename).parent().unwrap().join("lines");
     fs::create_dir_all(&dir).unwrap();
     let target_file = dir.join(Path::new(file));
-    fs::remove_file(&target_file);
+    fs::remove_file(&target_file).ok();
     dbg!(&target_file);
 
     let mut fptr = fitsio::FitsFile::open(filename).expect("Opening fits file");

@@ -2,11 +2,10 @@ use std::{
     collections::{BTreeMap, HashMap},
     env,
     sync::Arc,
-    time::Duration,
 };
 
 use egui::{mutex::Mutex, ProgressBar};
-use fits_inspect::egui::{FitsRender, FitsWidget};
+use fits_inspect::{egui::{FitsRender, FitsWidget}, analysis::Statistics};
 use indi::Number;
 use tokio::runtime::Runtime;
 use tokio_stream::StreamExt;
@@ -21,7 +20,7 @@ pub struct FlatApp {
     config: SetConfig,
     telescope: Arc<Telescope>,
     runner: Option<flat::Runner>,
-    fits_widget: Arc<Mutex<FitsWidget>>,
+    fits_render: Arc<Mutex<FitsRender>>,
     status: Arc<Mutex<Status>>,
 }
 
@@ -53,14 +52,12 @@ impl FlatApp {
             offset: 10.0,
         };
 
-        let blank_image = Array2::<u16>::zeros([10, 10]).into_dyn();
         let newed: FlatApp = FlatApp {
             config: flat_config,
             telescope,
             runner: None,
-            fits_widget: Arc::new(Mutex::new(FitsWidget::new(
+            fits_render: Arc::new(Mutex::new(FitsRender::new(
                 _cc.gl.as_ref().unwrap(),
-                blank_image,
             ))),
             status: Arc::new(Mutex::new(Status::default())),
         };
@@ -166,7 +163,7 @@ impl eframe::App for FlatApp {
                                 flat::Runner::new_set(self.config.clone(), self.telescope.clone());
                             let mut recv = runner.status();
                             let spawn_ctx = ctx.clone();
-                            let fits_widget = self.fits_widget.clone();
+                            let fits_render = self.fits_render.clone();
                             let app_status = self.status.clone();
                             tokio::spawn(async move {
                                 loop {
@@ -182,8 +179,10 @@ impl eframe::App for FlatApp {
                                                     let data: ArrayD<u16> = fits
                                                         .read_image()
                                                         .expect("Reading captured imager");
-                                                    let mut fits_widget = fits_widget.lock();
-                                                    fits_widget.set_fits(data);
+                                                    let stats = Statistics::new(&data.view());
+                                                    let mut fits_render = fits_render.lock();
+                                                    fits_render.set_fits(data);
+                                                    fits_render.auto_stretch(&stats);
                                                     spawn_ctx.request_repaint();
                                                 }
                                             }
@@ -224,9 +223,7 @@ impl eframe::App for FlatApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let mut fits_widget = self.fits_widget.lock();
-
-            fits_widget.update(ctx, _frame);
+            ui.add(FitsWidget::new(self.fits_render.clone()));
         });
     }
 }
