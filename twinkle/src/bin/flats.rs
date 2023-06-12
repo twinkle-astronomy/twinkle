@@ -5,7 +5,10 @@ use std::{
 };
 
 use egui::{mutex::Mutex, ProgressBar};
-use fits_inspect::{egui::{FitsRender, FitsWidget}, analysis::Statistics};
+use fits_inspect::{
+    analysis::Statistics,
+    egui::{FitsRender, FitsWidget},
+};
 use indi::Number;
 use tokio::runtime::Runtime;
 use tokio_stream::StreamExt;
@@ -56,9 +59,7 @@ impl FlatApp {
             config: flat_config,
             telescope,
             runner: None,
-            fits_render: Arc::new(Mutex::new(FitsRender::new(
-                _cc.gl.as_ref().unwrap(),
-            ))),
+            fits_render: Arc::new(Mutex::new(FitsRender::new(_cc.gl.as_ref().unwrap()))),
             status: Arc::new(Mutex::new(Status::default())),
         };
 

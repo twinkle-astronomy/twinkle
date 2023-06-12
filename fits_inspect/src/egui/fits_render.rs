@@ -10,6 +10,7 @@ use crate::egui::fits_widget::Drawable;
 
 use super::{image_mesh::ImageMesh, line_mesh::LineMesh};
 
+#[derive(Debug)]
 pub struct Elipse {
     pub x: f32,
     pub y: f32,
@@ -130,7 +131,7 @@ impl FitsRender {
 
             let clip_low = 0.0;
             let clip_high = std::u16::MAX as f32;
-            let histogram_high = std::u16::MAX as f32;
+            let histogram_high = 1.0;
             let histogram_low = 0.0;
             let histogram_mtf = 0.5;
 

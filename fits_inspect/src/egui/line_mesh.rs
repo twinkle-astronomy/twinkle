@@ -44,7 +44,7 @@ impl Drawable for LineMesh {
     fn load_data(&mut self, gl: &glow::Context) {
         let mut vertices = Vec::new();
 
-        let points = 20;
+        let points = 40;
         for star in &self.elipses {
             let delta_theta = 2.0 * std::f64::consts::PI / (points as f64);
             for i in 0..points {

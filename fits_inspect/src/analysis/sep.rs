@@ -118,7 +118,7 @@ impl<'a> Image {
         let status: SepApiStatus = unsafe {
             sep_sys::sep_extract(
                 &self.sep_sys_image,
-                (2.0 as f32).powf(15.0),
+                (2.0 as f32).powf(11.0),
                 sep_sys::SEP_THRESH_ABS,
                 10,
                 std::ptr::null(),

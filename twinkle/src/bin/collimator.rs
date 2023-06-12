@@ -1,9 +1,20 @@
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::{collections::HashMap, env, f64::consts::PI, net::TcpStream, time::Instant};
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use std::{env, net::TcpStream, sync::Arc, thread};
+
+use egui::mutex::Mutex;
+use fits_inspect::{
+    analysis::Statistics,
+    egui::{FitsRender, FitsWidget},
+};
 use fitsio::FitsFile;
-use indi::client::device::FitsImage;
+use indi::client::{device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
+
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::{collections::HashMap, f64::consts::PI, time::Instant};
+
+use fits_inspect::egui::fits_render::Elipse;
 use opencv::{
     self,
     core::BORDER_CONSTANT,
@@ -15,9 +26,9 @@ use opencv::{
 };
 use tokio_stream::StreamExt;
 
-fn new_image(data: &ArrayD<u16>) {
+fn new_image(data: &ArrayD<u16>) -> Box<dyn Iterator<Item = Elipse>> {
     let raw_data: Vec<u8> = data.iter().map(|x| (*x >> 8) as u8).collect();
-    let mut image = Mat::from_slice_rows_cols(&raw_data, data.shape()[0], data.shape()[1]).unwrap();
+    let image = Mat::from_slice_rows_cols(&raw_data, data.shape()[0], data.shape()[1]).unwrap();
 
     // let mut image = opencv::imgcodecs::imread("file.png", opencv::imgcodecs::IMREAD_COLOR)
     //     .expect("Reading file");
@@ -63,102 +74,130 @@ fn new_image(data: &ArrayD<u16>) {
     .unwrap();
 
     dbg!(start.elapsed());
-    for contour in contours {
-        let m = opencv::imgproc::moments(&contour, false).unwrap();
-        if m.m00 == 0.0 {
-            continue;
-        }
-        let area = opencv::imgproc::contour_area(&contour, false).unwrap();
-        let dia = (4.0 * area / PI).sqrt();
+    return Box::new(
+        contours
+            .into_iter()
+            .map(|contour| {
+                let m = opencv::imgproc::moments(&contour, false).unwrap();
+                (contour, m)
+            })
+            .filter(|(_contour, m)| m.m00 != 0.0)
+            .flat_map(|(contour, m)| {
+                let area = opencv::imgproc::contour_area(&contour, false).unwrap();
+                let radius = (4.0 * area / PI).sqrt() / 4.0;
 
-        let cx = m.m10 / m.m00;
-        let cy = m.m01 / m.m00;
-
-        opencv::imgproc::circle(
-            &mut image,
-            (cx as i32, cy as i32).into(),
-            (dia / 2.0) as i32,
-            (255.0, 255.0, 255.0).into(),
-            1,
-            LINE_8,
-            0,
-        )
-        .unwrap();
-
-        opencv::imgproc::circle(
-            &mut image,
-            (cx as i32, cy as i32).into(),
-            1 as i32,
-            (255.0, 255.0, 255.0).into(),
-            1,
-            LINE_8,
-            0,
-        )
-        .unwrap();
-    }
-
-    opencv::highgui::imshow("Collimation", &image).expect("show image");
+                [
+                    Elipse {
+                        x: (m.m10 / m.m00) as f32,
+                        y: (m.m01 / m.m00) as f32,
+                        a: radius as f32,
+                        b: radius as f32,
+                        theta: 0.0,
+                    },
+                    Elipse {
+                        x: (m.m10 / m.m00) as f32,
+                        y: (m.m01 / m.m00) as f32,
+                        a: 1.0 as f32,
+                        b: 1.0 as f32,
+                        theta: 0.0,
+                    },
+                ]
+            }),
+    );
 }
 
-#[tokio::main]
-async fn main() {
-    let args: Vec<String> = env::args().collect();
-    let addr = &args[1];
+pub struct FitsViewerApp {
+    fits_widget: Arc<Mutex<FitsRender>>,
+}
 
-    let client = indi::client::new(
-        TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
-        None,
-        None,
-    )
-    .expect("Connecting to indi");
+impl FitsViewerApp {
+    /// Called once before the first frame.
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Option<Self> {
+        let gl = cc.gl.as_ref()?;
 
-    let (tx, rx): (Sender<ArrayD<u16>>, Receiver<ArrayD<u16>>) = mpsc::channel();
+        let newed = FitsViewerApp {
+            fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
+        };
 
-    tokio::task::spawn_blocking(move || {
-        opencv::highgui::named_window("Collimation", 0).expect("Open window");
-        opencv::highgui::start_window_thread().unwrap();
-
-        let mut fptr = FitsFile::open("file.fits").unwrap();
-        let hdu = fptr.primary_hdu().unwrap();
-
-        let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
-        new_image(&data);
-
-        while opencv::highgui::get_window_property("Collimation", 0).unwrap() >= 0.0 {
-            if let Ok(v) = rx.try_recv() {
-                new_image(&v);
-            }
-            let key = opencv::highgui::wait_key(10).unwrap();
-            if key == 113 {
-                std::process::exit(0);
-            }
-        }
-    });
-
-    let camera = client
-        .get_device::<()>("ZWO CCD ASI294MM Pro")
-        .await
-        .unwrap();
-    camera
-        .enable_blob(Some("CCD1"), indi::BlobEnable::Only)
-        .await
-        .unwrap();
-
-    let mut ccd = camera.get_parameter("CCD1").await.unwrap().changes();
-
-    while let Some(Ok(image_param)) = ccd.next().await {
-        if let Some(image_data) = image_param
-            .get_values::<HashMap<String, indi::Blob>>()
-            .unwrap()
-            .get("CCD1")
         {
-            if let Some(bytes) = &image_data.value {
-                let fits_image = FitsImage::new(bytes.clone());
-                let data = fits_image.read_image().unwrap();
-                tx.send(data).unwrap();
-            } else {
-                dbg!("No image data");
-            }
+            let mut lock = newed.fits_widget.lock();
+            let mut fptr = FitsFile::open(
+                "file.fits",
+            )
+            .unwrap();
+            let hdu = fptr.primary_hdu().unwrap();
+            let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
+
+            let circles = new_image(&data);
+            
+            lock.set_fits(data);
+            lock.set_elipses(circles);
         }
+
+        let fits_widget = newed.fits_widget.clone();
+        let ctx = cc.egui_ctx.clone();
+        thread::spawn(move || {
+            let args: Vec<String> = env::args().collect();
+
+            let connection = TcpStream::connect(&args[1]).unwrap();
+            connection
+                .write(&indi::serialization::GetProperties {
+                    version: indi::INDI_PROTOCOL_VERSION.to_string(),
+                    device: None,
+                    name: None,
+                })
+                .unwrap();
+
+            connection
+                .write(&indi::serialization::EnableBlob {
+                    device: String::from("ZWO CCD ASI294MM Pro"),
+                    name: None,
+                    enabled: indi::BlobEnable::Only,
+                })
+                .unwrap();
+
+            let c_iter = connection.iter().unwrap();
+
+            for command in c_iter {
+                match command {
+                    Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
+                        println!("Got image for: {:?}", sbv.device);
+                        if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
+                            continue;
+                        }
+                        let fits =
+                            FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone()));
+                        let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
+                        let circles = new_image(&data);
+                        {
+                            let mut fits_widget = fits_widget.lock();
+                            fits_widget.set_fits(data);
+                            fits_widget.set_elipses(circles);
+                        }
+                        ctx.request_repaint();
+                    }
+                    _ => {}
+                }
+            }
+        });
+        Some(newed)
     }
+}
+
+impl eframe::App for FitsViewerApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let fits_widget = self.fits_widget.clone();
+        egui::CentralPanel::default().show(ctx, move |ui| {
+            ui.add(FitsWidget::new(fits_widget));
+        });
+    }
+}
+
+fn main() {
+    let native_options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "Fits Viewer",
+        native_options,
+        Box::new(move |cc| Box::new(FitsViewerApp::new(cc).unwrap())),
+    );
 }
