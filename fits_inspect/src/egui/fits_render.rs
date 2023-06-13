@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use eframe::{
     egui_glow,
     glow::{Context, HasContext, NativeProgram},
@@ -19,6 +21,29 @@ pub struct Elipse {
     pub b: f32,
 
     pub theta: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct Circle {
+    pub x: f32,
+    pub y: f32,
+
+    pub r: f32,
+}
+
+
+impl From<Circle> for Elipse {
+    fn from(value: Circle) -> Self {
+        Elipse {
+            x: value.x as f32,
+            y: value.y as f32,
+
+            a: value.r,
+            b: value.r,
+
+            theta: 0.0,
+        }
+    }
 }
 
 impl From<crate::analysis::sep::CatalogEntry> for Elipse {
@@ -136,7 +161,7 @@ impl FitsRender {
             let histogram_mtf = 0.5;
 
             texture = gl.create_texture().expect("Cannot create texture");
-            let image = ArrayD::<u16>::zeros(IxDyn(&[10, 10]));
+            let image = Arc::new(ArrayD::<u16>::zeros(IxDyn(&[10, 10])));
             image_mesh = ImageMesh {
                 texture,
                 image,
@@ -177,9 +202,11 @@ impl FitsRender {
         }
     }
 
-    pub fn set_fits(&mut self, data: ArrayD<u16>) {
-        self.image_mesh.image = data;
-        self.image_mesh.dirty = true;
+    pub fn set_fits(&mut self, data: Arc<ArrayD<u16>>) {
+        if data != self.image_mesh.image {
+            self.image_mesh.image = data;
+            self.image_mesh.dirty = true;    
+        }
     }
 
     pub fn set_elipses(&mut self, stars: impl IntoIterator<Item = impl Into<Elipse>>) {

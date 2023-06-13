@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use eframe::glow::{self, HasContext};
 use ndarray::ArrayD;
 
@@ -5,7 +7,7 @@ use super::{fits_widget::Drawable, FitsRender};
 
 pub struct ImageMesh {
     pub texture: glow::Texture,
-    pub image: ArrayD<u16>,
+    pub image: Arc<ArrayD<u16>>,
     pub program: glow::Program,
     pub vbo: glow::Buffer,
     pub vao: glow::VertexArray,

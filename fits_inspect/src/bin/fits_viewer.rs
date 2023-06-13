@@ -75,7 +75,7 @@ impl FitsViewerApp {
                     centers
                 );
 
-            lock.set_fits(data);
+            lock.set_fits(Arc::new(data));
             lock.set_elipses(stars);
             lock.auto_stretch(&stats);
         }
@@ -124,7 +124,7 @@ impl FitsViewerApp {
 
                         {
                             let mut fits_widget = fits_widget.lock();
-                            fits_widget.set_fits(data);
+                            fits_widget.set_fits(Arc::new(data));
                             fits_widget.set_elipses(stars.into_iter().filter(|x| x.flag == 0));
                             fits_widget.auto_stretch(&stats);
                         }

@@ -175,6 +175,20 @@ impl<T> Notify<T> {
             to_notify: Mutex::new(tx),
         }
     }
+
+    /// Returns a new `Notify<T>` with a given channel size
+    /// # Example
+    /// ```
+    /// use indi::client::notify::Notify;
+    /// let notify: Notify<i32> = Notify::new(42);
+    /// ```
+    pub fn new_with_size(value: T, size: usize) -> Notify<T> {
+        let (tx, _) = tokio::sync::broadcast::channel(size);
+        Notify {
+            subject: Mutex::new(Arc::new(value)),
+            to_notify: Mutex::new(tx),
+        }
+    }
 }
 
 impl<T: Debug + Sync + Send + 'static> Notify<T> {

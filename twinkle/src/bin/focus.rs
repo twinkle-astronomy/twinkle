@@ -2,7 +2,7 @@ use fits_inspect::analysis::sep::CatalogEntry;
 use fits_inspect::analysis::{sep, HyperbolicFit, Star, Statistics};
 use indi::*;
 use std::time::Duration;
-use std::{collections::HashMap, env, net::TcpStream};
+use std::{collections::HashMap, env};
 use twinkle::*;
 
 pub struct FocusMeasurement {

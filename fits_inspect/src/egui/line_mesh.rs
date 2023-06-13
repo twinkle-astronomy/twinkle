@@ -49,8 +49,8 @@ impl Drawable for LineMesh {
             let delta_theta = 2.0 * std::f64::consts::PI / (points as f64);
             for i in 0..points {
                 let theta = delta_theta * (i as f64);
-                let x0 = 2.0 * (star.a as f64) * theta.cos();
-                let y0 = 2.0 * (star.b as f64) * theta.sin();
+                let x0 = (star.a as f64) * theta.cos();
+                let y0 = (star.b as f64) * theta.sin();
                 let x = x0 * (star.theta as f64).cos() - y0 * (star.theta as f64).sin();
                 let y = y0 * (star.theta as f64).cos() + x0 * (star.theta as f64).sin();
 
@@ -58,8 +58,8 @@ impl Drawable for LineMesh {
                 vertices.push(star.y as f32 + y as f32 + 0.5);
 
                 let theta = delta_theta * ((i + 1) as f64);
-                let x0 = 2.0 * (star.a as f64) * theta.cos();
-                let y0 = 2.0 * (star.b as f64) * theta.sin();
+                let x0 = (star.a as f64) * theta.cos();
+                let y0 = (star.b as f64) * theta.sin();
                 let x = x0 * (star.theta as f64).cos() - y0 * (star.theta as f64).sin();
                 let y = y0 * (star.theta as f64).cos() + x0 * (star.theta as f64).sin();
 

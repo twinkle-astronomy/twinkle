@@ -13,7 +13,7 @@ use indi::Number;
 use tokio::runtime::Runtime;
 use tokio_stream::StreamExt;
 
-use ndarray::{Array2, ArrayD};
+use ndarray::ArrayD;
 use twinkle::{
     flat::{self, SetConfig, Status},
     Action, OpticsConfig, Telescope, TelescopeConfig,
@@ -182,7 +182,7 @@ impl eframe::App for FlatApp {
                                                         .expect("Reading captured imager");
                                                     let stats = Statistics::new(&data.view());
                                                     let mut fits_render = fits_render.lock();
-                                                    fits_render.set_fits(data);
+                                                    fits_render.set_fits(Arc::new(data));
                                                     fits_render.auto_stretch(&stats);
                                                     spawn_ctx.request_repaint();
                                                 }
