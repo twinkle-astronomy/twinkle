@@ -30,7 +30,7 @@ fn load_focus_events<T: AsRef<Path>>(
             let mut sep_image = sep::Image::new(image).unwrap();
             let bkg = sep_image.background().unwrap();
             sep_image.sub(&bkg).expect("Subtracting background");
-            let catalog = sep_image.extract(&bkg).unwrap();
+            let catalog = sep_image.extract(None).unwrap();
 
             println!("Found: {} stars", catalog.len());
             let fwhm = catalog.iter().map(|e| e.fwhm()).sum::<f32>() / catalog.len() as f32;

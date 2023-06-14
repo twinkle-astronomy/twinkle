@@ -56,7 +56,7 @@ pub fn lines(filename: &String) {
 
     let sep_image = sep::Image::new(data.clone()).unwrap();
     let bkg = sep_image.background().unwrap();
-    let mut catalog = sep_image.extract(&bkg).unwrap();
+    let mut catalog = sep_image.extract(None).unwrap();
     catalog.sort_by(|a, b| (-a.a / a.b).partial_cmp(&(-b.a / b.b)).unwrap());
     for star in &catalog {
         // if (star.a as f64 / star.b as f64) < 1.5 {

@@ -3,6 +3,7 @@ pub use statistics::*;
 pub mod sep;
 
 pub mod astigmatism;
+pub mod collimation;
 
 use ndarray::Array;
 use ndarray_stats::CorrelationExt;

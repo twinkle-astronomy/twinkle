@@ -36,7 +36,7 @@ fn main() {
     bkg.subarray(&mut sep_image)
         .expect("Background subtraction failed");
 
-    let catalog = sep_image.extract(&bkg).expect("Failed to extract features");
+    let catalog = sep_image.extract(None).expect("Failed to extract features");
 
     let mut wtr = Writer::from_path("foo.csv").unwrap();
     for entry in catalog {

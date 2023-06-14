@@ -39,7 +39,7 @@ impl FitsViewerApp {
             let bkg = sep_image.background().unwrap();
             sep_image.sub(&bkg).expect("Subtract background");
             
-            let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> = sep_image.extract(&bkg).unwrap()
+            let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> = sep_image.extract(None).unwrap()
                 .into_iter()
                 .filter(|x| x.flag == 0)
                 .filter(|x| x.peak * 1.2 < stats.clip_high.value as f32).collect();
@@ -120,7 +120,7 @@ impl FitsViewerApp {
                             fits_inspect::analysis::sep::Image::new(data.clone()).unwrap();
                         let bkg = sep_image.background().unwrap();
                         sep_image.sub(&bkg).expect("Subtract background");
-                        let stars = sep_image.extract(&bkg).unwrap();
+                        let stars = sep_image.extract(None).unwrap();
 
                         {
                             let mut fits_widget = fits_widget.lock();

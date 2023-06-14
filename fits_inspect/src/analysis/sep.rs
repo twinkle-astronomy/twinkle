@@ -113,12 +113,12 @@ impl<'a> Image {
         }
     }
 
-    pub fn extract(&self, _background: &Background) -> Result<Vec<CatalogEntry>, SepApiStatus> {
+    pub fn extract(&self, threshold: Option<f32>) -> Result<Vec<CatalogEntry>, SepApiStatus> {
         let mut catalog: *mut sep_sys::sep_catalog = std::ptr::null_mut();
         let status: SepApiStatus = unsafe {
             sep_sys::sep_extract(
                 &self.sep_sys_image,
-                (2.0 as f32).powf(11.0),
+                threshold.unwrap_or((2.0 as f32).powf(11.0)),
                 sep_sys::SEP_THRESH_ABS,
                 10,
                 std::ptr::null(),

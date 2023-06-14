@@ -37,9 +37,10 @@ pub fn focus(data: ArrayD<u16>) -> f64 {
     let center_x = data.shape()[1] as f64;
     let center_y = data.shape()[0] as f64;
 
-    let sep_image = sep::Image::new(data).unwrap();
+    let mut sep_image = sep::Image::new(data).unwrap();
     let bkg = sep_image.background().unwrap();
-    let catalog = sep_image.extract(&bkg).unwrap();
+    sep_image.sub(&bkg).unwrap();
+    let catalog = sep_image.extract(None).unwrap();
 
     let f = catalog.iter().map(|star| {
         let x = center_x - star.x;

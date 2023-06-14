@@ -136,7 +136,7 @@ async fn main() {
         let mut sep_image = sep::Image::new(image_data).unwrap();
         let bkg = sep_image.background().unwrap();
         sep_image.sub(&bkg).unwrap();
-        let catalog = sep_image.extract(&bkg).unwrap();
+        let catalog = sep_image.extract(None).unwrap();
 
         autofocus.add(FocusMeasurement {
             focuser_position,
