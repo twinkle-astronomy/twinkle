@@ -31,7 +31,6 @@ pub struct Circle {
     pub r: f32,
 }
 
-
 impl From<Circle> for Elipse {
     fn from(value: Circle) -> Self {
         Elipse {
@@ -205,7 +204,7 @@ impl FitsRender {
     pub fn set_fits(&mut self, data: Arc<ArrayD<u16>>) {
         if data != self.image_mesh.image {
             self.image_mesh.image = data;
-            self.image_mesh.dirty = true;    
+            self.image_mesh.dirty = true;
         }
     }
 

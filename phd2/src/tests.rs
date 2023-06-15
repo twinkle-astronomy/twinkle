@@ -16,9 +16,9 @@ async fn test_read_session() {
 
 #[cfg(feature = "test_phd2_simulator")]
 mod integration {
-    use std::time::Duration;
     use crate::serialization::Event;
     use crate::*;
+    use std::time::Duration;
     use tokio::net::TcpStream;
 
     #[tokio::test]

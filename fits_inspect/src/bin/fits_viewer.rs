@@ -5,7 +5,7 @@ use std::{env, net::TcpStream, sync::Arc, thread};
 use egui::mutex::Mutex;
 use fits_inspect::{
     analysis::Statistics,
-    egui::{FitsRender, FitsWidget, fits_render::Elipse},
+    egui::{fits_render::Elipse, FitsRender, FitsWidget},
 };
 use fitsio::FitsFile;
 use indi::client::{device::FitsImage, ClientConnection};
@@ -38,42 +38,86 @@ impl FitsViewerApp {
             let mut sep_image = fits_inspect::analysis::sep::Image::new(data.clone()).unwrap();
             let bkg = sep_image.background().unwrap();
             sep_image.sub(&bkg).expect("Subtract background");
-            
-            let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> = sep_image.extract(None).unwrap()
+
+            let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> = sep_image
+                .extract(None)
+                .unwrap()
                 .into_iter()
                 .filter(|x| x.flag == 0)
-                .filter(|x| x.peak * 1.2 < stats.clip_high.value as f32).collect();
+                .filter(|x| x.peak * 1.2 < stats.clip_high.value as f32)
+                .collect();
 
             let mut star_iter = stars.iter();
             let ((x, y), (xpeak, ypeak)) = if let Some(first) = star_iter.next() {
-                star_iter.fold(((first.x, first.y), (first.xpeak as f64, first.ypeak as f64)), |((x, y), (xpeak, ypeak)), star| {
-                    ((x + star.x, y + star.y), (xpeak + star.xpeak as f64, ypeak + star.ypeak as f64))
-                })
+                star_iter.fold(
+                    ((first.x, first.y), (first.xpeak as f64, first.ypeak as f64)),
+                    |((x, y), (xpeak, ypeak)), star| {
+                        (
+                            (x + star.x, y + star.y),
+                            (xpeak + star.xpeak as f64, ypeak + star.ypeak as f64),
+                        )
+                    },
+                )
             } else {
                 todo!()
             };
-            let ((x, y), (xpeak, ypeak)) = ((x / stars.len() as f64, y/ stars.len() as f64), (xpeak/ stars.len() as f64, ypeak/ stars.len() as f64));
+            let ((x, y), (xpeak, ypeak)) = (
+                (x / stars.len() as f64, y / stars.len() as f64),
+                (xpeak / stars.len() as f64, ypeak / stars.len() as f64),
+            );
 
             let centers = [
-                Elipse { x: data.shape()[1] as f32 / 2.0, y: data.shape()[0] as f32/ 2.0, a: 20.0, b: 20.0, theta: 0.0 },
-                Elipse { x: x as f32, y: y as f32, a: 0.5, b: 0.5, theta: 0.0 },
-                Elipse { x: x as f32, y: y as f32, a: 0.5, b: 1.5, theta: 0.0 },
-                Elipse { x: xpeak as f32, y: ypeak as f32, a: 1.5, b: 0.5, theta: 0.0 }
+                Elipse {
+                    x: data.shape()[1] as f32 / 2.0,
+                    y: data.shape()[0] as f32 / 2.0,
+                    a: 20.0,
+                    b: 20.0,
+                    theta: 0.0,
+                },
+                Elipse {
+                    x: x as f32,
+                    y: y as f32,
+                    a: 0.5,
+                    b: 0.5,
+                    theta: 0.0,
+                },
+                Elipse {
+                    x: x as f32,
+                    y: y as f32,
+                    a: 0.5,
+                    b: 1.5,
+                    theta: 0.0,
+                },
+                Elipse {
+                    x: xpeak as f32,
+                    y: ypeak as f32,
+                    a: 1.5,
+                    b: 0.5,
+                    theta: 0.0,
+                },
             ];
 
             dbg!(&centers);
-            let stars = stars.into_iter()
+            let stars = stars
+                .into_iter()
                 .flat_map(|x| {
-                    let center1 = Elipse { x: x.x as f32, y: x.y as f32, a: 0.5, b: 0.5, theta: 0.0 };
-                    let center2 = Elipse { x: x.xpeak as f32, y: x.ypeak as f32, a: 0.5, b: 0.5, theta: 0.0 };
-                    [
-                        x.into(),
-                        center1,
-                        center2,
-                    ]
-                }).chain(
-                    centers
-                );
+                    let center1 = Elipse {
+                        x: x.x as f32,
+                        y: x.y as f32,
+                        a: 0.5,
+                        b: 0.5,
+                        theta: 0.0,
+                    };
+                    let center2 = Elipse {
+                        x: x.xpeak as f32,
+                        y: x.ypeak as f32,
+                        a: 0.5,
+                        b: 0.5,
+                        theta: 0.0,
+                    };
+                    [x.into(), center1, center2]
+                })
+                .chain(centers);
 
             lock.set_fits(Arc::new(data));
             lock.set_elipses(stars);

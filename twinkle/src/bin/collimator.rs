@@ -1,10 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::{env, net::TcpStream, ops::Deref, sync::Arc, thread};
+use std::{env, net::TcpStream, sync::Arc, thread};
 
 use egui::mutex::Mutex;
 use fits_inspect::{
-    analysis::Statistics,
+    analysis::collimation::CollimationCalculator,
     egui::{fits_render::Circle, FitsRender, FitsWidget},
 };
 use fitsio::FitsFile;
@@ -12,10 +12,6 @@ use indi::client::{device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
 use tokio::runtime::Runtime;
 use tokio_stream::StreamExt;
-
-use std::f64::consts::PI;
-
-use fits_inspect::egui::fits_render::Elipse;
 
 #[derive(PartialEq, Debug, Clone)]
 enum Algo {
@@ -27,8 +23,8 @@ enum Algo {
 struct Settings {
     center_radius: f32,
     image: Arc<ArrayD<u16>>,
-    defocused: fits_inspect::analysis::collimation::defocused_star::DefocusedStar,
-    sep_threshold: f32,
+    defocused: fits_inspect::analysis::collimation::DefocusedStar,
+    peak_offset: fits_inspect::analysis::collimation::StarPeakOffset,
     algo: Algo,
 }
 pub struct FitsViewerApp {
@@ -57,7 +53,7 @@ impl FitsViewerApp {
                     center_radius: 0.02,
                     image: image.clone(),
                     defocused: Default::default(),
-                    sep_threshold: (2.0 as f32).powf(11.0),
+                    peak_offset: Default::default(),
                     algo: Algo::DefocusedStar,
                 },
                 1,
@@ -72,117 +68,40 @@ impl FitsViewerApp {
         let calc_context = cc.egui_ctx.clone();
         tokio::spawn(async move {
             loop {
+                dbg!("loop!");
                 match sub.next().await {
                     Some(Ok(settings)) => {
-                        dbg!("loop!");
                         let center = Circle {
                             x: image.shape()[1] as f32 / 2.0,
                             y: image.shape()[0] as f32 / 2.0,
                             r: settings.center_radius * max_radius(&image) / 2.0,
                         };
-                        let stats = Statistics::new(&settings.image.view());
                         match settings.algo {
                             Algo::DefocusedStar => {
-                                let mut fits_widget = calc_render.lock();
-                                let circles = {
-                                    fits_widget.set_fits(settings.image.clone());
-                                    settings.defocused.calculate(&settings.image)
-                                }
-                                .chain([center.into()]);
+                                let circles = settings
+                                    .defocused
+                                    .calculate(&settings.image)
+                                    .unwrap_or_else(|x| {
+                                        dbg!(x);
+                                        Box::new(vec![].into_iter())
+                                    });
 
-                                fits_widget.set_elipses(circles);
-                            }
-                            Algo::PeakOffset => {
-                                let image = settings.image.deref().clone();
-                                let mut sep_image =
-                                    fits_inspect::analysis::sep::Image::new(image).unwrap();
-                                let bkg = sep_image.background().unwrap();
-                                sep_image.sub(&bkg).expect("Subtract background");
-
-                                let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> =
-                                    sep_image
-                                        .extract(Some(settings.sep_threshold))
-                                        .unwrap_or(vec![])
-                                        .into_iter()
-                                        .filter(|x| x.flag == 0)
-                                        .filter(|x| x.peak * 1.2 < stats.clip_high.value as f32)
-                                        .collect();
-
-                                let mut star_iter = stars.iter();
-                                let ((x, y), (xpeak, ypeak)) = if let Some(first) = star_iter.next()
-                                {
-                                    star_iter.fold(
-                                        (
-                                            (first.x, first.y),
-                                            (first.xpeak as f64, first.ypeak as f64),
-                                        ),
-                                        |((x, y), (xpeak, ypeak)), star| {
-                                            (
-                                                (x + star.x, y + star.y),
-                                                (
-                                                    xpeak + star.xpeak as f64,
-                                                    ypeak + star.ypeak as f64,
-                                                ),
-                                            )
-                                        },
-                                    )
-                                } else {
-                                    ((0.0, 0.0), (0.0, 0.0))
-                                };
-                                let ((x, y), (xpeak, ypeak)) = (
-                                    (x / stars.len() as f64, y / stars.len() as f64),
-                                    (xpeak / stars.len() as f64, ypeak / stars.len() as f64),
-                                );
-
-                                let centers = [
-                                    Elipse {
-                                        x: x as f32,
-                                        y: y as f32,
-                                        a: 0.5,
-                                        b: 0.5,
-                                        theta: 0.0,
-                                    },
-                                    Elipse {
-                                        x: x as f32,
-                                        y: y as f32,
-                                        a: 0.5,
-                                        b: 10.5,
-                                        theta: 0.0,
-                                    },
-                                    Elipse {
-                                        x: xpeak as f32,
-                                        y: ypeak as f32,
-                                        a: 10.5,
-                                        b: 0.5,
-                                        theta: 0.0,
-                                    },
-                                ];
-
-                                dbg!(&centers);
-                                let stars = stars
-                                    .into_iter()
-                                    .flat_map(|x| {
-                                        let center1 = Elipse {
-                                            x: x.x as f32,
-                                            y: x.y as f32,
-                                            a: 0.5,
-                                            b: 0.5,
-                                            theta: 0.0,
-                                        };
-                                        let center2 = Elipse {
-                                            x: x.xpeak as f32,
-                                            y: x.ypeak as f32,
-                                            a: 0.5,
-                                            b: 0.5,
-                                            theta: 0.0,
-                                        };
-                                        [x.into(), center1, center2]
-                                    })
-                                    .chain(centers);
                                 let mut fits_widget = calc_render.lock();
                                 fits_widget.set_fits(settings.image.clone());
-                                fits_widget.auto_stretch(&stats);
-                                fits_widget.set_elipses(stars.chain([center.into()]));
+                                fits_widget.set_elipses(circles.chain([center.into()]));
+                            }
+                            Algo::PeakOffset => {
+                                let circles = settings
+                                    .peak_offset
+                                    .calculate(&settings.image)
+                                    .unwrap_or_else(|x| {
+                                        dbg!(x);
+                                        Box::new(vec![].into_iter())
+                                    });
+
+                                let mut fits_widget = calc_render.lock();
+                                fits_widget.set_fits(settings.image.clone());
+                                fits_widget.set_elipses(circles.chain([center.into()]));
                             }
                         }
 
@@ -196,7 +115,6 @@ impl FitsViewerApp {
                     }
                 }
             }
-            dbg!("end!");
         });
         thread::spawn(move || {
             let args: Vec<String> = env::args().collect();
@@ -277,7 +195,7 @@ impl eframe::App for FitsViewerApp {
                 Algo::PeakOffset => {
                     ui.add(
                         egui::Slider::new(
-                            &mut settings.sep_threshold,
+                            &mut settings.peak_offset.threshold,
                             0.0..=(std::u16::MAX as f32),
                         )
                         .text("SepThresh")
