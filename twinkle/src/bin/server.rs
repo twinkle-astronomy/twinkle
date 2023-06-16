@@ -1,13 +1,14 @@
 extern crate actix_web;
 
-use std::{env, io};
+use std::{env, io, time::Duration};
 use actix_web::{get, web, middleware, App, HttpServer, HttpResponse};
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 
 
 #[actix_rt::main]
 async fn main() -> io::Result<()> {
-    env::set_var("RUST_LOG", "actix_web=debug,actix_server=info");
+    env::set_var("RUST_LOG", "actix_web=debug,actix_server=debug");
     env_logger::init();
 
     HttpServer::new(|| {
@@ -55,10 +56,13 @@ pub async fn list_tweet() -> HttpResponse {
             Tweet::new("last tweet")
         ]
     };
-
-    HttpResponse::Ok()
+    let resp = HttpResponse::Ok()
         .content_type("application/json")
-        .json(tweets)
+        // .append_header(("access-control-allow-origin",  "*"))
+        .json(tweets);
+
+    dbg!(resp.body());
+    resp
 
 }
 
@@ -67,6 +71,7 @@ pub async fn get_tweet(id: web::Path<u32>) -> HttpResponse {
 
     HttpResponse::Ok()
         .content_type("application/json")
+        // .append_header(("access-control-allow-origin",  "*"))
         .json(Tweet::new(format!("A tweet with id: {}", id)))
 }
 
