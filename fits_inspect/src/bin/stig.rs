@@ -54,8 +54,9 @@ pub fn lines(filename: &String) {
 
     let mut lines: ArrayD<u16> = Array::zeros(data.shape());
 
-    let sep_image = sep::Image::new(data.clone()).unwrap();
+    let mut sep_image = sep::Image::new(data.clone()).unwrap();
     let bkg = sep_image.background().unwrap();
+    sep_image.sub(&bkg).unwrap();
     let mut catalog = sep_image.extract(None).unwrap();
     catalog.sort_by(|a, b| (-a.a / a.b).partial_cmp(&(-b.a / b.b)).unwrap());
     for star in &catalog {

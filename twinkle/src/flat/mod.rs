@@ -2,15 +2,11 @@ use crate::{Action, Telescope};
 use fits_inspect::analysis::Statistics;
 use indi::{
     client::{device::FitsImage, notify::Notify},
-    BlobEnable,
 };
 use std::{
-    borrow::Borrow, collections::HashMap, ops::Deref, path::Path, sync::Arc, time::Duration,
+    collections::HashMap, path::Path, sync::Arc, time::Duration,
 };
-use tokio::{
-    sync::watch::{self, Receiver, Ref, Sender},
-    task::{JoinError, JoinHandle},
-};
+use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
 
 #[derive(Debug, Clone)]
@@ -67,7 +63,7 @@ impl Runner {
 
         let task_status = status.clone();
         let task = tokio::spawn(async move {
-            let (compl, _duration) = Runner::run(&task_status, config, telescope).await;
+            let (_compl, _duration) = Runner::run(&task_status, config, telescope).await;
         });
 
         Runner { status, task }
@@ -78,7 +74,6 @@ impl Runner {
 
         let task_status = status.clone();
         let task = tokio::spawn(async move {
-            let mut compl = None;
             let mut exposure = Duration::from_millis(100);
             for (filter, _) in config.filters.iter().filter(|(_k, v)| **v) {
                 for (bin, _) in config.binnings.iter().filter(|(_k, v)| **v) {
@@ -106,7 +101,6 @@ impl Runner {
                             let mut lock = task_status.lock().unwrap();
                             lock.complete += 1;
                         }
-                        compl = Some(fits);
                     }
                 }
             }

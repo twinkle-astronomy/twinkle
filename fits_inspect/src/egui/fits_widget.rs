@@ -125,7 +125,7 @@ impl FitsWidget {
                 row.clamp(0, image_height - 1),
                 col.clamp(0, image_width - 1),
             ];
-            let pixel_value =
+            let _pixel_value =
                 Some(renderer.image_mesh.image.get(index).unwrap()).map(|x| x.to_owned());
         }
 

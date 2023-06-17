@@ -1,9 +1,8 @@
 extern crate actix_web;
 
-use std::{env, io, time::Duration};
+use std::{env, io};
 use actix_web::{get, web, middleware, App, HttpServer, HttpResponse};
 use serde::{Deserialize, Serialize};
-use tokio::time::sleep;
 
 
 #[actix_rt::main]

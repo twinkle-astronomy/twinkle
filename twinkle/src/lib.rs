@@ -140,10 +140,10 @@ impl Default for TwinkleApp {
 
 impl TwinkleApp {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let mut newed: TwinkleApp = Default::default();
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        let mut _newed: TwinkleApp = Default::default();
         // newed.fits_viewer = FitsWidget::new(cc);
-        newed
+        _newed
     }
 }
 
