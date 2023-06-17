@@ -1,9 +1,8 @@
 extern crate actix_web;
 
-use std::{env, io};
-use actix_web::{get, web, middleware, App, HttpServer, HttpResponse};
+use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
-
+use std::{env, io};
 
 #[actix_rt::main]
 async fn main() -> io::Result<()> {
@@ -24,7 +23,7 @@ async fn main() -> io::Result<()> {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Response<T> {
-    pub results: Vec<T>
+    pub results: Vec<T>,
 }
 
 pub type Tweets = Response<Tweet>;
@@ -46,14 +45,10 @@ impl Tweet {
     pub fn foo(&self) {}
 }
 
-
 #[get("/tweets")]
 pub async fn list_tweet() -> HttpResponse {
     let tweets = Tweets {
-        results: vec![
-            Tweet::new("First tweet!"),
-            Tweet::new("last tweet")
-        ]
+        results: vec![Tweet::new("First tweet!"), Tweet::new("last tweet")],
     };
     let resp = HttpResponse::Ok()
         .content_type("application/json")
@@ -62,12 +57,10 @@ pub async fn list_tweet() -> HttpResponse {
 
     dbg!(resp.body());
     resp
-
 }
 
 #[get("/tweets/{id}")]
 pub async fn get_tweet(id: web::Path<u32>) -> HttpResponse {
-
     HttpResponse::Ok()
         .content_type("application/json")
         // .append_header(("access-control-allow-origin",  "*"))

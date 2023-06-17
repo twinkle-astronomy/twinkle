@@ -1,3 +1,5 @@
+mod tests;
+
 pub mod number_vector;
 use std::sync::PoisonError;
 
@@ -6,6 +8,7 @@ pub use number_vector::NewNumberIter;
 pub use number_vector::SetNumberIter;
 
 pub mod text_vector;
+use serde::Deserializer;
 pub use text_vector::DefTextIter;
 pub use text_vector::NewTextIter;
 pub use text_vector::SetTextIter;
@@ -33,9 +36,37 @@ pub mod get_properties;
 use super::*;
 pub use get_properties::GetPropertiesIter;
 
+use serde::Deserialize;
+
 use quick_xml::name::QName;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
+
+#[derive(Debug, Clone, Copy)]
+pub struct Timestamp(pub DateTime<Utc>);
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> Result<Timestamp, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: &str = Deserialize::deserialize(deserializer)?;
+        let datetime = DateTime::from_str(&format!("{}Z", s)).unwrap();
+        Ok(Timestamp(datetime))
+    }
+}
+
+impl From<DateTime<Utc>> for Timestamp {
+    fn from(value: DateTime<Utc>) -> Self {
+        Timestamp(value)
+    }
+}
+
+impl Timestamp {
+    pub fn into_inner(self) -> DateTime<Utc> {
+        self.0
+    }
+}
 
 #[derive(Debug)]
 pub enum Command {
@@ -171,7 +202,7 @@ impl ToCommand<Vec<(&str, &str)>> for Vec<(&str, &str)> {
         Command::NewTextVector(NewTextVector {
             device: device_name,
             name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
+            timestamp: Some(chrono::offset::Utc::now().into()),
             texts: self
                 .iter()
                 .map(|x| OneText {
@@ -187,7 +218,7 @@ impl ToCommand<Vec<OneText>> for Vec<OneText> {
         Command::NewTextVector(NewTextVector {
             device: device_name,
             name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
+            timestamp: Some(chrono::offset::Utc::now().into()),
             texts: self,
         })
     }
@@ -239,52 +270,78 @@ impl From<UpdateError> for ClientErrors {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct DefTextVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "@group")]
     pub group: Option<String>,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "defText")]
     pub texts: Vec<DefText>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct DefText {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "$text")]
     pub value: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct SetTextVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "oneText")]
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct NewTextVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
 
+    #[serde(rename = "oneText")]
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct OneText {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "$text")]
     pub value: String,
 }
 

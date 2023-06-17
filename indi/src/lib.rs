@@ -103,6 +103,7 @@ use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Result as XmlResult;
 use quick_xml::Writer;
+use serde::Deserialize;
 
 use std::borrow::Cow;
 
@@ -125,7 +126,7 @@ use serialization::*;
 
 pub mod client;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
 pub enum PropertyState {
     Idle,
     Ok,
@@ -133,27 +134,30 @@ pub enum PropertyState {
     Alert,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
 pub enum SwitchState {
     On,
     Off,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
 pub enum SwitchRule {
     OneOfMany,
     AtMostOne,
     AnyOfMany,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
 pub enum PropertyPerm {
+    #[serde(rename = "ro")]
     RO,
+    #[serde(rename = "wo")]
     WO,
+    #[serde(rename = "rw")]
     RW,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
 pub enum BlobEnable {
     Never,
     Also,

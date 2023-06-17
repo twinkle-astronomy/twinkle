@@ -117,23 +117,60 @@ SQM
 </defText>
 </defTextVector>
                 "#;
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    reader.expand_empty_elements(true);
-    let mut command_iter = CommandIter::new(reader);
+    let command: Result<DefTextVector, _> = quick_xml::de::from_str(xml);
 
-    match command_iter.next().unwrap().unwrap() {
-        Command::DefTextVector(param) => {
+    match command {
+        Ok(param) => {
             assert_eq!(param.device, "CCD Simulator");
             assert_eq!(param.name, "ACTIVE_DEVICES");
             assert_eq!(param.texts.len(), 5)
         }
-        e => {
+        Err(e) => {
             panic!("Unexpected: {:?}", e)
         }
     }
 }
 
+#[test]
+fn test_def_text() {
+    let xml = r#"
+<defText name="ACTIVE_TELESCOPE" label="Active Telescope">
+    Simulator changed
+</defText>
+"#;
+    let command: Result<DefText, _> = quick_xml::de::from_str(xml);
+
+    match command {
+        Ok(param) => {
+            assert_eq!(param.name, "ACTIVE_TELESCOPE");
+            assert_eq!(param.label, Some(String::from("Active Telescope")));
+            assert_eq!(param.value, "Simulator changed")
+        }
+        Err(e) => {
+            panic!("Unexpected: {:?}", e)
+        }
+    }
+}
+
+#[test]
+fn test_one_text() {
+    let xml = r#"
+<oneText name="ACTIVE_TELESCOPE">
+    Simulator changed
+</oneText>
+"#;
+    let command: Result<OneText, _> = quick_xml::de::from_str(xml);
+
+    match command {
+        Ok(param) => {
+            assert_eq!(param.name, "ACTIVE_TELESCOPE");
+            assert_eq!(param.value, "Simulator changed")
+        }
+        Err(e) => {
+            panic!("Unexpected: {:?}", e)
+        }
+    }
+}
 #[test]
 fn test_set_text_vector() {
     let xml = r#"
@@ -155,18 +192,15 @@ SQM
 </oneText>
 </setTextVector>
                 "#;
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    reader.expand_empty_elements(true);
-    let mut command_iter = CommandIter::new(reader);
+    let command: Result<SetTextVector, _> = quick_xml::de::from_str(xml);
 
-    match command_iter.next().unwrap().unwrap() {
-        Command::SetTextVector(param) => {
+    match command {
+        Ok(param) => {
             assert_eq!(param.device, "CCD Simulator");
             assert_eq!(param.name, "ACTIVE_DEVICES");
             assert_eq!(param.texts.len(), 5)
         }
-        e => {
+        Err(e) => {
             panic!("Unexpected: {:?}", e)
         }
     }
@@ -193,18 +227,14 @@ SQM
 </oneText>
 </newTextVector>
                 "#;
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    reader.expand_empty_elements(true);
-    let mut command_iter = CommandIter::new(reader);
-
-    match command_iter.next().unwrap().unwrap() {
-        Command::NewTextVector(param) => {
+    let command: Result<NewTextVector, _> = quick_xml::de::from_str(xml);
+    match command {
+        Ok(param) => {
             assert_eq!(param.device, "CCD Simulator");
             assert_eq!(param.name, "ACTIVE_DEVICES");
             assert_eq!(param.texts.len(), 5)
         }
-        e => {
+        Err(e) => {
             panic!("Unexpected: {:?}", e)
         }
     }

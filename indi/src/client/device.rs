@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn test_update_text() {
         let mut device = Device::new(String::from("CCD Simulator"));
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+        let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_text = DefTextVector {
             device: String::from_str("CCD Simulator").unwrap(),
@@ -854,7 +854,7 @@ mod tests {
                         state: PropertyState::Ok,
                         perm: PropertyPerm::RW,
                         timeout: Some(60),
-                        timestamp: Some(timestamp),
+                        timestamp: Some(timestamp.into_inner()),
                         values: HashMap::from([(
                             String::from_str("seconds").unwrap(),
                             Text {
@@ -868,7 +868,9 @@ mod tests {
                 panic!("Unexpected");
             }
         }
-        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
+        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z")
+            .unwrap()
+            .into();
         let set_number = SetTextVector {
             device: String::from_str("CCD Simulator").unwrap(),
             name: String::from_str("Exposure").unwrap(),
@@ -905,7 +907,7 @@ mod tests {
                         state: PropertyState::Ok,
                         perm: PropertyPerm::RW,
                         timeout: Some(60),
-                        timestamp: Some(timestamp),
+                        timestamp: Some(timestamp.into_inner()),
                         values: HashMap::from([(
                             String::from_str("seconds").unwrap(),
                             Text {

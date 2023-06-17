@@ -1,11 +1,7 @@
 use crate::{Action, Telescope};
 use fits_inspect::analysis::Statistics;
-use indi::{
-    client::{device::FitsImage, notify::Notify},
-};
-use std::{
-    collections::HashMap, path::Path, sync::Arc, time::Duration,
-};
+use indi::client::{device::FitsImage, notify::Notify};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
 

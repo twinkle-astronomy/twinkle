@@ -143,7 +143,7 @@ pub fn new<T: ClientConnection>(
             command
                 .write(&mut xml_writer)
                 .expect("Writing command to connection");
-            xml_writer.inner().flush().expect("Flushing connection");
+            xml_writer.get_mut().flush().expect("Flushing connection");
         }
     });
 
@@ -315,7 +315,7 @@ pub trait ClientConnection {
         let mut xml_writer = Writer::new_with_indent(BufWriter::new(self.clone_writer()?), b' ', 2);
 
         command.write(&mut xml_writer)?;
-        xml_writer.inner().flush()?;
+        xml_writer.into_inner().flush()?;
         Ok(())
     }
 

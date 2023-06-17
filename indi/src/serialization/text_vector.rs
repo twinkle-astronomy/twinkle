@@ -24,7 +24,7 @@ impl CommandtoParam for DefTextVector {
             state: self.state,
             perm: self.perm,
             timeout: self.timeout,
-            timestamp: self.timestamp,
+            timestamp: self.timestamp.map(Timestamp::into_inner),
             values: self
                 .texts
                 .into_iter()
@@ -52,7 +52,7 @@ impl CommandToUpdate for SetTextVector {
             Parameter::TextVector(text_vector) => {
                 text_vector.state = self.state;
                 text_vector.timeout = self.timeout;
-                text_vector.timestamp = self.timestamp;
+                text_vector.timestamp = self.timestamp.map(Timestamp::into_inner);
                 for text in self.texts {
                     if let Some(existing) = text_vector.values.get_mut(&text.name) {
                         existing.value = text.value;
@@ -94,7 +94,7 @@ impl XmlSerialization for NewTextVector {
             if let Some(timestamp) = &self.timestamp {
                 creator = creator.with_attribute((
                     "timestamp",
-                    format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
+                    format!("{}", timestamp.into_inner().format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
                 ));
             }
             xml_writer = creator.write_inner_content(|xml_writer| {
@@ -197,7 +197,7 @@ impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
     ) -> Result<NewTextVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
 
         for attr in start_event.attributes() {
             let attr = attr?;
@@ -206,7 +206,7 @@ impl<'a, T: std::io::BufRead> NewTextIter<'a, T> {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -261,7 +261,7 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
         let mut name: Option<String> = None;
         let mut state: Option<PropertyState> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -273,7 +273,7 @@ impl<'a, T: std::io::BufRead> SetTextIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -335,7 +335,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
         let mut state: Option<PropertyState> = None;
         let mut perm: Option<PropertyPerm> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -350,7 +350,7 @@ impl<'a, T: std::io::BufRead> DefTextIter<'a, T> {
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(Timestamp(DateTime::from_str(&format!("{}Z", &attr_value))?))
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
