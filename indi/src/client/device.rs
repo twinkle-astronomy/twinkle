@@ -572,7 +572,7 @@ mod tests {
     #[test]
     fn test_update_switch() {
         let mut device = Device::new(String::from("CCD Simulator"));
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+        let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_switch = DefSwitchVector {
             device: String::from("CCD Simulator"),
@@ -615,7 +615,7 @@ mod tests {
                         perm: PropertyPerm::RW,
                         rule: SwitchRule::AtMostOne,
                         timeout: Some(60),
-                        timestamp: Some(timestamp),
+                        timestamp: Some(timestamp.into_inner()),
                         values: HashMap::from([(
                             String::from_str("seconds").unwrap(),
                             Switch {
@@ -629,7 +629,7 @@ mod tests {
                 panic!("Unexpected");
             }
         }
-        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
+        let timestamp = Timestamp(DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap());
         let set_switch = SetSwitchVector {
             device: String::from_str("CCD Simulator").unwrap(),
             name: String::from_str("Exposure").unwrap(),
@@ -667,7 +667,7 @@ mod tests {
                         perm: PropertyPerm::RW,
                         rule: SwitchRule::AtMostOne,
                         timeout: Some(60),
-                        timestamp: Some(timestamp),
+                        timestamp: Some(timestamp.into_inner()),
                         values: HashMap::from([(
                             String::from_str("seconds").unwrap(),
                             Switch {

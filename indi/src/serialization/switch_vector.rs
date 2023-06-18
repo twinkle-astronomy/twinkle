@@ -24,7 +24,7 @@ impl CommandtoParam for DefSwitchVector {
             perm: self.perm,
             rule: self.rule,
             timeout: self.timeout,
-            timestamp: self.timestamp,
+            timestamp: self.timestamp.map(Timestamp::into_inner),
             values: self
                 .switches
                 .into_iter()
@@ -50,7 +50,7 @@ impl CommandToUpdate for SetSwitchVector {
     fn update_param(self, param: &mut Parameter) -> Result<String, UpdateError> {
         match param {
             Parameter::SwitchVector(switch_vector) => {
-                switch_vector.timestamp = self.timestamp;
+                switch_vector.timestamp = self.timestamp.map(Timestamp::into_inner);
                 for switch in self.switches {
                     if let Some(existing) = switch_vector.values.get_mut(&switch.name) {
                         existing.value = switch.value;
@@ -200,7 +200,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
         let mut perm: Option<PropertyPerm> = None;
         let mut rule: Option<SwitchRule> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -216,7 +216,7 @@ impl<'a, T: std::io::BufRead> DefSwitchIter<'a, T> {
                 QName(b"rule") => rule = Some(SwitchRule::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -333,7 +333,7 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
         let mut name: Option<String> = None;
         let mut state: Option<PropertyState> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -345,7 +345,7 @@ impl<'a, T: std::io::BufRead> SetSwitchIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -402,7 +402,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
     ) -> Result<NewSwitchVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
 
         for attr in start_event.attributes() {
             let attr = attr?;
@@ -411,7 +411,7 @@ impl<'a, T: std::io::BufRead> NewSwitchIter<'a, T> {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -436,21 +436,11 @@ mod tests {
 
     #[test]
     fn test_parse_switch() {
-        let xml = r#"
-    <defSwitch name="INDI_DISABLED" label="Disabled">
-On
-    </defSwitch>
-"#;
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut switch_iter = DefSwitchIter::new(&mut command_iter);
-
-        let result = switch_iter.next().unwrap().unwrap();
+        let xml = r#"<defSwitch name="INDI_DISABLED" label="Disabled">On</defSwitch>"#;
+        let command: DefSwitch = quick_xml::de::from_str(xml).unwrap();
 
         assert_eq!(
-            result,
+            command,
             DefSwitch {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
@@ -464,14 +454,9 @@ Off
     </defSwitch>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut switch_iter = DefSwitchIter::new(&mut command_iter);
-
-        let result = switch_iter.next().unwrap().unwrap();
+        let command: DefSwitch = quick_xml::de::from_str(xml).unwrap();
         assert_eq!(
-            result,
+            command,
             DefSwitch {
                 name: "INDI_DISABLED".to_string(),
                 label: Some("Disabled".to_string()),
@@ -488,25 +473,23 @@ On
     </oneSwitch>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut switch_iter = SetSwitchIter::new(&mut command_iter);
-
-        let result = switch_iter.next().unwrap().unwrap();
+        let command: OneSwitch = quick_xml::de::from_str(xml).unwrap();
 
         assert_eq!(
-            result,
+            command,
             OneSwitch {
                 name: "INDI_DISABLED".to_string(),
                 value: SwitchState::On
             }
         );
     }
+
     #[test]
     fn test_send_new_switch_vector() {
         let mut writer = Writer::new(Cursor::new(Vec::new()));
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z")
+            .unwrap()
+            .into();
 
         let command = NewSwitchVector {
             device: String::from_str("CCD Simulator").unwrap(),
@@ -525,5 +508,61 @@ On
             String::from_utf8(result).unwrap(),
             String::from_str("<newSwitchVector device=\"CCD Simulator\" name=\"Exposure\" timestamp=\"2022-10-13T07:41:56.301\"><oneSwitch name=\"seconds\">On</oneSwitch></newSwitchVector>").unwrap()
         );
+    }
+
+    #[test]
+    fn test_def_switch_vector() {
+        let xml = r#"
+    <defSwitchVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" perm="rw" rule="OneOfMany" timeout="60" timestamp="2022-09-06T01:41:22">
+    <defSwitch name="INDI_ENABLED" label="Enabled">
+    Off
+    </defSwitch>
+    <defSwitch name="INDI_DISABLED" label="Disabled">
+    On
+    </defSwitch>
+    </defSwitchVector>
+                    "#;
+        let param: DefSwitchVector = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "SIMULATE_BAYER");
+        assert_eq!(param.switches.len(), 2)
+    }
+
+    #[test]
+    fn test_set_switch_vector() {
+        let xml = r#"
+    <setSwitchVector device="CCD Simulator" name="DEBUG" state="Ok" timeout="0" timestamp="2022-10-01T22:07:22">
+    <oneSwitch name="ENABLE">
+    On
+    </oneSwitch>
+    <oneSwitch name="DISABLE">
+    Off
+    </oneSwitch>
+    </setSwitchVector>
+                    "#;
+        let param: SetSwitchVector = quick_xml::de::from_str(xml).unwrap();
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "DEBUG");
+        assert_eq!(param.switches.len(), 2)
+    }
+
+    #[test]
+    fn test_new_switch_vector() {
+        let xml = r#"
+    <newSwitchVector device="CCD Simulator" name="DEBUG" timestamp="2022-10-01T22:07:22">
+    <oneSwitch name="ENABLE">
+    On
+    </oneSwitch>
+    <oneSwitch name="DISABLE">
+    Off
+    </oneSwitch>
+    </newSwitchVector>
+                    "#;
+        let param: NewSwitchVector = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "DEBUG");
+        assert_eq!(param.switches.len(), 2)
     }
 }

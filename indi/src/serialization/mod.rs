@@ -156,7 +156,7 @@ impl<I: Into<SwitchState> + Copy> ToCommand<Vec<(&str, I)>> for Vec<(&str, I)> {
         Command::NewSwitchVector(NewSwitchVector {
             device: device_name,
             name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
+            timestamp: Some(chrono::offset::Utc::now().into()),
             switches: self
                 .iter()
                 .map(|x| OneSwitch {
@@ -173,7 +173,7 @@ impl ToCommand<Vec<OneSwitch>> for Vec<OneSwitch> {
         Command::NewSwitchVector(NewSwitchVector {
             device: device_name,
             name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
+            timestamp: Some(chrono::offset::Utc::now().into()),
             switches: self,
         })
     }
@@ -458,52 +458,79 @@ pub struct OneNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct DefSwitchVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "@group")]
     pub group: Option<String>,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
+    #[serde(rename = "@rule")]
     pub rule: SwitchRule,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "defSwitch")]
     pub switches: Vec<DefSwitch>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct DefSwitch {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "$text")]
     pub value: SwitchState,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct SetSwitchVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "oneSwitch")]
     pub switches: Vec<OneSwitch>,
 }
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct NewSwitchVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
 
+    #[serde(rename = "oneSwitch")]
     pub switches: Vec<OneSwitch>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct OneSwitch {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "$text")]
     pub value: SwitchState,
 }
 
