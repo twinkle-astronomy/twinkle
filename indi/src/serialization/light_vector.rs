@@ -21,7 +21,7 @@ impl CommandtoParam for DefLightVector {
             group: self.group,
             label: self.label,
             state: self.state,
-            timestamp: self.timestamp,
+            timestamp: self.timestamp.map(Timestamp::into_inner),
             values: self
                 .lights
                 .into_iter()
@@ -48,7 +48,7 @@ impl CommandToUpdate for SetLightVector {
         match param {
             Parameter::LightVector(light_vector) => {
                 light_vector.state = self.state;
-                light_vector.timestamp = self.timestamp;
+                light_vector.timestamp = self.timestamp.map(Timestamp::into_inner);
                 for light in self.lights {
                     if let Some(existing) = light_vector.values.get_mut(&light.name) {
                         existing.value = light.value;
@@ -97,7 +97,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
         let mut label: Option<String> = None;
         let mut group: Option<String> = None;
         let mut state: Option<PropertyState> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -110,7 +110,7 @@ impl<'a, T: std::io::BufRead> DefLightIter<'a, T> {
                 QName(b"group") => group = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -222,7 +222,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
         let mut state: Option<PropertyState> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -233,7 +233,7 @@ impl<'a, T: std::io::BufRead> SetLightIter<'a, T> {
                 QName(b"name") => name = Some(attr_value),
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -318,12 +318,7 @@ Ok
     </defLight>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut light_iter = DefLightIter::new(&mut command_iter);
-
-        let result = light_iter.next().unwrap().unwrap();
+        let result: DefLight = quick_xml::de::from_str(xml).unwrap();
 
         assert_eq!(
             result,
@@ -364,12 +359,7 @@ Ok
     </oneLight>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut light_iter = SetLightIter::new(&mut command_iter);
-
-        let result = light_iter.next().unwrap().unwrap();
+        let result: OneLight = quick_xml::de::from_str(xml).unwrap();
 
         assert_eq!(
             result,
@@ -378,5 +368,43 @@ Ok
                 value: PropertyState::Ok
             }
         );
+    }
+
+    #[test]
+    fn test_def_light_vector() {
+        let xml = r#"
+    <defLightVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" timestamp="2022-09-06T01:41:22">
+    <defLight name="INDI_ENABLED" label="Enabled">
+    Busy
+    </defLight>
+    <defLight name="INDI_DISABLED" label="Disabled">
+    Ok
+    </defLight>
+    </defLightVector>
+                    "#;
+        let param: DefLightVector = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "SIMULATE_BAYER");
+        assert_eq!(param.lights.len(), 2)
+    }
+
+    #[test]
+    fn test_set_light_vector() {
+        let xml = r#"
+    <setLightVector device="CCD Simulator" name="SIMULATE_BAYER" state="Idle" timestamp="2022-09-06T01:41:22">
+    <oneLight name="INDI_ENABLED">
+    Busy
+    </oneLight>
+    <oneLight name="INDI_DISABLED">
+    Ok
+    </oneLight>
+    </setLightVector>
+                    "#;
+        let param: SetLightVector = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "SIMULATE_BAYER");
+        assert_eq!(param.lights.len(), 2)
     }
 }

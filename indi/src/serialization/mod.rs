@@ -534,40 +534,59 @@ pub struct OneSwitch {
     pub value: SwitchState,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct DefLightVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "@group")]
     pub group: Option<String>,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "defLight")]
     pub lights: Vec<DefLight>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct DefLight {
+    #[serde(rename = "@name")]
     name: String,
+    #[serde(rename = "@label")]
     label: Option<String>,
+    #[serde(rename = "$text")]
     value: PropertyState,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct SetLightVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "oneLight")]
     pub lights: Vec<OneLight>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct OneLight {
+    #[serde(rename = "@name")]
     name: String,
+    #[serde(rename = "$text")]
     value: PropertyState,
 }
 

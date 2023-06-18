@@ -1,64 +1,6 @@
 use super::*;
 
 #[test]
-fn test_def_light_vector() {
-    let xml = r#"
-<defLightVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" state="Idle" timestamp="2022-09-06T01:41:22">
-<defLight name="INDI_ENABLED" label="Enabled">
-Busy
-</defLight>
-<defLight name="INDI_DISABLED" label="Disabled">
-Ok
-</defLight>
-</defLightVector>
-                "#;
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    reader.expand_empty_elements(true);
-    let mut command_iter = CommandIter::new(reader);
-
-    match command_iter.next().unwrap().unwrap() {
-        Command::DefLightVector(param) => {
-            assert_eq!(param.device, "CCD Simulator");
-            assert_eq!(param.name, "SIMULATE_BAYER");
-            assert_eq!(param.lights.len(), 2)
-        }
-        e => {
-            panic!("Unexpected: {:?}", e)
-        }
-    }
-}
-
-#[test]
-fn test_set_light_vector() {
-    let xml = r#"
-<setLightVector device="CCD Simulator" name="SIMULATE_BAYER" state="Idle" timestamp="2022-09-06T01:41:22">
-<oneLight name="INDI_ENABLED">
-Busy
-</oneLight>
-<oneLight name="INDI_DISABLED">
-Ok
-</oneLight>
-</setLightVector>
-                "#;
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    reader.expand_empty_elements(true);
-    let mut command_iter = CommandIter::new(reader);
-
-    match command_iter.next().unwrap().unwrap() {
-        Command::SetLightVector(param) => {
-            assert_eq!(param.device, "CCD Simulator");
-            assert_eq!(param.name, "SIMULATE_BAYER");
-            assert_eq!(param.lights.len(), 2)
-        }
-        e => {
-            panic!("Unexpected: {:?}", e)
-        }
-    }
-}
-
-#[test]
 fn test_blob_vector() {
     let xml = r#"
 <defBLOBVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" perm="rw"  state="Idle" timestamp="2022-09-06T01:41:22">
