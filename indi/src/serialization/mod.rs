@@ -1,6 +1,7 @@
 mod tests;
 
 pub mod number_vector;
+use std::ops::Deref;
 use std::sync::PoisonError;
 
 pub use number_vector::DefNumberIter;
@@ -53,6 +54,14 @@ impl<'de> Deserialize<'de> for Timestamp {
         let s: &str = Deserialize::deserialize(deserializer)?;
         let datetime = DateTime::from_str(&format!("{}Z", s)).unwrap();
         Ok(Timestamp(datetime))
+    }
+}
+
+impl Deref for Timestamp {
+    type Target = DateTime<Utc>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -175,12 +184,12 @@ impl ToCommand<Vec<(&str, f64)>> for Vec<(&str, f64)> {
         Command::NewNumberVector(NewNumberVector {
             device: device_name,
             name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
+            timestamp: Some(Timestamp(chrono::offset::Utc::now())),
             numbers: self
                 .iter()
                 .map(|x| OneNumber {
                     name: String::from(x.0),
-                    value: x.1,
+                    value: x.1.into(),
                 })
                 .collect(),
         })
@@ -191,7 +200,7 @@ impl ToCommand<Vec<OneNumber>> for Vec<OneNumber> {
         Command::NewNumberVector(NewNumberVector {
             device: device_name,
             name: param_name,
-            timestamp: Some(chrono::offset::Utc::now()),
+            timestamp: Some(Timestamp(chrono::offset::Utc::now())),
             numbers: self,
         })
     }
@@ -345,66 +354,108 @@ pub struct OneText {
     pub value: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Sexagesimal {
+    pub hour: f64,
+    pub minute: Option<f64>,
+    pub second: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct DefNumberVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "@group")]
     pub group: Option<String>,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "defNumber")]
     pub numbers: Vec<DefNumber>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct DefNumber {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "@format")]
     pub format: String,
+    #[serde(rename = "@min")]
     pub min: f64,
+    #[serde(rename = "@max")]
     pub max: f64,
+    #[serde(rename = "@step")]
     pub step: f64,
-    pub value: f64,
+    #[serde(rename = "$value")]
+    pub value: Sexagesimal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct SetNumberVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "oneNumber")]
     pub numbers: Vec<SetOneNumber>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct SetOneNumber {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@min")]
     pub min: Option<f64>,
+    #[serde(rename = "@max")]
     pub max: Option<f64>,
+    #[serde(rename = "@step")]
     pub step: Option<f64>,
-    pub value: f64,
+    #[serde(rename = "$value")]
+    pub value: Sexagesimal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct NewNumberVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
 
+    #[serde(rename = "oneNumber")]
     pub numbers: Vec<OneNumber>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct OneNumber {
+    #[serde(rename = "@name")]
     pub name: String,
-    pub value: f64,
+    #[serde(rename = "$value")]
+    pub value: Sexagesimal,
 }
 
 #[derive(Debug)]
@@ -575,6 +626,7 @@ pub trait XmlSerialization {
 #[derive(Debug)]
 pub enum DeError {
     XmlError(quick_xml::Error),
+    XmlDeError(quick_xml::DeError),
     IoError(std::io::Error),
     DecodeUtf8(str::Utf8Error),
     DecodeLatin(Cow<'static, str>),
@@ -592,6 +644,12 @@ pub enum DeError {
 impl From<quick_xml::Error> for DeError {
     fn from(err: quick_xml::Error) -> Self {
         DeError::XmlError(err)
+    }
+}
+
+impl From<quick_xml::DeError> for DeError {
+    fn from(err: quick_xml::DeError) -> Self {
+        DeError::XmlDeError(err)
     }
 }
 

@@ -439,30 +439,147 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_def_text_vector() {
+        let xml = r#"
+    <defTextVector device="CCD Simulator" name="ACTIVE_DEVICES" label="Snoop devices" group="Options" state="Idle" perm="rw" timeout="60" timestamp="2022-09-05T21:07:22">
+    <defText name="ACTIVE_TELESCOPE" label="Telescope">
+    Telescope Simulator
+    </defText>
+    <defText name="ACTIVE_ROTATOR" label="Rotator">
+    Rotator Simulator
+    </defText>
+    <defText name="ACTIVE_FOCUSER" label="Focuser">
+    Focuser Simulator
+    </defText>
+    <defText name="ACTIVE_FILTER" label="Filter">
+    CCD Simulator
+    </defText>
+    <defText name="ACTIVE_SKYQUALITY" label="Sky Quality">
+    SQM
+    </defText>
+    </defTextVector>
+                    "#;
+        let command: Result<DefTextVector, _> = quick_xml::de::from_str(xml);
+
+        match command {
+            Ok(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "ACTIVE_DEVICES");
+                assert_eq!(param.texts.len(), 5)
+            }
+            Err(e) => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
     fn test_def_text() {
         let xml = r#"
-    <defText name="ACTIVE_TELESCOPE" label="Telescope">
-Telescope Simulator
+    <defText name="ACTIVE_TELESCOPE" label="Active Telescope">
+        Simulator changed
     </defText>
-"#;
+    "#;
+        let command: Result<DefText, _> = quick_xml::de::from_str(xml);
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-
-        let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = DefTextIter::new(&mut command_iter);
-
-        let result = number_iter.next().unwrap().unwrap();
-
-        assert_eq!(
-            result,
-            DefText {
-                name: "ACTIVE_TELESCOPE".to_string(),
-                label: Some("Telescope".to_string()),
-                value: "Telescope Simulator".to_string()
+        match command {
+            Ok(param) => {
+                assert_eq!(param.name, "ACTIVE_TELESCOPE");
+                assert_eq!(param.label, Some(String::from("Active Telescope")));
+                assert_eq!(param.value, "Simulator changed")
             }
-        );
+            Err(e) => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_one_text() {
+        let xml = r#"
+    <oneText name="ACTIVE_TELESCOPE">
+        Simulator changed
+    </oneText>
+    "#;
+        let command: Result<OneText, _> = quick_xml::de::from_str(xml);
+
+        match command {
+            Ok(param) => {
+                assert_eq!(param.name, "ACTIVE_TELESCOPE");
+                assert_eq!(param.value, "Simulator changed")
+            }
+            Err(e) => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+    #[test]
+    fn test_set_text_vector() {
+        let xml = r#"
+    <setTextVector device="CCD Simulator" name="ACTIVE_DEVICES" state="Ok" timeout="60" timestamp="2022-10-01T17:06:14">
+    <oneText name="ACTIVE_TELESCOPE">
+    Simulator changed
+    </oneText>
+    <oneText name="ACTIVE_ROTATOR">
+    Rotator Simulator
+    </oneText>
+    <oneText name="ACTIVE_FOCUSER">
+    Focuser Simulator
+    </oneText>
+    <oneText name="ACTIVE_FILTER">
+    CCD Simulator
+    </oneText>
+    <oneText name="ACTIVE_SKYQUALITY">
+    SQM
+    </oneText>
+    </setTextVector>
+                    "#;
+        let command: Result<SetTextVector, _> = quick_xml::de::from_str(xml);
+
+        match command {
+            Ok(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "ACTIVE_DEVICES");
+                assert_eq!(param.texts.len(), 5)
+            }
+            Err(e) => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_new_text_vector() {
+        let xml = r#"
+    <newTextVector device="CCD Simulator" name="ACTIVE_DEVICES" timestamp="2022-10-01T17:06:14">
+    <oneText name="ACTIVE_TELESCOPE">
+    Simulator changed
+    </oneText>
+    <oneText name="ACTIVE_ROTATOR">
+    Rotator Simulator
+    </oneText>
+    <oneText name="ACTIVE_FOCUSER">
+    Focuser Simulator
+    </oneText>
+    <oneText name="ACTIVE_FILTER">
+    CCD Simulator
+    </oneText>
+    <oneText name="ACTIVE_SKYQUALITY">
+    SQM
+    </oneText>
+    </newTextVector>
+                    "#;
+        let command: Result<NewTextVector, _> = quick_xml::de::from_str(xml);
+        match command {
+            Ok(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "ACTIVE_DEVICES");
+                assert_eq!(param.texts.len(), 5)
+            }
+            Err(e) => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
     }
 
     //     use std::io::Cursor;

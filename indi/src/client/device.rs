@@ -442,10 +442,10 @@ impl ActiveDevice {
                     dbg!("Exposure was canceled");
                     return Err(ChangeError::<Command>::Canceled);
                 }
-                let remaining_exposure = exposure_param
+                let remaining_exposure: f64 = exposure_param
                     .get_values::<HashMap<String, Number>>()?
                     .get("CCD_EXPOSURE_VALUE")
-                    .and_then(|x| Some(x.value))
+                    .and_then(|x| Some(x.value.into()))
                     .expect("Missing CCD_EXPOSURE_VALUE from CCD_EXPOSURE parameter");
                 // Image is done exposing, new image data should be sent very soon
                 if remaining_exposure == 0.0 {
@@ -506,7 +506,7 @@ impl ActiveDevice {
 
         let ccd_binning = self.get_parameter("CCD_BINNING").await.unwrap();
 
-        let binning = {
+        let binning: f64 = {
             let ccd_binning_lock = ccd_binning.lock().unwrap();
             ccd_binning_lock
                 .get_values::<HashMap<String, Number>>()
@@ -514,15 +514,17 @@ impl ActiveDevice {
                 .get("HOR_BIN")
                 .unwrap()
                 .value
+                .into()
         };
         let pixel_scale = {
             let ccd_info_lock = ccd_info.lock().unwrap();
-            let ccd_pixel_size = ccd_info_lock
+            let ccd_pixel_size: f64 = ccd_info_lock
                 .get_values::<HashMap<String, Number>>()
                 .unwrap()
                 .get("CCD_PIXEL_SIZE")
                 .unwrap()
-                .value;
+                .value
+                .into();
             binning * ccd_pixel_size / 800.0 * 180.0 / std::f64::consts::PI * 3.6
         };
 
@@ -684,7 +686,7 @@ mod tests {
     #[test]
     fn test_update_number() {
         let mut device = client::device::Device::new(String::from("CCD Simulator"));
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+        let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_number = DefNumberVector {
             device: String::from_str("CCD Simulator").unwrap(),
@@ -703,7 +705,7 @@ mod tests {
                 min: 0.0,
                 max: 100.0,
                 step: 1.0,
-                value: 13.3,
+                value: 13.3.into(),
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
@@ -730,7 +732,7 @@ mod tests {
                         state: PropertyState::Ok,
                         perm: PropertyPerm::RW,
                         timeout: Some(60),
-                        timestamp: Some(timestamp),
+                        timestamp: Some(timestamp.into_inner()),
                         values: HashMap::from([(
                             String::from_str("seconds").unwrap(),
                             Number {
@@ -739,7 +741,7 @@ mod tests {
                                 min: 0.0,
                                 max: 100.0,
                                 step: 1.0,
-                                value: 13.3,
+                                value: 13.3.into(),
                             }
                         )])
                     }
@@ -749,7 +751,7 @@ mod tests {
             }
         }
 
-        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap();
+        let timestamp = Timestamp(DateTime::from_str("2022-10-13T08:41:56.301Z").unwrap());
         let set_number = SetNumberVector {
             device: String::from_str("CCD Simulator").unwrap(),
             name: String::from_str("Exposure").unwrap(),
@@ -762,7 +764,7 @@ mod tests {
                 min: None,
                 max: None,
                 step: None,
-                value: 5.0,
+                value: 5.0.into(),
             }],
         };
         assert_eq!(device.get_parameters().len(), 1);
@@ -789,7 +791,7 @@ mod tests {
                         state: PropertyState::Ok,
                         perm: PropertyPerm::RW,
                         timeout: Some(60),
-                        timestamp: Some(timestamp),
+                        timestamp: Some(timestamp.into_inner()),
                         values: HashMap::from([(
                             String::from_str("seconds").unwrap(),
                             Number {
@@ -798,7 +800,7 @@ mod tests {
                                 min: 0.0,
                                 max: 100.0,
                                 step: 1.0,
-                                value: 5.0
+                                value: 5.0.into()
                             }
                         )])
                     }

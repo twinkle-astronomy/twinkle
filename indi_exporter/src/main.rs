@@ -40,7 +40,7 @@ impl Metrics {
                                         value_name.as_str(),
                                         value.label.as_ref().unwrap_or(&"".to_string()).as_str(),
                                     ])
-                                    .set(value.value);
+                                    .set(value.value.into());
                             }
                         }
                         indi::Parameter::SwitchVector(param) => {

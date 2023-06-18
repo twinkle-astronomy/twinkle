@@ -207,7 +207,7 @@ pub struct Number {
     pub min: f64,
     pub max: f64,
     pub step: f64,
-    pub value: f64,
+    pub value: Sexagesimal,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -442,7 +442,7 @@ impl TryEq<Parameter> for Vec<(&str, f64)> {
         let current_values = other.get_values::<HashMap<String, Number>>()?;
 
         Ok(self.iter().all(|other_value| {
-            Some(other_value.1) == current_values.get(other_value.0).map(|x| x.value)
+            Some(other_value.1) == current_values.get(other_value.0).map(|x| x.value.into())
         }))
     }
 }

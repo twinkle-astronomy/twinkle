@@ -82,7 +82,7 @@ async fn main() {
 
     let focuser = telescope.get_focuser().await.expect("Getting focuser");
 
-    let focuser_position = focuser
+    let focuser_position: f64 = focuser
         .get_parameter("ABS_FOCUS_POSITION")
         .await
         .unwrap()
@@ -92,7 +92,8 @@ async fn main() {
         .unwrap()
         .get("FOCUS_ABSOLUTE_POSITION")
         .unwrap()
-        .value;
+        .value
+        .into();
 
     let focus_config = AutoFocusConfig {
         exposure: Duration::from_secs(1),
@@ -111,7 +112,7 @@ async fn main() {
         .unwrap();
 
     while !autofocus.is_complete() {
-        let focuser_position = focuser
+        let focuser_position: f64 = focuser
             .get_parameter("ABS_FOCUS_POSITION")
             .await
             .unwrap()
@@ -121,7 +122,8 @@ async fn main() {
             .unwrap()
             .get("FOCUS_ABSOLUTE_POSITION")
             .unwrap()
-            .value;
+            .value
+            .into();
 
         let fits_data = camera
             .capture_image_from_param(focus_config.exposure, &ccd)

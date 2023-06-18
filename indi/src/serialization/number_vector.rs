@@ -10,6 +10,75 @@ use std::str;
 use super::super::*;
 use super::*;
 
+impl<'de> Deserialize<'de> for Sexagesimal {
+    fn deserialize<D>(deserializer: D) -> Result<Sexagesimal, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: &str = Deserialize::deserialize(deserializer)?;
+        let mut components = s.split([' ', ':']);
+
+        let hour = components
+            .next()
+            .map(str::parse)
+            .transpose()
+            .unwrap()
+            .unwrap();
+        let minute = components.next().map(str::parse).transpose().unwrap();
+        let second = components.next().map(str::parse).transpose().unwrap();
+
+        Ok(Sexagesimal {
+            hour,
+            minute,
+            second,
+        })
+    }
+}
+
+impl std::fmt::Display for Sexagesimal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.hour)?;
+        if let Some(minute) = self.minute {
+            write!(f, ":{}", minute)?;
+        }
+        if let Some(second) = self.second {
+            write!(f, ":{}", second)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl From<f64> for Sexagesimal {
+    fn from(value: f64) -> Self {
+        // TODO: try splitting minute and second out of value instead of putting
+        //  it all in hour.
+        Self {
+            hour: value.into(),
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<Sexagesimal> for f64 {
+    fn from(value: Sexagesimal) -> Self {
+        let mut val = value.hour;
+
+        let sign = value.hour.signum();
+        let div = 60.0;
+
+        if let Some(minute) = value.minute {
+            val += sign * minute / div;
+        }
+        if let Some(second) = value.second {
+            val += sign * second / (div * div);
+        }
+
+        val
+    }
+}
+
 impl CommandtoParam for DefNumberVector {
     fn get_name(&self) -> &String {
         &self.name
@@ -26,7 +95,7 @@ impl CommandtoParam for DefNumberVector {
             state: self.state,
             perm: self.perm,
             timeout: self.timeout,
-            timestamp: self.timestamp,
+            timestamp: self.timestamp.map(Timestamp::into_inner),
             values: self
                 .numbers
                 .into_iter()
@@ -58,7 +127,7 @@ impl CommandToUpdate for SetNumberVector {
             Parameter::NumberVector(number_vector) => {
                 number_vector.state = self.state;
                 number_vector.timeout = self.timeout;
-                number_vector.timestamp = self.timestamp;
+                number_vector.timestamp = self.timestamp.map(Timestamp::into_inner);
                 for number in self.numbers {
                     if let Some(existing) = number_vector.values.get_mut(&number.name) {
                         existing.min = number.min.unwrap_or(existing.min);
@@ -127,7 +196,7 @@ impl XmlSerialization for NewNumberVector {
             if let Some(timestamp) = &self.timestamp {
                 creator = creator.with_attribute((
                     "timestamp",
-                    format!("{}", timestamp.format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
+                    format!("{}", timestamp.deref().format("%Y-%m-%dT%H:%M:%S%.3f")).as_str(),
                 ));
             }
             xml_writer = creator.write_inner_content(|xml_writer| {
@@ -142,23 +211,9 @@ impl XmlSerialization for NewNumberVector {
     }
 }
 
-fn parse_number(e: &BytesText) -> Result<f64, DeError> {
+fn parse_number(e: &BytesText) -> Result<Sexagesimal, DeError> {
     let text = &e.unescape()?;
-    let mut components = text.split([' ', ':']);
-
-    let mut val: f64 = match components.next() {
-        Some(comp) => comp.parse::<f64>()?,
-        None => return Err(DeError::ParseSexagesimalError(text.to_string())),
-    };
-
-    let sign = val.signum();
-    let mut div = 60.0;
-
-    for comp in components {
-        val += sign * comp.parse::<f64>()? / div;
-
-        div = div * 60.0;
-    }
+    let val: Sexagesimal = quick_xml::de::from_str(text)?;
     return Ok(val);
 }
 
@@ -193,7 +248,7 @@ fn next_set_one_number<T: std::io::BufRead>(
                     }
                 }
 
-                let value: Result<f64, DeError> = match xml_reader.read_event_into(buf) {
+                let value: Result<Sexagesimal, DeError> = match xml_reader.read_event_into(buf) {
                     Ok(Event::Text(e)) => parse_number(&e),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 };
@@ -246,7 +301,7 @@ fn next_one_number<T: std::io::BufRead>(
                     }
                 }
 
-                let value: Result<f64, DeError> = match xml_reader.read_event_into(buf) {
+                let value: Result<Sexagesimal, DeError> = match xml_reader.read_event_into(buf) {
                     Ok(Event::Text(e)) => parse_number(&e),
                     e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
                 };
@@ -310,7 +365,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
         let mut state: Option<PropertyState> = None;
         let mut perm: Option<PropertyPerm> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -325,7 +380,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -384,7 +439,7 @@ impl<'a, T: std::io::BufRead> DefNumberIter<'a, T> {
                         }
                     }
 
-                    let value: Result<f64, DeError> =
+                    let value: Result<Sexagesimal, DeError> =
                         match self.xml_reader.read_event_into(self.buf) {
                             Ok(Event::Text(e)) => parse_number(&e),
                             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
@@ -452,7 +507,7 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
         let mut name: Option<String> = None;
         let mut state: Option<PropertyState> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -464,7 +519,7 @@ impl<'a, T: std::io::BufRead> SetNumberIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -520,7 +575,7 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
     ) -> Result<NewNumberVector, DeError> {
         let mut device: Option<String> = None;
         let mut name: Option<String> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
 
         for attr in start_event.attributes() {
             let attr = attr?;
@@ -529,7 +584,7 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 key => {
                     return Err(DeError::UnexpectedAttr(format!(
@@ -552,98 +607,125 @@ impl<'a, T: std::io::BufRead> NewNumberIter<'a, T> {
 mod tests {
     use super::*;
     use std::io::Cursor;
-    #[test]
-    fn test_set_number() {
-        let xml = r#"
-    <oneNumber name="SIM_FOCUS_POSITION">
-7340
-    </oneNumber>
-"#;
-
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = SetNumberIter::new(&mut command_iter);
-
-        let result = number_iter.next().unwrap().unwrap();
-
-        assert_eq!(
-            result,
-            SetOneNumber {
-                name: "SIM_FOCUS_POSITION".to_string(),
-                min: None,
-                max: None,
-                step: None,
-                value: 7340.0
-            }
-        );
-    }
 
     #[test]
     fn test_def_number() {
         let xml = r#"
-    <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
-1280
-    </defNumber>
-"#;
+        <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
+    1280
+        </defNumber>
+                    "#;
+        let command: Result<DefNumber, _> = quick_xml::de::from_str(xml);
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = DefNumberIter::new(&mut command_iter);
-
-        let result = number_iter.next().unwrap().unwrap();
-
-        assert_eq!(
-            result,
-            DefNumber {
-                name: "SIM_XRES".to_string(),
-                label: Some("CCD X resolution".to_string()),
-                format: "%4.0f".to_string(),
-                min: 512.0,
-                max: 8192.0,
-                step: 512.0,
-                value: 1280.0
+        match command {
+            Ok(param) => {
+                assert_eq!(param.name, "SIM_XRES");
+                assert_eq!(param.label, Some(String::from("CCD X resolution")));
+                assert_eq!(param.value, 1280.0.into());
             }
-        );
+            Err(e) => {
+                panic!("Unexpected: {:?}", e);
+            }
+        }
+    }
 
+    #[test]
+    fn test_def_number_vector() {
         let xml = r#"
-    <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
-5.2000000000000001776
-    </defNumber>
+    <defNumberVector device="CCD Simulator" name="SIMULATOR_SETTINGS" label="Settings" group="Simulator Config" state="Idle" perm="rw" timeout="60" timestamp="2022-08-12T05:52:27">
+        <defNumber name="SIM_XRES" label="CCD X resolution" format="%4.0f" min="512" max="8192" step="512">
+    1280
+        </defNumber>
+        <defNumber name="SIM_YRES" label="CCD Y resolution" format="%4.0f" min="512" max="8192" step="512">
+    1024
+        </defNumber>
+        <defNumber name="SIM_XSIZE" label="CCD X Pixel Size" format="%4.2f" min="1" max="30" step="5">
+    5.2000000000000001776
+        </defNumber>
+    </defNumberVector>
+                    "#;
+        let command: Result<DefNumberVector, _> = quick_xml::de::from_str(xml);
+
+        match command {
+            Ok(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIMULATOR_SETTINGS");
+                assert_eq!(param.numbers.len(), 3)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_number_vector() {
+        let xml = r#"
+    <setNumberVector device="CCD Simulator" name="SIM_FOCUSING" state="Ok" timeout="60" timestamp="2022-10-01T21:21:10">
+    <oneNumber name="SIM_FOCUS_POSITION">
+    7340
+    </oneNumber>
+    <oneNumber name="SIM_FOCUS_MAX">
+    100000
+    </oneNumber>
+    <oneNumber name="SIM_SEEING">
+    3.5
+    </oneNumber>
+    </setNumberVector>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut number_iter = DefNumberIter::new(&mut command_iter);
+        let command: Result<SetNumberVector, _> = quick_xml::de::from_str(xml);
 
-        let result = number_iter.next().unwrap().unwrap();
-        assert_eq!(
-            result,
-            DefNumber {
-                name: "SIM_XSIZE".to_string(),
-                label: Some("CCD X Pixel Size".to_string()),
-                format: "%4.2f".to_string(),
-                min: 1.0,
-                max: 30.0,
-                step: 5.0,
-                value: 5.2000000000000001776
+        match command {
+            Ok(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIM_FOCUSING");
+                assert_eq!(param.numbers.len(), 3)
             }
-        );
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn test_new_number_vector() {
+        let xml = r#"
+    <newNumberVector device="CCD Simulator" name="SIM_FOCUSING" timestamp="2022-10-01T21:21:10">
+    <oneNumber name="SIM_FOCUS_POSITION">
+    7340
+    </oneNumber>
+    <oneNumber name="SIM_FOCUS_MAX">
+    100000
+    </oneNumber>
+    <oneNumber name="SIM_SEEING">
+    3.5
+    </oneNumber>
+    </newNumberVector>
+    "#;
+
+        let command: Result<NewNumberVector, _> = quick_xml::de::from_str(xml);
+
+        match command {
+            Ok(param) => {
+                assert_eq!(param.device, "CCD Simulator");
+                assert_eq!(param.name, "SIM_FOCUSING");
+                assert_eq!(param.numbers.len(), 3)
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
     }
 
     #[test]
     fn test_parse_number_normal() {
-        let mut buf = Vec::new();
         let xml = r#"-10.505"#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
+        let event: Result<Sexagesimal, _> = quick_xml::de::from_str(xml);
 
-        let event = reader.read_event_into(&mut buf);
-        if let Ok(Event::Text(e)) = event {
-            assert_eq!(-10.505, parse_number(&e).unwrap());
+        if let Ok(e) = event {
+            assert_eq!(Into::<Sexagesimal>::into(-10.505), e);
         } else {
             panic!("Unexpected");
         }
@@ -651,15 +733,12 @@ mod tests {
 
     #[test]
     fn test_parse_number_sexagesimal_1() {
-        let mut buf = Vec::new();
         let xml = r#"-10 30.3"#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
+        let event: Result<Sexagesimal, _> = quick_xml::de::from_str(xml);
 
-        let event = reader.read_event_into(&mut buf);
-        if let Ok(Event::Text(e)) = event {
-            assert_eq!(-10.505, parse_number(&e).unwrap());
+        if let Ok(e) = event {
+            assert_eq!(-10.505, e.into());
         } else {
             panic!("Unexpected");
         }
@@ -667,15 +746,12 @@ mod tests {
 
     #[test]
     fn test_parse_number_sexagesimal_2() {
-        let mut buf = Vec::new();
         let xml = r#"-10:30:18"#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
+        let event: Result<Sexagesimal, _> = quick_xml::de::from_str(xml);
 
-        let event = reader.read_event_into(&mut buf);
-        if let Ok(Event::Text(e)) = event {
-            assert_eq!(-10.505, parse_number(&e).unwrap());
+        if let Ok(e) = event {
+            assert_eq!(-10.505, e.into());
         } else {
             panic!("Unexpected");
         }
@@ -684,7 +760,9 @@ mod tests {
     #[test]
     fn test_send_new_number_vector() {
         let mut writer = Writer::new(Cursor::new(Vec::new()));
-        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap();
+        let timestamp = DateTime::from_str("2022-10-13T07:41:56.301Z")
+            .unwrap()
+            .into();
 
         let command = NewNumberVector {
             device: String::from_str("CCD Simulator").unwrap(),
@@ -692,7 +770,7 @@ mod tests {
             timestamp: Some(timestamp),
             numbers: vec![OneNumber {
                 name: String::from_str("seconds").unwrap(),
-                value: 3.0,
+                value: 3.0.into(),
             }],
         };
 
