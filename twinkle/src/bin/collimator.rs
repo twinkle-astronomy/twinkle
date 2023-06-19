@@ -145,8 +145,9 @@ impl FitsViewerApp {
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;
                         }
-                        let fits =
-                            FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone().into()));
+                        let fits = FitsImage::new(Arc::new(
+                            sbv.blobs.get_mut(0).unwrap().value.clone().into(),
+                        ));
                         let data: Arc<ArrayD<u16>> =
                             Arc::new(fits.read_image().expect("Reading captured image"));
 

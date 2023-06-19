@@ -43,7 +43,7 @@ use quick_xml::name::QName;
 use quick_xml::Result as XmlResult;
 use quick_xml::{Reader, Writer};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Timestamp(pub DateTime<Utc>);
 
 impl<'de> Deserialize<'de> for Timestamp {
@@ -667,25 +667,35 @@ pub struct EnableBlob {
     pub enabled: BlobEnable,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct Message {
+    #[serde(rename = "@device")]
     pub device: Option<String>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct DelProperty {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: Option<String>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct GetProperties {
+    #[serde(rename = "@version")]
     pub version: String,
+    #[serde(rename = "@device")]
     pub device: Option<String>,
+    #[serde(rename = "@name")]
     pub name: Option<String>,
 }
 

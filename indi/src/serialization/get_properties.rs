@@ -117,4 +117,15 @@ mod tests {
             String::from_str("<getProperties version=\"1.7\" device=\"CCD Simulator\"/>").unwrap()
         );
     }
+
+    #[test]
+    fn test_get_properties() {
+        let xml = r#"
+    <getProperties version="1.7" device="Telescope Simulator" name="foothing"/>
+                    "#;
+        let param: GetProperties = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, Some(String::from("Telescope Simulator")));
+        assert_eq!(param.name, Some(String::from("foothing")));
+    }
 }

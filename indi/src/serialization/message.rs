@@ -39,7 +39,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
         start_event: &events::BytesStart,
     ) -> Result<Message, DeError> {
         let mut device: Option<String> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -48,7 +48,7 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
             match attr.key {
                 QName(b"device") => device = Some(attr_value),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -73,4 +73,36 @@ impl<'a, T: std::io::BufRead> MessageIter<'a, T> {
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message() {
+        let xml = r#"
+    <message device="Telescope Simulator" timestamp="2022-10-02T00:37:07" message="[INFO] update mount and pier side: Pier Side On, mount type 2"/>
+                    "#;
+        let mut reader = Reader::from_str(xml);
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut command_iter = CommandIter::new(reader);
+
+        match command_iter.next().unwrap().unwrap() {
+            Command::Message(param) => {
+                assert_eq!(param.device, Some(String::from("Telescope Simulator")));
+                assert_eq!(
+                    param.message,
+                    Some(String::from(
+                        "[INFO] update mount and pier side: Pier Side On, mount type 2"
+                    ))
+                );
+            }
+            e => {
+                panic!("Unexpected: {:?}", e)
+            }
+        }
+    }
+
 }

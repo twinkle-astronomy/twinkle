@@ -40,7 +40,7 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
     ) -> Result<DelProperty, DeError> {
         let mut device: Result<String, DeError> = Err(DeError::MissingAttr(&"device"));
         let mut name: Option<String> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -50,7 +50,7 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
                 QName(b"device") => device = Ok(attr_value),
                 QName(b"name") => name = Some(attr_value),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -75,5 +75,21 @@ impl<'a, T: std::io::BufRead> DelPropertyIter<'a, T> {
             Event::End(_) => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_properties() {
+        let xml = r#"
+    <delProperty device="Telescope Simulator" name="foothing"/>
+                    "#;
+        let param: DelProperty = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, String::from("Telescope Simulator"));
+        assert_eq!(param.name, Some(String::from("foothing")));
     }
 }
