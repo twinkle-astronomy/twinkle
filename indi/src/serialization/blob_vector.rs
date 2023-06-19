@@ -1,11 +1,20 @@
-use quick_xml::events::Event;
+use chrono::DateTime;
+use quick_xml::events::{self, BytesText};
 use quick_xml::name::QName;
 use quick_xml::Reader;
+use quick_xml::{events::Event, Writer};
+use serde::{Deserialize, Deserializer};
 
-use std::str;
+use std::str::FromStr;
+use std::{num::Wrapping, str, sync::Arc};
 
-use super::super::*;
-use super::*;
+use crate::{BlobEnable, BlobVector, Parameter, PropertyPerm, PropertyState};
+
+use super::{
+    CommandIter, CommandToUpdate, CommandtoParam, DeError, DefBlob, DefBlobVector, EnableBlob,
+    OneBlob, SetBlobVector, Timestamp, UpdateError, XmlSerialization,
+};
+use crate::XmlResult;
 
 impl CommandtoParam for DefBlobVector {
     fn get_name(&self) -> &String {
@@ -23,14 +32,14 @@ impl CommandtoParam for DefBlobVector {
             state: self.state,
             perm: self.perm,
             timeout: self.timeout,
-            timestamp: self.timestamp,
+            timestamp: self.timestamp.map(Timestamp::into_inner),
             values: self
                 .blobs
                 .into_iter()
                 .map(|i| {
                     (
                         i.name,
-                        Blob {
+                        crate::Blob {
                             label: i.label,
                             format: None,
                             value: None,
@@ -52,11 +61,11 @@ impl CommandToUpdate for SetBlobVector {
             Parameter::BlobVector(blob_vector) => {
                 blob_vector.state = self.state;
                 blob_vector.timeout = self.timeout;
-                blob_vector.timestamp = self.timestamp;
+                blob_vector.timestamp = self.timestamp.map(Timestamp::into_inner);
                 for blob in self.blobs {
                     if let Some(existing) = blob_vector.values.get_mut(&blob.name) {
                         existing.format = Some(blob.format);
-                        existing.value = Some(Arc::new(blob.value));
+                        existing.value = Some(Arc::new(blob.value.into()));
                     }
                 }
                 Ok(self.name)
@@ -127,7 +136,7 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
         let mut state: Option<PropertyState> = None;
         let mut perm: Option<PropertyPerm> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -142,7 +151,7 @@ impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
                 QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -250,7 +259,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
         let mut name: Option<String> = None;
         let mut state: Option<PropertyState> = None;
         let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<DateTime<Utc>> = None;
+        let mut timestamp: Option<Timestamp> = None;
         let mut message: Option<String> = None;
 
         for attr in start_event.attributes() {
@@ -262,7 +271,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                 QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
                 QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
                 QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?)
+                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
                 }
                 QName(b"message") => message = Some(attr_value),
                 key => {
@@ -346,7 +355,7 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
                         size: size?,
                         enclen: enclen,
                         format: format?,
-                        value: value?,
+                        value: value?.into(),
                     }))
                 }
                 tag => Err(DeError::UnexpectedTag(
@@ -357,6 +366,33 @@ impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
             Event::Eof => Ok(None),
             e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
         }
+    }
+}
+
+impl From<Vec<u8>> for super::Blob {
+    fn from(value: Vec<u8>) -> Self {
+        super::Blob(value)
+    }
+}
+
+impl From<super::Blob> for Vec<u8> {
+    fn from(value: super::Blob) -> Self {
+        value.0
+    }
+}
+impl<'de> Deserialize<'de> for super::Blob {
+    fn deserialize<D>(deserializer: D) -> Result<super::Blob, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: &str = Deserialize::deserialize(deserializer)?;
+        let mut result = vec![];
+
+        for line in s.split('\n') {
+            base64::decode_config_buf(line, base64::STANDARD, &mut result).unwrap();
+        }
+
+        Ok(super::Blob(result))
     }
 }
 
@@ -371,13 +407,7 @@ mod tests {
     <defBLOB name="INDI_DISABLED" label="Disabled"/>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut switch_iter = DefBlobIter::new(&mut command_iter);
-
-        let result = switch_iter.next().unwrap().unwrap();
+        let result: DefBlob = quick_xml::de::from_str(xml).unwrap();
 
         assert_eq!(
             result,
@@ -391,13 +421,8 @@ mod tests {
     <defBLOB name="INDI_DISABLED" label="Disabled"/>
 "#;
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut switch_iter = DefBlobIter::new(&mut command_iter);
+        let result: DefBlob = quick_xml::de::from_str(xml).unwrap();
 
-        let result = switch_iter.next().unwrap().unwrap();
         assert_eq!(
             result,
             DefBlob {
@@ -430,18 +455,39 @@ mod tests {
     fn test_set_blob() {
         let xml = include_str!("../../tests/image_capture_one_blob.log");
 
-        let mut reader = Reader::from_str(xml);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
-        let mut command_iter = CommandIter::new(reader);
-        let mut switch_iter = SetBlobIter::new(&mut command_iter);
-
-        let result = switch_iter.next().unwrap().unwrap();
+        let result: OneBlob = quick_xml::de::from_str(xml).unwrap();
 
         assert_eq!(result.name, "CCD1".to_string());
         assert_eq!(result.size, 23040);
         assert_eq!(result.enclen, Some(30720));
         assert_eq!(result.format, ".fits");
-        assert_eq!(result.value.len(), 23040);
+        assert_eq!(result.value.0.len(), 23040);
+    }
+
+    #[test]
+    fn test_blob_vector() {
+        let xml = r#"
+    <defBLOBVector device="CCD Simulator" name="SIMULATE_BAYER" label="Bayer" group="Simulator Config" perm="rw"  state="Idle" timestamp="2022-09-06T01:41:22">
+    <defBLOB name="INDI_ENABLED" label="Enabled"/>
+    <defBLOB name="INDI_DISABLED" label="Disabled"/>
+    </defBLOBVector>
+                    "#;
+        let param: DefBlobVector = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "SIMULATE_BAYER");
+        assert_eq!(param.blobs.len(), 2)
+    }
+
+    #[test]
+    fn test_set_blob_vector() {
+        let xml = include_str!("../../tests/image_capture_blob_vector.log");
+
+        let param: SetBlobVector = quick_xml::de::from_str(xml).unwrap();
+
+        assert_eq!(param.device, "CCD Simulator");
+        assert_eq!(param.name, "CCD1");
+        assert_eq!(param.state, PropertyState::Ok);
+        assert_eq!(param.blobs.len(), 1)
     }
 }

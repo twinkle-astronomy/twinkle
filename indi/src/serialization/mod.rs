@@ -590,46 +590,73 @@ pub struct OneLight {
     value: PropertyState,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct DefBlobVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@label")]
     pub label: Option<String>,
+    #[serde(rename = "@group")]
     pub group: Option<String>,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "defBLOB")]
     pub blobs: Vec<DefBlob>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct DefBlob {
+    #[serde(rename = "@name")]
     name: String,
+    #[serde(rename = "@label")]
     label: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct SetBlobVector {
+    #[serde(rename = "@device")]
     pub device: String,
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@state")]
     pub state: PropertyState,
+    #[serde(rename = "@timeout")]
     pub timeout: Option<u32>,
-    pub timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "@timestamp")]
+    pub timestamp: Option<Timestamp>,
+    #[serde(rename = "@message")]
     pub message: Option<String>,
 
+    #[serde(rename = "oneBLOB")]
     pub blobs: Vec<OneBlob>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Blob(pub Vec<u8>);
+
+#[derive(Debug, PartialEq, Deserialize)]
 pub struct OneBlob {
+    #[serde(rename = "@name")]
     pub name: String,
+    #[serde(rename = "@size")]
     pub size: u64,
+    #[serde(rename = "@enclen")]
     pub enclen: Option<u64>,
+    #[serde(rename = "@format")]
     pub format: String,
-    pub value: Vec<u8>,
+    #[serde(rename = "$text")]
+    pub value: Blob,
 }
 
 #[derive(Debug, PartialEq)]

@@ -486,7 +486,10 @@ impl ActiveDevice {
 
         Ok(wait_fn(image_changes, Duration::from_secs(60), move |ccd| {
             // We've been called before the next image has come in.
-            if let Some(image_data) = ccd.get_values::<HashMap<String, Blob>>()?.get("CCD1") {
+            if let Some(image_data) = ccd
+                .get_values::<HashMap<String, crate::Blob>>()?
+                .get("CCD1")
+            {
                 if let Some(bytes) = &image_data.value {
                     Ok(notify::Status::Complete(FitsImage::new(bytes.clone())))
                 } else {
