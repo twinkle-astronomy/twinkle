@@ -11,7 +11,7 @@ repository = "https://github.com/cconstantine/twinkle/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-quick-xml = {version="~0.29.0", features=["encoding", "serialize", "serde", "tokio"]}
+quick-xml = {version="~0.29.0", features=["encoding", "serialize", "serde", "tokio", "async-tokio"]}
 chrono = "0.4"
 encoding = "0.2"
 base64 = "0.13.0"

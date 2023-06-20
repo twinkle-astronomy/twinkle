@@ -96,11 +96,8 @@
 //!     fits.save("flat.fits").expect("Saving image");
 //! }
 
-use quick_xml::events;
 use quick_xml::events::attributes::AttrError;
-use quick_xml::events::attributes::Attribute;
 use quick_xml::events::BytesText;
-use quick_xml::events::Event;
 use quick_xml::Result as XmlResult;
 use quick_xml::Writer;
 use serde::Deserialize;

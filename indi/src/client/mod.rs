@@ -10,10 +10,11 @@ use std::{
     time::Duration,
 };
 
-use quick_xml::{Reader, Writer};
+use quick_xml::{de::IoReader, Writer};
 
 use crate::{
-    serialization, Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
+    serialization::{self, CommandIter},
+    Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
     INDI_PROTOCOL_VERSION,
 };
 
@@ -286,14 +287,13 @@ pub trait ClientConnection {
     /// for command in connection.iter().unwrap() {
     ///     println!("Command: {:?}", command);
     /// }
-    fn iter(&self) -> Result<serialization::CommandIter<BufReader<Self::Read>>, std::io::Error> {
-        let mut xml_reader = Reader::from_reader(BufReader::new(self.clone_reader()?));
-
-        xml_reader.trim_text(true);
-        xml_reader.expand_empty_elements(true);
-
-        let iter = serialization::CommandIter::new(xml_reader);
-        Ok(iter)
+    fn iter<'a>(
+        &self,
+    ) -> Result<
+        CommandIter<'a, IoReader<BufReader<<Self as ClientConnection>::Read>>>,
+        std::io::Error,
+    > {
+        Ok(CommandIter::new(BufReader::new(self.clone_reader()?)))
     }
 
     /// Sends the given INDI command to the connected server.  Consumes the command.

@@ -1,19 +1,19 @@
+use std::io::Cursor;
+
 use super::*;
 
 #[test]
 fn test_set_simulator_log() {
     let xml = include_str!("../../tests/image_capture.log");
 
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    reader.expand_empty_elements(true);
-    let mut command_iter = CommandIter::new(reader);
+    let mut command_iter = CommandIter::new(Cursor::new(xml));
 
     for command in command_iter.by_ref() {
         match command {
-            Ok(_) => (),
+            Ok(c) => {
+                dbg!(c);
+            }
             Err(e) => {
-                println!("position: {}", command_iter.buffer_position());
                 panic!("{:?}", e);
             }
         }

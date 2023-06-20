@@ -1,20 +1,14 @@
-use chrono::DateTime;
-use quick_xml::events::{self, BytesText};
-use quick_xml::name::QName;
-use quick_xml::Reader;
-use quick_xml::{events::Event, Writer};
 use serde::{Deserialize, Deserializer};
 
-use std::str::FromStr;
-use std::{num::Wrapping, str, sync::Arc};
+use std::{num::Wrapping, sync::Arc};
 
-use crate::{BlobEnable, BlobVector, Parameter, PropertyPerm, PropertyState};
+use crate::{BlobVector, Parameter};
 
+use super::super::*;
 use super::{
-    CommandIter, CommandToUpdate, CommandtoParam, DeError, DefBlob, DefBlobVector, EnableBlob,
-    OneBlob, SetBlobVector, Timestamp, UpdateError, XmlSerialization,
+    CommandToUpdate, CommandtoParam, DefBlobVector, SetBlobVector, Timestamp, UpdateError,
+    XmlSerialization,
 };
-use crate::XmlResult;
 
 impl CommandtoParam for DefBlobVector {
     fn get_name(&self) -> &String {
@@ -75,7 +69,7 @@ impl CommandToUpdate for SetBlobVector {
     }
 }
 
-impl XmlSerialization for EnableBlob {
+impl XmlSerialization for crate::serialization::EnableBlob {
     fn write<'a, T: std::io::Write>(
         &self,
         xml_writer: &'a mut Writer<T>,
@@ -98,277 +92,6 @@ impl XmlSerialization for EnableBlob {
     }
 }
 
-pub struct DefBlobIter<'a, T: std::io::BufRead> {
-    xml_reader: &'a mut Reader<T>,
-    buf: &'a mut Vec<u8>,
-}
-
-impl<'a, T: std::io::BufRead> Iterator for DefBlobIter<'a, T> {
-    type Item = Result<DefBlob, DeError>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.next_blob() {
-            Ok(Some(switch)) => {
-                return Some(Ok(switch));
-            }
-            Ok(None) => return None,
-            Err(e) => {
-                return Some(Err(e));
-            }
-        }
-    }
-}
-impl<'a, T: std::io::BufRead> DefBlobIter<'a, T> {
-    pub fn new(command_iter: &mut CommandIter<T>) -> DefBlobIter<T> {
-        DefBlobIter {
-            xml_reader: &mut command_iter.xml_reader,
-            buf: &mut command_iter.buf,
-        }
-    }
-
-    pub fn blob_vector(
-        xml_reader: &Reader<T>,
-        start_event: &events::BytesStart,
-    ) -> Result<DefBlobVector, DeError> {
-        let mut device: Option<String> = None;
-        let mut name: Option<String> = None;
-        let mut label: Option<String> = None;
-        let mut group: Option<String> = None;
-        let mut state: Option<PropertyState> = None;
-        let mut perm: Option<PropertyPerm> = None;
-        let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<Timestamp> = None;
-        let mut message: Option<String> = None;
-
-        for attr in start_event.attributes() {
-            let attr = attr?;
-            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
-            match attr.key {
-                QName(b"device") => device = Some(attr_value),
-                QName(b"name") => name = Some(attr_value),
-                QName(b"label") => label = Some(attr_value),
-                QName(b"group") => group = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
-                QName(b"perm") => perm = Some(PropertyPerm::try_from(attr, xml_reader)?),
-                QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
-                }
-                QName(b"message") => message = Some(attr_value),
-                key => {
-                    return Err(DeError::UnexpectedAttr(format!(
-                        "Unexpected attribute {}",
-                        str::from_utf8(key.into_inner())?
-                    )))
-                }
-            }
-        }
-        Ok(DefBlobVector {
-            device: device.ok_or(DeError::MissingAttr(&"device"))?,
-            name: name.ok_or(DeError::MissingAttr(&"name"))?,
-            label: label,
-            group: group,
-            state: state.ok_or(DeError::MissingAttr(&"state"))?,
-            perm: perm.ok_or(DeError::MissingAttr(&"perm"))?,
-            timeout: timeout,
-            timestamp: timestamp,
-            message: message,
-            blobs: Vec::new(),
-        })
-    }
-
-    fn next_blob(&mut self) -> Result<Option<DefBlob>, DeError> {
-        let event = self.xml_reader.read_event_into(&mut self.buf)?;
-        match event {
-            Event::Start(e) => match e.name() {
-                QName(b"defBLOB") => {
-                    let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
-                    let mut label: Option<String> = None;
-
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        let attr_value = attr
-                            .decode_and_unescape_value(self.xml_reader)?
-                            .into_owned();
-
-                        match attr.key {
-                            QName(b"name") => name = Ok(attr_value),
-                            QName(b"label") => label = Some(attr_value),
-                            key => {
-                                return Err(DeError::UnexpectedAttr(format!(
-                                    "Unexpected attribute {}",
-                                    str::from_utf8(key.into_inner())?
-                                )))
-                            }
-                        }
-                    }
-
-                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
-                    match trailing_event {
-                        Event::End(_) => (),
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    }
-
-                    Ok(Some(DefBlob {
-                        name: name?,
-                        label: label,
-                    }))
-                }
-                tag => Err(DeError::UnexpectedTag(
-                    str::from_utf8(tag.into_inner())?.to_string(),
-                )),
-            },
-            Event::End(_) => Ok(None),
-            Event::Eof => Ok(None),
-            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-        }
-    }
-}
-
-pub struct SetBlobIter<'a, T: std::io::BufRead> {
-    xml_reader: &'a mut Reader<T>,
-    buf: &'a mut Vec<u8>,
-}
-
-impl<'a, T: std::io::BufRead> Iterator for SetBlobIter<'a, T> {
-    type Item = Result<OneBlob, DeError>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.next_blob() {
-            Ok(Some(switch)) => {
-                return Some(Ok(switch));
-            }
-            Ok(None) => return None,
-            Err(e) => {
-                return Some(Err(e));
-            }
-        }
-    }
-}
-impl<'a, T: std::io::BufRead> SetBlobIter<'a, T> {
-    pub fn new(command_iter: &mut CommandIter<T>) -> SetBlobIter<T> {
-        SetBlobIter {
-            xml_reader: &mut command_iter.xml_reader,
-            buf: &mut command_iter.buf,
-        }
-    }
-
-    pub fn blob_vector(
-        xml_reader: &Reader<T>,
-        start_event: &events::BytesStart,
-    ) -> Result<SetBlobVector, DeError> {
-        let mut device: Option<String> = None;
-        let mut name: Option<String> = None;
-        let mut state: Option<PropertyState> = None;
-        let mut timeout: Option<u32> = None;
-        let mut timestamp: Option<Timestamp> = None;
-        let mut message: Option<String> = None;
-
-        for attr in start_event.attributes() {
-            let attr = attr?;
-            let attr_value = attr.decode_and_unescape_value(xml_reader)?.into_owned();
-            match attr.key {
-                QName(b"device") => device = Some(attr_value),
-                QName(b"name") => name = Some(attr_value),
-                QName(b"state") => state = Some(PropertyState::try_from(attr, xml_reader)?),
-                QName(b"timeout") => timeout = Some(attr_value.parse::<u32>()?),
-                QName(b"timestamp") => {
-                    timestamp = Some(DateTime::from_str(&format!("{}Z", &attr_value))?.into())
-                }
-                QName(b"message") => message = Some(attr_value),
-                key => {
-                    return Err(DeError::UnexpectedAttr(format!(
-                        "Unexpected attribute {}",
-                        str::from_utf8(key.into_inner())?
-                    )))
-                }
-            }
-        }
-        Ok(SetBlobVector {
-            device: device.ok_or(DeError::MissingAttr(&"device"))?,
-            name: name.ok_or(DeError::MissingAttr(&"name"))?,
-            state: state.ok_or(DeError::MissingAttr(&"state"))?,
-            timeout: timeout,
-            timestamp: timestamp,
-            message: message,
-            blobs: Vec::new(),
-        })
-    }
-
-    fn next_blob(&mut self) -> Result<Option<OneBlob>, DeError> {
-        let event = self.xml_reader.read_event_into(&mut self.buf)?;
-        match event {
-            Event::Start(e) => match e.name() {
-                QName(b"oneBLOB") => {
-                    let mut name: Result<String, DeError> = Err(DeError::MissingAttr(&"name"));
-                    let mut size: Result<u64, DeError> = Err(DeError::MissingAttr(&"size"));
-                    let mut enclen: Option<u64> = None;
-                    let mut format: Result<String, DeError> = Err(DeError::MissingAttr(&"format"));
-
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        let attr_value = attr
-                            .decode_and_unescape_value(self.xml_reader)?
-                            .into_owned();
-
-                        match attr.key {
-                            QName(b"name") => name = Ok(attr_value),
-                            QName(b"format") => format = Ok(attr_value),
-                            QName(b"size") => size = Ok(attr_value.parse::<u64>()?),
-                            QName(b"enclen") => enclen = Some(attr_value.parse::<u64>()?),
-                            QName(b"len") => (),
-                            key => {
-                                return Err(DeError::UnexpectedAttr(format!(
-                                    "Unexpected attribute {}",
-                                    str::from_utf8(key.into_inner())?
-                                )))
-                            }
-                        }
-                    }
-
-                    let value: Result<Vec<u8>, DeError> = match self
-                        .xml_reader
-                        .read_event_into(self.buf)
-                    {
-                        Ok(Event::Text(e)) => match size {
-                            Ok(size) => {
-                                let mut result = Vec::with_capacity(size.try_into().unwrap());
-                                let esc = e.into_inner();
-
-                                for line in esc.split(|b| *b == b'\n') {
-                                    base64::decode_config_buf(line, base64::STANDARD, &mut result)
-                                        .unwrap();
-                                }
-
-                                Ok(result)
-                            }
-                            Err(_) => Err(DeError::MissingAttr(&"size")),
-                        },
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    };
-
-                    let trailing_event = self.xml_reader.read_event_into(&mut self.buf)?;
-                    match trailing_event {
-                        Event::End(_) => (),
-                        e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-                    }
-                    Ok(Some(OneBlob {
-                        name: name?,
-                        size: size?,
-                        enclen: enclen,
-                        format: format?,
-                        value: value?.into(),
-                    }))
-                }
-                tag => Err(DeError::UnexpectedTag(
-                    str::from_utf8(tag.into_inner())?.to_string(),
-                )),
-            },
-            Event::End(_) => Ok(None),
-            Event::Eof => Ok(None),
-            e => return Err(DeError::UnexpectedEvent(format!("{:?}", e))),
-        }
-    }
-}
-
 impl From<Vec<u8>> for super::Blob {
     fn from(value: Vec<u8>) -> Self {
         super::Blob(value)
@@ -385,7 +108,7 @@ impl<'de> Deserialize<'de> for super::Blob {
     where
         D: Deserializer<'de>,
     {
-        let s: &str = Deserialize::deserialize(deserializer)?;
+        let s: String = Deserialize::deserialize(deserializer)?;
         let mut result = vec![];
 
         for line in s.split('\n') {
@@ -398,6 +121,13 @@ impl<'de> Deserialize<'de> for super::Blob {
 
 #[cfg(test)]
 mod tests {
+    use quick_xml::Writer;
+
+    use crate::{
+        serialization::{DefBlob, EnableBlob, OneBlob},
+        BlobEnable, PropertyState,
+    };
+
     use super::*;
     use std::io::Cursor;
 
@@ -437,7 +167,7 @@ mod tests {
         let mut writer = Writer::new(Cursor::new(Vec::new()));
 
         let command = EnableBlob {
-            device: String::from_str("CCD Simulator").unwrap(),
+            device: String::from("CCD Simulator"),
             name: None,
             enabled: BlobEnable::Also,
         };
