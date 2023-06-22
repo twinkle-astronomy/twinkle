@@ -135,9 +135,7 @@ async fn main() {
         let stats = Statistics::new(&image_data.view());
         dbg!(stats.unique, (stats.unique as f64).log2());
 
-        let mut sep_image = sep::Image::new(image_data).unwrap();
-        let bkg = sep_image.background().unwrap();
-        sep_image.sub(&bkg).unwrap();
+        let sep_image = sep::Image::new(&image_data).unwrap();
         let catalog = sep_image.extract(None).unwrap();
 
         autofocus.add(FocusMeasurement {

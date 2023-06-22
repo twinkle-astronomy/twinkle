@@ -4,7 +4,7 @@ use std::{env, net::TcpStream, sync::Arc, thread};
 
 use egui::mutex::Mutex;
 use fits_inspect::{
-    analysis::collimation::CollimationCalculator,
+    analysis::{collimation::CollimationCalculator, Statistics},
     egui::{fits_render::Circle, FitsRender, FitsWidget},
 };
 use fitsio::FitsFile;
@@ -68,7 +68,6 @@ impl FitsViewerApp {
         let calc_context = cc.egui_ctx.clone();
         tokio::spawn(async move {
             loop {
-                dbg!("loop!");
                 match sub.next().await {
                     Some(Ok(settings)) => {
                         let center = Circle {
@@ -76,40 +75,36 @@ impl FitsViewerApp {
                             y: image.shape()[0] as f32 / 2.0,
                             r: settings.center_radius * max_radius(&image) / 2.0,
                         };
+                        let stats = Statistics::new(&settings.image.view());
                         match settings.algo {
                             Algo::DefocusedStar => {
                                 let circles = settings
                                     .defocused
                                     .calculate(&settings.image)
-                                    .unwrap_or_else(|x| {
-                                        dbg!(x);
-                                        Box::new(vec![].into_iter())
-                                    });
+                                    .unwrap_or_else(|_x| Box::new(vec![].into_iter()));
 
                                 let mut fits_widget = calc_render.lock();
                                 fits_widget.set_fits(settings.image.clone());
+                                fits_widget.reset_stretch(&stats);
                                 fits_widget.set_elipses(circles.chain([center.into()]));
                             }
                             Algo::PeakOffset => {
                                 let circles = settings
                                     .peak_offset
                                     .calculate(&settings.image)
-                                    .unwrap_or_else(|x| {
-                                        dbg!(x);
-                                        Box::new(vec![].into_iter())
-                                    });
-
+                                    .unwrap_or_else(|_x| Box::new(vec![].into_iter()));
                                 let mut fits_widget = calc_render.lock();
                                 fits_widget.set_fits(settings.image.clone());
+                                fits_widget.auto_stretch(&stats);
                                 fits_widget.set_elipses(circles.chain([center.into()]));
                             }
                         }
 
                         calc_context.request_repaint();
                     }
-                    Some(Err(e)) => {
-                        dbg!(e);
-                    }
+                    Some(Err(
+                        tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(_),
+                    )) => {}
                     None => {
                         dbg!("None");
                     }
@@ -195,13 +190,8 @@ impl eframe::App for FitsViewerApp {
                 }
                 Algo::PeakOffset => {
                     ui.add(
-                        egui::Slider::new(
-                            &mut settings.peak_offset.threshold,
-                            0.0..=(std::u16::MAX as f32),
-                        )
-                        .text("SepThresh")
-                        .logarithmic(true)
-                        .smallest_positive(0.01),
+                        egui::Slider::new(&mut settings.peak_offset.threshold, 1.0..=20.0)
+                            .text("SepThresh"),
                     );
                 }
             }

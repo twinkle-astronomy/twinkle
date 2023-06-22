@@ -35,9 +35,7 @@ impl FitsViewerApp {
             let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
             let stats = Statistics::new(&data.view());
 
-            let mut sep_image = fits_inspect::analysis::sep::Image::new(data.clone()).unwrap();
-            let bkg = sep_image.background().unwrap();
-            sep_image.sub(&bkg).expect("Subtract background");
+            let sep_image = fits_inspect::analysis::sep::Image::new(&data).unwrap();
 
             let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> = sep_image
                 .extract(None)
@@ -155,15 +153,13 @@ impl FitsViewerApp {
                         if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
                             continue;
                         }
-                        let fits =
-                            FitsImage::new(Arc::new(sbv.blobs.get_mut(0).unwrap().value.clone().into()));
+                        let fits = FitsImage::new(Arc::new(
+                            sbv.blobs.get_mut(0).unwrap().value.clone().into(),
+                        ));
                         let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
                         let stats = Statistics::new(&data.view());
 
-                        let mut sep_image =
-                            fits_inspect::analysis::sep::Image::new(data.clone()).unwrap();
-                        let bkg = sep_image.background().unwrap();
-                        sep_image.sub(&bkg).expect("Subtract background");
+                        let sep_image = fits_inspect::analysis::sep::Image::new(&data).unwrap();
                         let stars = sep_image.extract(None).unwrap();
 
                         {

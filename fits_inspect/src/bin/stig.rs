@@ -36,7 +36,7 @@ fn focal(filename: &String) -> f64 {
     let hdu = fptr.primary_hdu().expect("Getting primary HDU");
     let data: ArrayD<u16> = hdu.read_image(&mut fptr).expect("reading image");
     // dbg!(data.shape());
-    return astigmatism::focus(data);
+    return astigmatism::focus(&data);
 }
 
 pub fn lines(filename: &String) {
@@ -54,9 +54,7 @@ pub fn lines(filename: &String) {
 
     let mut lines: ArrayD<u16> = Array::zeros(data.shape());
 
-    let mut sep_image = sep::Image::new(data.clone()).unwrap();
-    let bkg = sep_image.background().unwrap();
-    sep_image.sub(&bkg).unwrap();
+    let sep_image = sep::Image::new(&data).unwrap();
     let mut catalog = sep_image.extract(None).unwrap();
     catalog.sort_by(|a, b| (-a.a / a.b).partial_cmp(&(-b.a / b.b)).unwrap());
     for star in &catalog {

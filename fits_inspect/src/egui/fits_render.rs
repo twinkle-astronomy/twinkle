@@ -217,11 +217,19 @@ impl FitsRender {
         self.image_mesh.clip_low = stats.clip_low.value as f32 / std::u16::MAX as f32;
         self.image_mesh.clip_high = stats.clip_high.value as f32 / std::u16::MAX as f32;
         self.image_mesh.histogram_high = stats.clip_high.value as f32 / std::u16::MAX as f32;
-        self.image_mesh.histogram_low = stats.clip_low.value as f32 / std::u16::MAX as f32;
+        self.image_mesh.histogram_low =
+            (stats.median as f32 + -2.8 * stats.mad as f32).max(0.0) / u16::MAX as f32;
         self.image_mesh.histogram_mtf =
             (stats.median as f32 - 2.8 * stats.mad as f32) / std::u16::MAX as f32;
     }
 
+    pub fn reset_stretch(&mut self, stats: &Statistics) {
+        self.image_mesh.clip_low = stats.clip_low.value as f32 / std::u16::MAX as f32;
+        self.image_mesh.clip_high = stats.clip_high.value as f32 / std::u16::MAX as f32;
+        self.image_mesh.histogram_high = stats.clip_high.value as f32 / std::u16::MAX as f32;
+        self.image_mesh.histogram_low = stats.clip_low.value as f32 / std::u16::MAX as f32;
+        self.image_mesh.histogram_mtf = 0.5;
+    }
     // https://en.wikipedia.org/wiki/Median_absolute_deviation
     // midpoint = median + -2.8*mad (if median < 0.5)
 

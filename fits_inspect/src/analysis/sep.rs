@@ -1,4 +1,4 @@
-use ndarray::{Array2, ArrayD};
+use ndarray::ArrayD;
 use sep_sys;
 use serde::Serialize;
 use std::ffi::c_void;
@@ -42,14 +42,17 @@ impl From<i32> for SepApiStatus {
 
 pub struct Image {
     sep_sys_image: sep_sys::sep_image,
-    image: Array2<f32>,
+    background: Background,
+    image: ArrayD<f32>,
+    _bkg_rms_array: Vec<f32>,
 }
 
 impl<'a> Image {
-    pub fn new(image: ArrayD<u16>) -> Result<Image, ndarray::ShapeError> {
-        let data_f32: Array2<f32> = image.into_dimensionality()?.map(|x| *x as f32);
-        let data_ptr = data_f32.as_slice().unwrap();
-        let sep_image = sep_sys::sep_image {
+    pub fn new(image: &ArrayD<u16>) -> Result<Image, SepApiStatus> {
+        let image: ArrayD<f32> = image.map(|x| *x as f32);
+        let data_ptr = image.as_slice().unwrap();
+
+        let mut sep_sys_image = sep_sys::sep_image {
             data: data_ptr.as_ptr() as *const c_void,
             noise: std::ptr::null(),
             mask: std::ptr::null(),
@@ -58,31 +61,50 @@ impl<'a> Image {
             ndtype: sep_sys::SEP_TFLOAT,
             mdtype: sep_sys::SEP_TFLOAT,
             sdtype: sep_sys::SEP_TFLOAT,
-            w: data_f32.shape()[1] as i32,
-            h: data_f32.shape()[0] as i32,
+            w: image.shape()[1] as i32,
+            h: image.shape()[0] as i32,
             noiseval: 0.0 as f64,
             noise_type: sep_sys::SEP_NOISE_NONE,
             gain: 0.0 as f64,
             maskthresh: 0.0 as f64,
         };
 
-        Ok(Image {
-            sep_sys_image: sep_image,
-            image: data_f32,
-        })
+        let background = Self::background(&sep_sys_image)?;
+        let mut bkg_rms_array = vec![0.0 as f32; image.shape()[1] * image.shape()[0]];
+
+        unsafe {
+            sep_sys::sep_bkg_rmsarray(
+                background.sep_sys_background,
+                bkg_rms_array.as_mut_ptr() as *mut c_void,
+                sep_sys::SEP_TFLOAT,
+            );
+        }
+
+        sep_sys_image.noise = bkg_rms_array.as_mut_ptr() as *mut c_void;
+        sep_sys_image.noise_type = sep_sys::SEP_NOISE_STDDEV;
+        let mut image = Image {
+            sep_sys_image,
+            background,
+            image,
+            _bkg_rms_array: bkg_rms_array,
+        };
+
+        image.sub()?;
+
+        Ok(image)
     }
 
-    pub fn background(&self) -> Result<Background, SepApiStatus> {
+    fn background(sep_image: &sep_sys::sep_image) -> Result<Background, SepApiStatus> {
         let mut background = Background {
             sep_sys_background: std::ptr::null_mut(),
         };
         let status: SepApiStatus = unsafe {
             sep_sys::sep_background(
-                &self.sep_sys_image,
-                128,
-                128,
-                9,
-                9,
+                sep_image,
+                64,
+                64,
+                3,
+                3,
                 0.0 as f64,
                 &mut background.sep_sys_background,
             )
@@ -95,12 +117,12 @@ impl<'a> Image {
         }
     }
 
-    pub fn sub(&mut self, background: &Background) -> Result<(), SepApiStatus> {
+    fn sub(&mut self) -> Result<(), SepApiStatus> {
         let status: SepApiStatus = unsafe {
             let data: *mut c_void = self.image.as_mut_ptr() as *mut c_void;
 
             sep_sys::sep_bkg_subarray(
-                background.sep_sys_background,
+                self.background.sep_sys_background,
                 data,
                 self.sep_sys_image.dtype,
             )
@@ -114,14 +136,17 @@ impl<'a> Image {
     }
 
     pub fn extract(&self, threshold: Option<f32>) -> Result<Vec<CatalogEntry>, SepApiStatus> {
+        // unsafe { sep_set_sub_object_limit(20000) };
         let mut catalog: *mut sep_sys::sep_catalog = std::ptr::null_mut();
+
         let status: SepApiStatus = unsafe {
+            let conv: Vec<f32> = vec![1., 2., 1., 2., 4., 2., 1., 2., 1.];
             sep_sys::sep_extract(
                 &self.sep_sys_image,
                 threshold.unwrap_or((2.0 as f32).powf(11.0)),
-                sep_sys::SEP_THRESH_ABS,
+                sep_sys::SEP_THRESH_REL,
                 10,
-                std::ptr::null(),
+                conv.as_ptr(),
                 3,
                 3,
                 sep_sys::SEP_FILTER_CONV,
@@ -239,34 +264,18 @@ impl Star for CatalogEntry {
     }
 }
 
-pub struct Background {
+struct Background {
     sep_sys_background: *mut sep_sys::sep_bkg,
 }
 
-impl Background {
-    pub fn global(&self) -> f32 {
-        unsafe { *self.sep_sys_background }.global
-    }
-    pub fn globalrms(&self) -> f32 {
-        unsafe { *self.sep_sys_background }.globalrms
-    }
-
-    pub fn subarray(&self, image: &mut Image) -> Result<(), SepApiStatus> {
-        let status: SepApiStatus = unsafe {
-            sep_sys::sep_bkg_subarray(
-                self.sep_sys_background,
-                image.image.as_ptr() as *mut c_void,
-                sep_sys::SEP_TFLOAT,
-            )
-        }
-        .into();
-
-        match status {
-            SepApiStatus::ReturnOk => Ok(()),
-            error => Err(error),
-        }
-    }
-}
+// impl Background {
+//     fn global(&self) -> f32 {
+//         unsafe { *self.sep_sys_background }.global
+//     }
+//     fn globalrms(&self) -> f32 {
+//         unsafe { *self.sep_sys_background }.globalrms
+//     }
+// }
 impl Drop for Background {
     fn drop(&mut self) {
         if self.sep_sys_background != std::ptr::null_mut() {
@@ -275,5 +284,15 @@ impl Drop for Background {
             }
             self.sep_sys_background = std::ptr::null_mut();
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn playground() {
+        dbg!(std::env::current_exe().unwrap());
+
+        todo!();
     }
 }

@@ -30,11 +30,8 @@ fn main() {
         (nd_stats.clip_high.value, nd_stats.clip_high.count)
     );
 
-    let mut sep_image =
-        fits_inspect::analysis::sep::Image::new(data).expect("Unable to create sep image");
-    let bkg = sep_image.background().unwrap();
-    bkg.subarray(&mut sep_image)
-        .expect("Background subtraction failed");
+    let sep_image =
+        fits_inspect::analysis::sep::Image::new(&data).expect("Unable to create sep image");
 
     let catalog = sep_image.extract(None).expect("Failed to extract features");
 

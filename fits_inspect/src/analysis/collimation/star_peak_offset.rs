@@ -9,9 +9,7 @@ pub struct StarPeakOffset {
 
 impl Default for StarPeakOffset {
     fn default() -> Self {
-        Self {
-            threshold: (2.0 as f32).powf(11.0),
-        }
+        Self { threshold: 2. }
     }
 }
 
@@ -21,9 +19,7 @@ impl CollimationCalculator for StarPeakOffset {
         image: &ndarray::ArrayD<u16>,
     ) -> Result<Box<dyn Iterator<Item = crate::egui::fits_render::Elipse>>> {
         let stats = Statistics::new(&image.view());
-        let mut sep_image = crate::analysis::sep::Image::new(image.clone())?;
-        let bkg = sep_image.background()?;
-        sep_image.sub(&bkg).expect("Subtract background");
+        let sep_image = crate::analysis::sep::Image::new(image)?;
 
         let stars: Vec<crate::analysis::sep::CatalogEntry> = sep_image
             .extract(Some(self.threshold))
@@ -86,7 +82,6 @@ impl CollimationCalculator for StarPeakOffset {
             },
         ];
 
-        dbg!(&centers);
         let stars = stars
             .into_iter()
             .flat_map(|x| {

@@ -28,7 +28,7 @@ fn weighted_mean<T: WeightedValue>(values: impl std::iter::Iterator<Item = T>) -
     total / weights
 }
 
-pub fn focus(data: ArrayD<u16>) -> f64 {
+pub fn focus(data: &ArrayD<u16>) -> f64 {
     // let mut fptr = fitsio::FitsFile::open(filename).expect("Opening fits file");
     // let hdu = fptr.primary_hdu().expect("Getting primary HDU");
     // let data: ArrayD<u16> = hdu.read_image(&mut fptr).expect("reading image");
@@ -37,9 +37,7 @@ pub fn focus(data: ArrayD<u16>) -> f64 {
     let center_x = data.shape()[1] as f64;
     let center_y = data.shape()[0] as f64;
 
-    let mut sep_image = sep::Image::new(data).unwrap();
-    let bkg = sep_image.background().unwrap();
-    sep_image.sub(&bkg).unwrap();
+    let sep_image = sep::Image::new(data).unwrap();
     let catalog = sep_image.extract(None).unwrap();
 
     let f = catalog.iter().map(|star| {
