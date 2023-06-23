@@ -26,3 +26,4 @@ rand = "0.8.5"
 actix-web-actors = "4.2.0"
 actix = "0.13.0"
 futures-util = { version = "0.3.28", features = ["channel"] }
+actix-ws = "0.2.5"
