@@ -82,7 +82,7 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 }
 
 /// Create a new Client object that will stay in sync with the INDI server
-/// on the other end of `connection`.  
+/// on the other end of `connection`.
 ///
 /// # Arguments
 /// * `connection` - An object implementing `ClientConnection` (such as TcpStream) that will be used
@@ -226,9 +226,8 @@ impl<T: ClientConnection> Client<T> {
     /// Returns the a read-only lock on client's MemoryDeviceStore.
     pub fn get_devices(
         &self,
-    ) -> Result<NotifyMutexGuard<MemoryDeviceStore>, PoisonError<MutexGuard<Arc<MemoryDeviceStore>>>>
-    {
-        self.devices.lock()
+    ) -> Arc<Notify<MemoryDeviceStore>> {
+        self.devices.clone()
     }
 }
 

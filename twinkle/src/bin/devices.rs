@@ -14,7 +14,8 @@ fn main() -> Result<(), ChangeError<()>> {
 
     thread::sleep(Duration::from_secs(10));
 
-    let devices = client.get_devices().unwrap();
+    let binding = client.get_devices();
+    let devices = binding.lock().unwrap();
     println!("{:#?}", devices.deref());
     Ok(())
 }

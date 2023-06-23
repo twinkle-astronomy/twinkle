@@ -1,18 +1,85 @@
 extern crate actix_web;
+use std::{env, net::TcpStream};
 
-use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
+use actix::prelude::*;
+use actix_web::{HttpRequest, web, HttpResponse, Error, HttpServer, middleware, App, get};
+use actix_web_actors::ws;
+use futures_util::stream::once;
 use serde::{Deserialize, Serialize};
-use std::{env, io};
+use tokio::sync::broadcast::{Receiver, Sender};
+use tokio_stream::{StreamExt, wrappers::{BroadcastStream, errors::BroadcastStreamRecvError}};
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct Ping;
+
+struct MyWs {
+    recv: Receiver<Vec<String>>
+}
+
+impl Actor for MyWs {
+    type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let stream = BroadcastStream::new(self.recv);
+        Self::add_stream(stream, ctx);
+
+    }
+}
+/// Handler for ws::Message message
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        println!("handle!");
+    }
+}
+
+/// Handler for ws::Message message
+impl StreamHandler<Result<Vec<String>, BroadcastStreamRecvError>> for MyWs {
+    fn handle(&mut self, msg: Result<Vec<String>, BroadcastStreamRecvError>, ctx: &mut Self::Context) {
+        println!("handle!");
+    }
+}
+
+async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+    let sender = req.app_data::<Sender<Vec<String>>>().unwrap();
+    let resp = ws::start(MyWs {recv: sender.subscribe() }, &req, stream);
+    
+    println!("{:?}", resp);
+    resp
+}
 
 #[actix_rt::main]
-async fn main() -> io::Result<()> {
+async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug,actix_server=debug");
+
+    let args: Vec<String> = env::args().collect();
+    let connection = TcpStream::connect(&args[1]).unwrap();
+    let client = indi::client::new(connection, None, None).unwrap();
+
+    let devices = client.get_devices();
+    let mut sub = devices.subscribe().unwrap();
+
+    let (tx, _rx) = tokio::sync::broadcast::channel::<Vec<String>>(1024);
+
+    let tx_c = tx.clone();
+    tokio::spawn(async move {
+        while let Some(Ok(update)) = sub.next().await  {
+            let device_names: Vec<String> = update.keys().map(|x| x.into() ).collect();
+
+            tx_c.send(device_names).unwrap();
+            // {"type": "DeviceNames", value: ["device 1", "device 2"]}
+        }
+    });
+
+
     env_logger::init();
 
-    HttpServer::new(|| {
+    HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
+            .app_data(tx.clone())
             // Register HTTP request handlers
+            .route("/ws/", web::get().to(index))
             .service(list_tweet)
             .service(get_tweet)
     })
