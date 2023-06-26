@@ -27,3 +27,5 @@ actix-web-actors = "4.2.0"
 actix = "0.13.0"
 futures-util = { version = "0.3.28", features = ["channel"] }
 actix-ws = "0.2.5"
+pin-project = "1.1.0"
+client = { version = "0.1.0", path = "../client" }

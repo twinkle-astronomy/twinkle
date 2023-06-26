@@ -1,27 +1,25 @@
 pub mod device;
-pub mod notify;
+// pub mod notify;
+use client;
 
 use std::{
     collections::HashMap,
     io::{BufReader, BufWriter, Write},
     net::TcpStream,
-    sync::{Arc, MutexGuard, PoisonError},
+    sync::{Arc, PoisonError},
     thread,
     time::Duration,
 };
 
 use quick_xml::{de::IoReader, Writer};
 
+use self::device::ParamUpdateResult;
 use crate::{
     serialization::{self, CommandIter},
     Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
     INDI_PROTOCOL_VERSION,
 };
-
-use self::{
-    device::ParamUpdateResult,
-    notify::{wait_fn, Notify, NotifyMutexGuard},
-};
+use client::notify::{self, wait_fn, Notify};
 
 #[derive(Debug)]
 pub enum ChangeError<E> {
@@ -224,9 +222,7 @@ impl<T: ClientConnection> Client<T> {
     }
 
     /// Returns the a read-only lock on client's MemoryDeviceStore.
-    pub fn get_devices(
-        &self,
-    ) -> Arc<Notify<MemoryDeviceStore>> {
+    pub fn get_devices(&self) -> Arc<Notify<MemoryDeviceStore>> {
         self.devices.clone()
     }
 }

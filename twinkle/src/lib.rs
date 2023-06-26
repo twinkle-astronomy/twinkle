@@ -6,10 +6,8 @@ use std::{
     time::Duration,
 };
 
-use indi::{
-    client::{device::ActiveDevice, notify::Notify},
-    Parameter,
-};
+use client::notify::{self, Notify};
+use indi::{client::device::ActiveDevice, Parameter};
 use tokio_stream::wrappers::BroadcastStream;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -53,9 +51,7 @@ impl Telescope {
                 .unwrap(),
         }
     }
-    pub async fn get_primary_camera(
-        &self,
-    ) -> Result<ActiveDevice, indi::client::notify::Error<()>> {
+    pub async fn get_primary_camera(&self) -> Result<ActiveDevice, notify::Error<()>> {
         self.client.get_device(&self.config.primary_camera).await
     }
 
@@ -73,11 +69,11 @@ impl Telescope {
         Ok(image_camera.get_parameter("CCD1").await?)
     }
 
-    pub async fn get_filter_wheel(&self) -> Result<ActiveDevice, indi::client::notify::Error<()>> {
+    pub async fn get_filter_wheel(&self) -> Result<ActiveDevice, notify::Error<()>> {
         self.client.get_device(&self.config.filter_wheel).await
     }
 
-    pub async fn get_focuser(&self) -> Result<ActiveDevice, indi::client::notify::Error<()>> {
+    pub async fn get_focuser(&self) -> Result<ActiveDevice, notify::Error<()>> {
         self.client.get_device(&self.config.focuser).await
     }
 

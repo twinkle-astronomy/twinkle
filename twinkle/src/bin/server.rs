@@ -1,13 +1,15 @@
 extern crate actix_web;
-use std::{env, net::TcpStream, sync::Arc, collections::HashMap};
+use std::{collections::HashMap, env, net::TcpStream, sync::Arc};
 
-use actix::prelude::*;
-use actix_web::{HttpRequest, web::{self, Data}, HttpResponse, Error, HttpServer, middleware, App, get};
+use actix_web::{
+    middleware,
+    web::{self, Data},
+    App, Error, HttpRequest, HttpResponse, HttpServer,
+};
 
-use indi::client::{notify::Notify, device::Device};
-use serde::{Deserialize, Serialize};
-use tokio::{sync::{broadcast::{Receiver, Sender}, mpsc}, task::spawn_local};
-use tokio_stream::{StreamExt, wrappers::{BroadcastStream, errors::BroadcastStreamRecvError}};
+use client::{notify::Notify, StreamExt as _};
+use indi::client::device::Device;
+use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 
 /// Handshake and start WebSocket handler with heartbeats.
 async fn chat_ws(
@@ -17,18 +19,22 @@ async fn chat_ws(
 ) -> Result<HttpResponse, Error> {
     let (res, mut session, _msg_stream) = actix_ws::handle(&req, stream)?;
 
-    let mut devices = devices.subscribe().unwrap();
+    let devices = devices.subscribe().unwrap();
 
     // spawn websocket handler (and don't await it) so that the response is returned immediately
     tokio::spawn(async move {
-        while let Some(Ok(devices)) = devices.next().await {
-            let device_names: Vec<String> = devices.keys().map(|x| x.into() ).collect();
+        let mut device_names = devices
+            .map(|device| -> Result<Vec<String>, BroadcastStreamRecvError> {
+                Ok(device?.keys().map(String::clone).collect::<Vec<String>>())
+            })
+            .changes();
+        while let Some(Ok(device_names)) = device_names.next().await {
             if let Err(e) = session.text(format!("{:?}", device_names)).await {
                 dbg!(e);
-                break
+                break;
             }
         }
-    
+
         // attempt to close connection gracefully
         let _ = session.close(None).await;
     });

@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+	"client",
 	"indi",
 	"indi_exporter",
 	"phd2",

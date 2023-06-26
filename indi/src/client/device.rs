@@ -11,11 +11,11 @@ use std::{
 
 use fitsio::FitsFile;
 
+use super::ChangeError;
 use crate::*;
-
-use super::{
-    notify::{self, wait_fn, Notify, OnDropFutureExt},
-    ChangeError,
+use ::client::{
+    notify::{self, wait_fn, Notify},
+    OnDropFutureExt,
 };
 
 /// Internal representation of a device.
@@ -352,11 +352,13 @@ impl ActiveDevice {
             let _ = self.get_parameter(name).await?;
         }
         let device_name = self.device.lock()?.name.clone();
-        self.sender().send(Command::EnableBlob(EnableBlob {
+        if let Err(_) = self.sender().send(Command::EnableBlob(EnableBlob {
             device: device_name,
             name: name.map(|x| String::from(x)),
             enabled,
-        }))?;
+        })) {
+            return Err(notify::Error::Canceled);
+        };
         Ok(())
     }
 
@@ -570,6 +572,8 @@ mod tests {
     use chrono::DateTime;
     use std::ops::Deref;
 
+    use crate::client::device;
+
     use super::*;
 
     #[test]
@@ -688,7 +692,7 @@ mod tests {
 
     #[test]
     fn test_update_number() {
-        let mut device = client::device::Device::new(String::from("CCD Simulator"));
+        let mut device = device::Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_number = DefNumberVector {

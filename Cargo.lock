@@ -803,6 +803,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "pin-project",
+ "pin-project-lite",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "4.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1613,6 +1623,7 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "clap 4.3.0",
+ "client",
  "convolutions-rs",
  "criterion",
  "csv",
@@ -2110,6 +2121,7 @@ dependencies = [
  "base64 0.13.1",
  "bytes",
  "chrono",
+ "client",
  "crossbeam-channel",
  "derivative",
  "encoding",
@@ -4004,6 +4016,7 @@ dependencies = [
  "actix-web-actors",
  "actix-ws",
  "chrono",
+ "client",
  "eframe",
  "egui",
  "env_logger",
@@ -4012,6 +4025,7 @@ dependencies = [
  "futures-util",
  "indi",
  "ndarray",
+ "pin-project",
  "rand",
  "serde",
  "tokio",

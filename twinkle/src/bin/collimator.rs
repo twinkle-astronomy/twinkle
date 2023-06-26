@@ -2,6 +2,7 @@
 
 use std::{env, net::TcpStream, sync::Arc, thread};
 
+use client::notify;
 use egui::mutex::Mutex;
 use fits_inspect::{
     analysis::{collimation::CollimationCalculator, Statistics},
@@ -29,7 +30,7 @@ struct Settings {
 }
 pub struct FitsViewerApp {
     fits_widget: Arc<Mutex<FitsRender>>,
-    settings: Arc<indi::client::notify::Notify<Settings>>,
+    settings: Arc<notify::Notify<Settings>>,
 }
 
 fn max_radius(image: &ArrayD<u16>) -> f32 {
@@ -48,7 +49,7 @@ impl FitsViewerApp {
 
         let newed = FitsViewerApp {
             fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
-            settings: Arc::new(indi::client::notify::Notify::new_with_size(
+            settings: Arc::new(notify::Notify::new_with_size(
                 Settings {
                     center_radius: 0.02,
                     image: image.clone(),

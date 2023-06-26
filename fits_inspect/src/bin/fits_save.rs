@@ -5,9 +5,9 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::time::Duration;
 
-use indi::client::notify;
-use indi::client::notify::wait_fn;
+use client::notify::wait_fn;
 use indi::TypeError;
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();
@@ -36,7 +36,7 @@ async fn main() {
 
     wait_fn::<(), TypeError, _, _>(imager.subscribe().unwrap(), Duration::MAX, |imager| {
         if imager.gen() == imager_gen {
-            return Ok(notify::Status::Pending);
+            return Ok(client::notify::Status::Pending);
         }
         imager_gen = imager.gen();
 
@@ -62,7 +62,7 @@ async fn main() {
                 .write_all(&image)
                 .expect("Unable to write file");
         }
-        Ok(notify::Status::Pending)
+        Ok(client::notify::Status::Pending)
     })
     .await
     .expect("Aquiring images");
