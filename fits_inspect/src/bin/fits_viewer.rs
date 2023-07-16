@@ -1,11 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::{env, net::TcpStream, sync::Arc, thread};
+use std::{env, net::TcpStream, sync::Arc, thread, path::PathBuf};
 
 use egui::mutex::Mutex;
 use fits_inspect::{
     analysis::Statistics,
-    egui::{fits_render::Elipse, FitsRender, FitsWidget},
+    egui::{fits_render::Elipse, FitsRender, FitsWidget}, Image, calibration::{CalibrationStore, CanCalibrate, HasCalibration}, HasImage,
 };
 use fitsio::FitsFile;
 use indi::client::{device::FitsImage, ClientConnection};
@@ -23,157 +23,35 @@ impl FitsViewerApp {
         let newed = FitsViewerApp {
             fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
         };
-
+        
+        // let mut callibrations: CalibrationStore<fits_inspect::calibration::Image> = CalibrationStore::default();
+        // let paths = std::fs::read_dir("/home/cconstantine/AstroDMx_DATA/twinkle/calibration/").unwrap();
+    
+        // for path in paths {
+        //     let path = path.unwrap();
+        //     println!("Name: {}", path.path().display());
+        //     let image: Result<fits_inspect::calibration::Image, _> = path.path().try_into();
+        //     match image {
+        //         Ok(image) => {
+        //             dbg!(&image.desc);
+        //             callibrations.insert(image.desc.clone(), image);
+        //         }
+        //         Err(e) => {
+        //             dbg!(e);
+        //         }
+        //     }
+        // }
+        let mut image: Image = PathBuf::from("~/AstroDMx_DATA/ekos/NGC_6992_mosaic/data/NGC_6992/NGC_6992-Part_1/Light/H_Alpha/NGC_6992-Part_1_Light_H_Alpha_720_secs_2023-06-21T00-54-28_010.fits").try_into().unwrap();
+        dbg!(image.describe_dark());
+        let dark: fits_inspect::calibration::Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/twinkle/calibration/masterDark_BIN-2_4144x2822_EXPOSURE-720.00s_GAIN-240.fit").try_into().unwrap();
+        let flat: fits_inspect::calibration::Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/twinkle/calibration/masterFlat_BIN-2_4144x2822_FILTER-H-Alpha_mono.fit").try_into().unwrap();
+        image.calibrate(&dark, &flat).ok();
+        let data = image.get_data();
         {
             let mut lock = newed.fits_widget.lock();
-            let mut fptr = FitsFile::open(
-                // "~/test/test27.fits"
-                "~/AstroDMx_DATA/ekos/NGC_6543/Light/H_Alpha/NGC_6543_Light_H_Alpha_720_secs_2023-06-10T23-03-41_009.fits",
-            )
-            .unwrap();
-            let hdu = fptr.primary_hdu().unwrap();
-            let data: ArrayD<u16> = hdu.read_image(&mut fptr).unwrap();
-            let stats = Statistics::new(&data.view());
-
-            let sep_image = fits_inspect::analysis::sep::Image::new(&data).unwrap();
-
-            let stars: Vec<fits_inspect::analysis::sep::CatalogEntry> = sep_image
-                .extract(None)
-                .unwrap()
-                .into_iter()
-                .filter(|x| x.flag == 0)
-                .filter(|x| x.peak * 1.2 < stats.clip_high.value as f32)
-                .collect();
-
-            let mut star_iter = stars.iter();
-            let ((x, y), (xpeak, ypeak)) = if let Some(first) = star_iter.next() {
-                star_iter.fold(
-                    ((first.x, first.y), (first.xpeak as f64, first.ypeak as f64)),
-                    |((x, y), (xpeak, ypeak)), star| {
-                        (
-                            (x + star.x, y + star.y),
-                            (xpeak + star.xpeak as f64, ypeak + star.ypeak as f64),
-                        )
-                    },
-                )
-            } else {
-                todo!()
-            };
-            let ((x, y), (xpeak, ypeak)) = (
-                (x / stars.len() as f64, y / stars.len() as f64),
-                (xpeak / stars.len() as f64, ypeak / stars.len() as f64),
-            );
-
-            let centers = [
-                Elipse {
-                    x: data.shape()[1] as f32 / 2.0,
-                    y: data.shape()[0] as f32 / 2.0,
-                    a: 20.0,
-                    b: 20.0,
-                    theta: 0.0,
-                },
-                Elipse {
-                    x: x as f32,
-                    y: y as f32,
-                    a: 0.5,
-                    b: 0.5,
-                    theta: 0.0,
-                },
-                Elipse {
-                    x: x as f32,
-                    y: y as f32,
-                    a: 0.5,
-                    b: 1.5,
-                    theta: 0.0,
-                },
-                Elipse {
-                    x: xpeak as f32,
-                    y: ypeak as f32,
-                    a: 1.5,
-                    b: 0.5,
-                    theta: 0.0,
-                },
-            ];
-
-            dbg!(&centers);
-            let stars = stars
-                .into_iter()
-                .flat_map(|x| {
-                    let center1 = Elipse {
-                        x: x.x as f32,
-                        y: x.y as f32,
-                        a: 0.5,
-                        b: 0.5,
-                        theta: 0.0,
-                    };
-                    let center2 = Elipse {
-                        x: x.xpeak as f32,
-                        y: x.ypeak as f32,
-                        a: 0.5,
-                        b: 0.5,
-                        theta: 0.0,
-                    };
-                    [x.into(), center1, center2]
-                })
-                .chain(centers);
-
-            lock.set_fits(Arc::new(data));
-            lock.set_elipses(stars);
-            lock.auto_stretch(&stats);
+            lock.set_fits(data);
+            lock.auto_stretch(image.get_statistics());
         }
-
-        let fits_widget = newed.fits_widget.clone();
-        let ctx = cc.egui_ctx.clone();
-        thread::spawn(move || {
-            let args: Vec<String> = env::args().collect();
-
-            let connection = TcpStream::connect(&args[1]).unwrap();
-            connection
-                .write(&indi::serialization::GetProperties {
-                    version: indi::INDI_PROTOCOL_VERSION.to_string(),
-                    device: None,
-                    name: None,
-                })
-                .unwrap();
-
-            connection
-                .write(&indi::serialization::EnableBlob {
-                    device: String::from("ZWO CCD ASI294MM Pro"),
-                    name: None,
-                    enabled: indi::BlobEnable::Only,
-                })
-                .unwrap();
-
-            let c_iter = connection.iter().unwrap();
-
-            for command in c_iter {
-                match command {
-                    Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
-                        println!("Got image for: {:?}", sbv.device);
-                        if sbv.device != String::from("ZWO CCD ASI294MM Pro") {
-                            continue;
-                        }
-                        let fits = FitsImage::new(Arc::new(
-                            sbv.blobs.get_mut(0).unwrap().value.clone().into(),
-                        ));
-                        let data: ArrayD<u16> = fits.read_image().expect("Reading captured image");
-                        let stats = Statistics::new(&data.view());
-
-                        let sep_image = fits_inspect::analysis::sep::Image::new(&data).unwrap();
-                        let stars = sep_image.extract(None).unwrap();
-
-                        {
-                            let mut fits_widget = fits_widget.lock();
-                            fits_widget.set_fits(Arc::new(data));
-                            fits_widget.set_elipses(stars.into_iter().filter(|x| x.flag == 0));
-                            fits_widget.auto_stretch(&stats);
-                        }
-                        ctx.request_repaint();
-                    }
-                    _ => {}
-                }
-            }
-        });
         Some(newed)
     }
 }

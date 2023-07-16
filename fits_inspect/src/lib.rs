@@ -1,3 +1,9 @@
+use std::{time::Duration, path::PathBuf, sync::Arc};
+
+use analysis::Statistics;
+use calibration::{HasCalibration, Flat, Dark, CalibrationDescription};
+use fitsio::FitsFile;
+use indi::client::device::FitsImage;
 use ndarray::{
     array, Array, Array2, ArrayBase, ArrayD, ArrayView, Dim, Dimension, IntoDimension, Ix2, IxDyn,
     IxDynImpl, OwnedRepr, SliceInfo, SliceInfoElem, ViewRepr, Zip,
@@ -5,8 +11,106 @@ use ndarray::{
 use ndarray_conv::*;
 
 pub mod egui;
-
 pub mod analysis;
+pub mod calibration;
+
+
+
+
+pub trait HasImage {
+    fn get_data(&self) -> Arc<ArrayD<u16>>;
+    fn get_data_mut(&mut self) -> &mut ArrayD<u16>;
+    fn get_statistics(&self) -> &Statistics;
+    fn set_statistics(&mut self, stats: Statistics);
+}
+
+pub struct Image {
+    data: Arc<ArrayD<u16>>,
+    stats: Statistics,
+    flat: calibration::CalibrationDescription,
+    dark: calibration::CalibrationDescription,
+}
+
+impl HasImage for Image {
+    fn get_data(&self) -> Arc<ArrayD<u16>> {
+        self.data.clone()
+    }
+
+    fn get_data_mut(&mut self) -> &mut ArrayD<u16> {
+        Arc::make_mut(&mut self.data)
+    }
+
+    fn get_statistics(&self) -> &Statistics {
+        &self.stats
+    }
+    fn set_statistics(&mut self, stats: Statistics) {
+        self.stats = stats;
+    }
+
+}
+
+impl HasCalibration for Image {
+    fn describe_flat(&self) -> &CalibrationDescription {
+        &self.flat
+    }
+    fn describe_dark(&self) -> &CalibrationDescription {
+        &self.dark
+    }
+}
+
+impl TryFrom<FitsImage> for Image {
+    type Error = fitsio::errors::Error;
+
+    fn try_from(fits_image: FitsImage) -> Result<Self, Self::Error> {
+        let data = Arc::new(fits_image.read_image()?);
+        let stats = Statistics::new(&data.view());
+        let flat = CalibrationDescription::Flat(Flat {
+            filter: fits_image.read_header("FILTER")?,
+        });
+        let dark = CalibrationDescription::Dark(Dark {
+            offset: fits_image.read_header("OFFSET")?,
+            gain: fits_image.read_header("GAIN")?,
+            exposure: Duration::from_secs(fits_image.read_header::<i32>("EXPTIME")? as u64),
+        });
+        
+        Ok(Image {
+            data,
+            stats,
+            flat,
+            dark,
+        })
+    }
+}
+
+impl TryFrom<PathBuf> for Image {
+    type Error = fitsio::errors::Error;
+
+    fn try_from(filename: PathBuf) -> Result<Self, Self::Error> {
+
+        let mut fptr = FitsFile::open(filename)?;
+
+        let hdu = fptr.primary_hdu()?;
+        let data: Arc<ArrayD<u16>> = Arc::new(hdu.read_image(&mut fptr)?);
+        let stats = Statistics::new(&data.view());
+
+        // let frame: String = hdu.read_key(&mut fptr, "FRAME")?;
+        let flat = CalibrationDescription::Flat(Flat {
+            filter: hdu.read_key(&mut fptr, "FILTER")?
+        });
+
+        let dark = CalibrationDescription::Dark(Dark {
+            offset: hdu.read_key::<f64>(&mut fptr, "OFFSET")? as i32,
+            gain: hdu.read_key::<f64>(&mut fptr, "GAIN")? as i32,
+            exposure: Duration::from_secs(hdu.read_key::<f64>(&mut fptr, "EXPTIME")? as u64),
+        });
+        Ok(Image {
+            data,
+            stats,
+            flat,
+            dark,
+        })
+    }
+}
 
 pub fn phd2_convolve(data: &ArrayD<u16>) -> Array2<f32> {
     let data_f32: ArrayBase<OwnedRepr<f32>, Ix2> = data

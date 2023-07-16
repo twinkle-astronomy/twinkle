@@ -108,7 +108,7 @@ impl Statistics {
     }
 
     fn create_histogram(data: &ArrayViewD<u16>) -> Vec<usize> {
-        let mut histogram: Vec<usize> = vec![0; std::u16::MAX as usize];
+        let mut histogram: Vec<usize> = vec![0; std::u16::MAX as usize + 1];
 
         for d in data.iter() {
             histogram[*d as usize] += 1;

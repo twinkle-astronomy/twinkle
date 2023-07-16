@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use fitsio::FitsFile;
+use fitsio::{FitsFile, headers::ReadsKey};
 
 use super::ChangeError;
 use crate::*;
@@ -158,6 +158,35 @@ impl FitsImage {
     /// Returns a new FitsImage from the given raw data
     pub fn new(data: Arc<Vec<u8>>) -> FitsImage {
         FitsImage { raw_data: data }
+    }
+
+    pub fn read_header<T: ReadsKey>(&self, name: &str) -> fitsio::errors::Result<T> {
+        let mut ptr_size = self.raw_data.capacity();
+        let mut ptr = self.raw_data.as_ptr();
+
+        // now we have a pointer to the data, let's open this in `fitsio_sys`
+        let mut fptr = std::ptr::null_mut();
+        let mut status = 0;
+
+        let c_filename = std::ffi::CString::new("memory.fits").expect("creating c string");
+        unsafe {
+            fitsio::sys::ffomem(
+                &mut fptr as *mut *mut _,
+                c_filename.as_ptr(),
+                fitsio::sys::READONLY as _,
+                &mut ptr as *const _ as *mut *mut libc::c_void,
+                &mut ptr_size as *mut _,
+                0,
+                None,
+                &mut status,
+            );
+        }
+        fitsio::errors::check_status(status)?;
+        let mut f = unsafe { FitsFile::from_raw(fptr, fitsio::FileOpenMode::READONLY) }?;
+
+        let hdu = f.primary_hdu()?;
+
+        hdu.read_key(&mut f, name)
     }
 
     /// Returns an `ndarray::ArrayD<u16>` of the image data contained within `self`.  Currently only supports
