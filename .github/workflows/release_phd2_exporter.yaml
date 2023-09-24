@@ -5,7 +5,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: phd2_exporter
+  IMAGE_NAME: ${{ github.repository_owner }}/phd2_exporter
 
 jobs:
   build-and-push-image:
