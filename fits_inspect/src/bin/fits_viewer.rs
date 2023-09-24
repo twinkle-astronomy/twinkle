@@ -1,15 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::{env, net::TcpStream, sync::Arc, thread, path::PathBuf};
+use std::{path::PathBuf, sync::Arc};
 
 use egui::mutex::Mutex;
 use fits_inspect::{
-    analysis::Statistics,
-    egui::{fits_render::Elipse, FitsRender, FitsWidget}, Image, calibration::{CalibrationStore, CanCalibrate, HasCalibration}, HasImage,
+    calibration::{CanCalibrate, HasCalibration},
+    egui::{FitsRender, FitsWidget},
+    HasImage, Image,
 };
-use fitsio::FitsFile;
-use indi::client::{device::FitsImage, ClientConnection};
-use ndarray::ArrayD;
 
 pub struct FitsViewerApp {
     fits_widget: Arc<Mutex<FitsRender>>,
@@ -23,10 +21,10 @@ impl FitsViewerApp {
         let newed = FitsViewerApp {
             fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
         };
-        
+
         // let mut callibrations: CalibrationStore<fits_inspect::calibration::Image> = CalibrationStore::default();
         // let paths = std::fs::read_dir("/home/cconstantine/AstroDMx_DATA/twinkle/calibration/").unwrap();
-    
+
         // for path in paths {
         //     let path = path.unwrap();
         //     println!("Name: {}", path.path().display());

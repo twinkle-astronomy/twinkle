@@ -1,7 +1,7 @@
-use std::{time::Duration, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use analysis::Statistics;
-use calibration::{HasCalibration, Flat, Dark, CalibrationDescription};
+use calibration::{CalibrationDescription, Dark, Flat, HasCalibration};
 use fitsio::FitsFile;
 use indi::client::device::FitsImage;
 use ndarray::{
@@ -10,12 +10,9 @@ use ndarray::{
 };
 use ndarray_conv::*;
 
-pub mod egui;
 pub mod analysis;
 pub mod calibration;
-
-
-
+pub mod egui;
 
 pub trait HasImage {
     fn get_data(&self) -> Arc<ArrayD<u16>>;
@@ -46,7 +43,6 @@ impl HasImage for Image {
     fn set_statistics(&mut self, stats: Statistics) {
         self.stats = stats;
     }
-
 }
 
 impl HasCalibration for Image {
@@ -72,7 +68,7 @@ impl TryFrom<FitsImage> for Image {
             gain: fits_image.read_header("GAIN")?,
             exposure: Duration::from_secs(fits_image.read_header::<i32>("EXPTIME")? as u64),
         });
-        
+
         Ok(Image {
             data,
             stats,
@@ -86,7 +82,6 @@ impl TryFrom<PathBuf> for Image {
     type Error = fitsio::errors::Error;
 
     fn try_from(filename: PathBuf) -> Result<Self, Self::Error> {
-
         let mut fptr = FitsFile::open(filename)?;
 
         let hdu = fptr.primary_hdu()?;
@@ -95,7 +90,7 @@ impl TryFrom<PathBuf> for Image {
 
         // let frame: String = hdu.read_key(&mut fptr, "FRAME")?;
         let flat = CalibrationDescription::Flat(Flat {
-            filter: hdu.read_key(&mut fptr, "FILTER")?
+            filter: hdu.read_key(&mut fptr, "FILTER")?,
         });
 
         let dark = CalibrationDescription::Dark(Dark {

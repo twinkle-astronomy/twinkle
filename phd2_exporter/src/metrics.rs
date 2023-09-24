@@ -1,3 +1,4 @@
+use log::debug;
 use phd2::{
     serialization::{Event, ServerEvent},
     Phd2Connection,
@@ -52,7 +53,7 @@ impl Metrics {
         let guide_star_mass_histo = register_histogram_vec!(
             histogram_opts!(
                 "phd2_guide_star_mass_histo",
-                "Histogram of snr",
+                "Histogram of guid star mass",
                 exponential_buckets(10_000.0, 1.1, 50).unwrap()
             ),
             &["host", "mount",]
@@ -206,7 +207,7 @@ impl Metrics {
 
         loop {
             let event = recv.recv().await;
-            dbg!(&event);
+            debug!(target: "phd2_events", "{:?}", &event);
             match event {
                 Ok(event) => {
                     self.handle_event(&event);

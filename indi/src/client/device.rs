@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use fitsio::{FitsFile, headers::ReadsKey};
+use fitsio::{headers::ReadsKey, FitsFile};
 
 use super::ChangeError;
 use crate::*;

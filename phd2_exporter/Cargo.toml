@@ -10,4 +10,8 @@ clap = { version = "4.2.7", features = ["derive"] }
 prometheus_exporter = "0.8.5"
 tokio = { version = "1.26.0", features = ["full"] }
 phd2 = { path="../phd2" }
-
+serde = "1.0.188"
+serde_yaml = "0.9.25"
+log = "0.4.20"
+simple_logger = "4.2.0"
+env_logger = "0.10.0"
