@@ -21,7 +21,7 @@
 //!         .into();
 //!     let mut pixel_scale = phd2.get_pixel_scale().await.expect("Getting pixel scale.");
 //!     
-//!     let mut sub = phd2.subscribe().await.expect("Subscribing to events");
+//!     let mut sub = phd2.subscribe().await;
 //!
 //!     while let Ok(event) = sub.recv().await {
 //!         if let Event::GuideStep(guide) = &event.event {
@@ -52,7 +52,6 @@ use serialization::{
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    sync::Mutex,
     time::error::Elapsed,
 };
 
@@ -92,22 +91,20 @@ impl From<serde_json::Error> for ClientError {
     }
 }
 
-impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
-    for Phd2Connection<T>
-{
-    fn from(value: T) -> Self {
+impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> Phd2Connection<T> {
+    pub fn from(value: T) -> (Phd2Connection<T>, tokio::sync::mpsc::Receiver<ServerEvent>) {
         let (read, write) = tokio::io::split(value);
-        let pending_requests = Arc::new(Mutex::new(HashMap::default()));
-        let pending_responses = pending_requests.clone();
-        let (events, _) = tokio::sync::broadcast::channel(1024);
-        let events = Arc::new(Mutex::new(Some(events)));
-        let new_events = events.clone();
+        let (events, recv) = tokio::sync::mpsc::channel(1024);
+
         let client = Phd2Connection {
-            events,
-            pending_requests,
-            write,
+            connection: Arc::new(tokio::sync::Mutex::new(Connection {
+                pending_requests: Default::default(),
+                write,
+            })),
             last_id: std::sync::atomic::AtomicU64::new(0),
         };
+
+        let connection = client.connection.clone();
 
         tokio::spawn(async move {
             let mut read = BufReader::new(read);
@@ -116,8 +113,6 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
             loop {
                 buf.clear();
                 if read.read_line(&mut buf).await.unwrap() == 0 {
-                    let mut lock = new_events.lock().await;
-                    *lock = None;
                     break;
                 }
                 let obj = serde_json::from_str::<ServerMessage>(&buf);
@@ -125,14 +120,14 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
                 match obj {
                     Ok(obj) => match obj {
                         ServerMessage::ServerEvent(event) => {
-                            let lock = new_events.lock().await;
-                            if let Some(sender) = lock.as_ref() {
-                                sender.send(Arc::new(event)).ok();
-                            }
+                            events
+                                .send(event)
+                                .await
+                                .expect("Sending ServerEvent to channel");
                         }
                         ServerMessage::JsonRpcResponse(rpc) => {
-                            let mut lock = pending_responses.lock().await;
-                            if let Some(pr) = lock.remove(&rpc.id) {
+                            let mut lock = connection.lock().await;
+                            if let Some(pr) = lock.pending_requests.remove(&rpc.id) {
                                 pr.send(rpc).ok();
                             }
                         }
@@ -145,33 +140,31 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> From<T>
             }
         });
 
-        client
+        (client, recv)
     }
 }
 
-pub struct Phd2Connection<T> {
-    events: Arc<Mutex<Option<tokio::sync::broadcast::Sender<Arc<ServerEvent>>>>>,
-    pending_requests: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<JsonRpcResponse>>>>,
+struct Connection<T> {
+    pending_requests: HashMap<u64, tokio::sync::oneshot::Sender<JsonRpcResponse>>,
     write: tokio::io::WriteHalf<T>,
+}
+
+pub struct Phd2Connection<T> {
+    connection: Arc<tokio::sync::Mutex<Connection<T>>>,
 
     last_id: std::sync::atomic::AtomicU64,
 }
 
 impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
-    pub async fn subscribe(&self) -> Option<tokio::sync::broadcast::Receiver<Arc<ServerEvent>>> {
-        let lock = self.events.lock().await;
-        Some(lock.as_ref()?.subscribe())
-    }
-
-    async fn call(&mut self, request: JsonRpcRequest) -> Result<serde_json::Value, ClientError> {
+    async fn call(&self, request: JsonRpcRequest) -> Result<serde_json::Value, ClientError> {
         Ok(tokio::time::timeout(Duration::from_secs(1), async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
             {
-                let mut lock = self.pending_requests.lock().await;
-                lock.insert(request.id, tx);
+                let mut sender = self.connection.lock().await;
+                sender.pending_requests.insert(request.id, tx);
+                sender.write.write(&serde_json::to_vec(&request)?).await?;
+                sender.write.write(b"\n").await?;
             }
-            self.write.write(&serde_json::to_vec(&request)?).await?;
-            self.write.write(b"\n").await?;
             let resp = rx.await.unwrap();
 
             if let Some(e) = resp.error {
@@ -185,12 +178,16 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         .await??)
     }
 
-    fn next_id(&mut self) -> u64 {
+    fn next_id(&self) -> u64 {
         self.last_id.fetch_add(1, Ordering::SeqCst)
     }
 
+    pub async fn disconnect(self) -> std::io::Result<()> {
+        let mut lock = self.connection.lock().await;
+        lock.write.shutdown().await
+    }
     pub async fn capture_single_frame(
-        &mut self,
+        &self,
         exposure: Duration,
         subframe: Option<[u32; 4]>,
     ) -> Result<isize, ClientError> {
@@ -211,7 +208,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn clear_calibration(
-        &mut self,
+        &self,
         target: ClearCalibrationParam,
     ) -> Result<isize, ClientError> {
         let id = self.next_id();
@@ -228,7 +225,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn dither(
-        &mut self,
+        &self,
         amount: f64,
         ra_only: bool,
         settle: Settle,
@@ -246,7 +243,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn find_star(&mut self, roi: Option<[usize; 4]>) -> Result<[f64; 2], ClientError> {
+    pub async fn find_star(&self, roi: Option<[usize; 4]>) -> Result<[f64; 2], ClientError> {
         let id = self.next_id();
         let mut params = json!({});
 
@@ -264,7 +261,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn flip_calibration(&mut self) -> Result<isize, ClientError> {
+    pub async fn flip_calibration(&self) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -278,7 +275,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_algo_param_names(&mut self, axis: Axis) -> Result<Vec<String>, ClientError> {
+    pub async fn get_algo_param_names(&self, axis: Axis) -> Result<Vec<String>, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -292,7 +289,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn get_algo_param<S: Into<String> + Serialize>(
-        &mut self,
+        &self,
         axis: Axis,
         name: S,
     ) -> Result<f64, ClientError> {
@@ -308,7 +305,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_app_state(&mut self) -> Result<State, ClientError> {
+    pub async fn get_app_state(&self) -> Result<State, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -321,7 +318,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_camera_frame_size(&mut self) -> Result<[usize; 2], ClientError> {
+    pub async fn get_camera_frame_size(&self) -> Result<[usize; 2], ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -334,7 +331,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_calibrated(&mut self) -> Result<bool, ClientError> {
+    pub async fn get_calibrated(&self) -> Result<bool, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -348,7 +345,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn get_calibration_data(
-        &mut self,
+        &self,
         which: WhichDevice,
     ) -> Result<Calibration, ClientError> {
         let id = self.next_id();
@@ -363,7 +360,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_connected(&mut self) -> Result<bool, ClientError> {
+    pub async fn get_connected(&self) -> Result<bool, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -376,7 +373,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_cooler_status(&mut self) -> Result<CoolerStatus, ClientError> {
+    pub async fn get_cooler_status(&self) -> Result<CoolerStatus, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -389,9 +386,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_current_equipment(
-        &mut self,
-    ) -> Result<HashMap<String, Equipment>, ClientError> {
+    pub async fn get_current_equipment(&self) -> Result<HashMap<String, Equipment>, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -403,7 +398,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn get_dec_guide_mode(&mut self) -> Result<DecGuideMode, ClientError> {
+    pub async fn get_dec_guide_mode(&self) -> Result<DecGuideMode, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -415,7 +410,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn get_exposure(&mut self) -> Result<Duration, ClientError> {
+    pub async fn get_exposure(&self) -> Result<Duration, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -428,7 +423,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value::<DurationMillis>(result)?.into())
     }
 
-    pub async fn get_exposure_durations(&mut self) -> Result<Vec<Duration>, ClientError> {
+    pub async fn get_exposure_durations(&self) -> Result<Vec<Duration>, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -444,7 +439,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
             .collect())
     }
 
-    pub async fn get_guide_output_enabled(&mut self) -> Result<bool, ClientError> {
+    pub async fn get_guide_output_enabled(&self) -> Result<bool, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -457,7 +452,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_lock_position(&mut self) -> Result<Option<[f64; 2]>, ClientError> {
+    pub async fn get_lock_position(&self) -> Result<Option<[f64; 2]>, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -477,7 +472,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_lock_shift_enabled(&mut self) -> Result<bool, ClientError> {
+    pub async fn get_lock_shift_enabled(&self) -> Result<bool, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -490,7 +485,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_lock_shift_params(&mut self) -> Result<LockShiftParams, ClientError> {
+    pub async fn get_lock_shift_params(&self) -> Result<LockShiftParams, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -503,7 +498,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_paused(&mut self) -> Result<bool, ClientError> {
+    pub async fn get_paused(&self) -> Result<bool, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -516,7 +511,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_pixel_scale(&mut self) -> Result<f64, ClientError> {
+    pub async fn get_pixel_scale(&self) -> Result<f64, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -529,7 +524,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_profile(&mut self) -> Result<Profile, ClientError> {
+    pub async fn get_profile(&self) -> Result<Profile, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -542,7 +537,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_profiles(&mut self) -> Result<Vec<Profile>, ClientError> {
+    pub async fn get_profiles(&self) -> Result<Vec<Profile>, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -555,7 +550,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_search_region(&mut self) -> Result<isize, ClientError> {
+    pub async fn get_search_region(&self) -> Result<isize, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -568,7 +563,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_ccd_temperature(&mut self) -> Result<HashMap<String, f64>, ClientError> {
+    pub async fn get_ccd_temperature(&self) -> Result<HashMap<String, f64>, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -583,7 +578,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
     /// Phd2 simulator is giving me an invalid string for the pixels causing a parse error for the response.
     /// PR to resolve this issue: https://github.com/OpenPHDGuiding/phd2/pull/1076
-    pub async fn get_star_image(&mut self) -> Result<StarImage, ClientError> {
+    pub async fn get_star_image(&self) -> Result<StarImage, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -596,7 +591,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn get_use_subframes(&mut self) -> Result<bool, ClientError> {
+    pub async fn get_use_subframes(&self) -> Result<bool, ClientError> {
         let id = self.next_id();
         let result = self
             .call(JsonRpcRequest {
@@ -610,7 +605,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn guide(
-        &mut self,
+        &self,
         settle: Settle,
         recalibrate: Option<bool>,
         roi: Option<[usize; 4]>,
@@ -635,7 +630,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn guide_pulse(
-        &mut self,
+        &self,
         amount: isize,
         direction: PulseDirection,
         which: Option<WhichDevice>,
@@ -658,7 +653,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
     /// This is the `loop` rpc method, but functions in rust can't
     /// be named `loop`, so it's `loop_` instead.
-    pub async fn loop_(&mut self) -> Result<isize, ClientError> {
+    pub async fn loop_(&self) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -672,7 +667,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn save_image(&mut self) -> Result<HashMap<String, String>, ClientError> {
+    pub async fn save_image(&self) -> Result<HashMap<String, String>, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -686,7 +681,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
     pub async fn set_algo_param(
-        &mut self,
+        &self,
         axis: Axis,
         name: impl Into<String>,
         value: f64,
@@ -703,7 +698,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn set_connected(&mut self, connected: bool) -> Result<isize, ClientError> {
+    pub async fn set_connected(&self, connected: bool) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -716,7 +711,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn set_dec_guide_mode(&mut self, mode: DecGuideMode) -> Result<isize, ClientError> {
+    pub async fn set_dec_guide_mode(&self, mode: DecGuideMode) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -729,7 +724,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn set_exposure(&mut self, exposure: Duration) -> Result<isize, ClientError> {
+    pub async fn set_exposure(&self, exposure: Duration) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -742,7 +737,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn set_guide_output_enabled(&mut self, enabled: bool) -> Result<isize, ClientError> {
+    pub async fn set_guide_output_enabled(&self, enabled: bool) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -757,7 +752,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
     }
 
     pub async fn set_lock_position(
-        &mut self,
+        &self,
         x: f64,
         y: f64,
         exact: Option<bool>,
@@ -779,7 +774,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
 
-    pub async fn set_lock_shift_enabled(&mut self, enabled: bool) -> Result<isize, ClientError> {
+    pub async fn set_lock_shift_enabled(&self, enabled: bool) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -793,7 +788,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
         Ok(serde_json::from_value(result)?)
     }
     pub async fn set_lock_shift_params(
-        &mut self,
+        &self,
         rate: [f64; 2],
         units: impl Into<String>,
         axes: impl Into<String>,
@@ -814,7 +809,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn set_paused(&mut self, paused: bool, full: bool) -> Result<isize, ClientError> {
+    pub async fn set_paused(&self, paused: bool, full: bool) -> Result<isize, ClientError> {
         let id = self.next_id();
         let mut params = json!({ "paused": paused });
 
@@ -832,7 +827,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn set_profile(&mut self, profile_id: isize) -> Result<isize, ClientError> {
+    pub async fn set_profile(&self, profile_id: isize) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -845,7 +840,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn shutdown(&mut self) -> Result<isize, ClientError> {
+    pub async fn shutdown(&self) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self
@@ -858,7 +853,7 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite> Phd2Connection<T> {
 
         Ok(serde_json::from_value(result)?)
     }
-    pub async fn stop_capture(&mut self) -> Result<isize, ClientError> {
+    pub async fn stop_capture(&self) -> Result<isize, ClientError> {
         let id = self.next_id();
 
         let result = self

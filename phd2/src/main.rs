@@ -7,14 +7,17 @@ use phd2::{
 
 #[tokio::main]
 async fn main() {
-    let mut phd2: Phd2Connection<_> = tokio::net::TcpStream::connect("astro.local:4400")
-        .await
-        .expect("Connecting to phd2")
-        .into();
+    let (phd2, mut events): (Phd2Connection<_>, _) = Phd2Connection::from(
+        tokio::net::TcpStream::connect("astro.local:4400")
+            .await
+            .expect("Connecting to phd2"),
+    );
+
     phd2.loop_().await.unwrap();
 
     phd2.find_star(None).await.ok();
 
+    phd2.set_paused(true, true).await.expect("Pausing");
     phd2.guide(
         Settle {
             pixels: 1.0,
@@ -25,11 +28,11 @@ async fn main() {
         None,
     )
     .await
-    .unwrap();
+    .expect("guiding");
 
-    let mut sub = phd2.subscribe().await.unwrap();
+    phd2.disconnect().await.expect("disconnecting");
 
-    while let Ok(event) = sub.recv().await {
+    while let Some(event) = events.recv().await {
         if let Event::GuideStep(guide) = &event.event {
             let delta = (guide.dx.powi(2) + guide.dy.powi(2)).sqrt();
             println!("guide error: {:2.2}", delta);

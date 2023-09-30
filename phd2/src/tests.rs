@@ -4,17 +4,15 @@ use tokio::fs::File;
 
 #[tokio::test]
 async fn test_read_session() {
-    let file: Phd2Connection<File> = File::open("./src/test_data/session.log")
-        .await
-        .unwrap()
-        .into();
-    let mut sub = file.subscribe().await.unwrap();
-    while let Ok(event) = sub.recv().await {
+    let (_file, mut sub): (Phd2Connection<File>, _) =
+        Phd2Connection::from(File::open("./src/test_data/session.log").await.unwrap());
+
+    while let Some(event) = sub.recv().await {
         dbg!(event);
     }
 }
 
-#[cfg(feature = "test_phd2_simulator")]
+// #[cfg(feature = "test_phd2_simulator")]
 mod integration {
     use crate::serialization::Event;
     use crate::*;
@@ -27,11 +25,11 @@ mod integration {
 
         let mut phd2_instance = tokio::process::Command::new("phd2").spawn().unwrap();
 
-        let mut phd2: Phd2Connection<_> = loop {
+        let (phd2, mut events): (Phd2Connection<_>, _) = loop {
             println!("Connecting to phd2");
             let connection = TcpStream::connect("localhost:4400").await;
             match connection {
-                Ok(connection) => break connection.into(),
+                Ok(connection) => break Phd2Connection::from(connection),
                 Err(e) => {
                     dbg!(e);
                     println!("Waiting 1s before trying again");
@@ -97,7 +95,6 @@ mod integration {
         phd2.set_exposure(Duration::from_secs(1)).await?;
         {
             println!("Starting looping");
-            let mut events = phd2.subscribe().await.expect("Getting events");
             phd2.loop_().await?;
 
             let mut frame_count = 0;
@@ -117,7 +114,6 @@ mod integration {
         {
             println!("Starting guiding");
             let settle = Settle::new(1.5, Duration::from_secs(1), Duration::from_secs(60));
-            let mut events = phd2.subscribe().await.expect("Getting events");
             phd2.guide(settle, Some(true), None).await?;
 
             loop {
@@ -155,16 +151,27 @@ mod integration {
 
             phd2.stop_capture().await?;
         }
-        phd2.shutdown().await?;
+        {
+            phd2.shutdown().await?;
 
-        let shutdown = tokio::time::timeout(Duration::from_secs(5), phd2_instance.wait()).await;
+            tokio::time::timeout(Duration::from_secs(5), async move {
+                loop {
+                    if let None = events.recv().await {
+                        break;
+                    }
+                }
+            })
+            .await
+            .expect("Waiting for client to disconnect");
+            let shutdown = tokio::time::timeout(Duration::from_secs(5), phd2_instance.wait()).await;
 
-        if let Ok(Ok(status)) = shutdown {
-            assert!(status.success());
-        } else {
-            dbg!(&shutdown);
-            phd2_instance.kill().await.expect("Killing phd2");
-            panic!("Shutting down phd2 didn't work");
+            if let Ok(Ok(status)) = shutdown {
+                assert!(status.success());
+            } else {
+                dbg!(&shutdown);
+                phd2_instance.kill().await.expect("Killing phd2");
+                panic!("Shutting down phd2 didn't work");
+            }
         }
         Ok(())
     }
