@@ -138,7 +138,7 @@ impl Runner {
                 "CCD_CONTROLS",
                 vec![("Offset", config.offset), ("Gain", config.gain)]
             ),
-            camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
+            // camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
             camera.change(
                 "CCD_BINNING",
                 vec![("HOR_BIN", config.binning), ("VER_BIN", config.binning)]
@@ -151,6 +151,7 @@ impl Runner {
         let mut exposure = config.exposure;
 
         loop {
+            exposure = exposure.max(Duration::from_secs(2)).min(Duration::from_secs(3));
             println!("Exposing for {}s", exposure.as_millis() as f64 / 1000f64);
             let fits_data = camera
                 .capture_image_from_param(exposure, &camera_ccd)

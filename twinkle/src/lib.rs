@@ -7,8 +7,8 @@ use std::{
 };
 
 use client::notify::{self, Notify};
-use indi::{client::device::ActiveDevice, Parameter};
-use tokio_stream::wrappers::BroadcastStream;
+use indi::{client::{device::ActiveDevice, DeviceStore, MemoryDeviceStore}, Parameter};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 mod backend;
@@ -36,8 +36,9 @@ impl Telescope {
 
         let image_client = indi::client::new(
             TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
-            Some(&config.primary_camera.clone()),
-            Some("CCD1"),
+            None, None
+            // Some(&config.primary_camera.clone()),
+            // Some("CCD1"),
         )
         .expect("Connecting to INDI server");
 
@@ -78,7 +79,6 @@ impl Telescope {
     }
 
     pub fn root_path(&self) -> String {
-        // String::from("~/AstroDMx_DATA/Flat/")
         String::from("./Flat/")
     }
 }

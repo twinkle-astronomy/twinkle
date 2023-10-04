@@ -4,7 +4,6 @@ resolver = "2"
 members = [
 	"client",
 	"indi",
-	"indi_exporter",
 	"phd2",
 	"twinkle",
 	"fits_inspect",
