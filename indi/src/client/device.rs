@@ -413,6 +413,30 @@ impl ActiveDevice {
         self.capture_image_from_param(exposure, &image_param).await
     }
 
+    /// Waits for and returns the next image from the given parameter.
+    pub async fn next_image(&self, image_param: &Notify<Parameter>) -> Result<FitsImage, ChangeError<Command>> {
+        let sub = image_param.changes();
+
+        Ok(wait_fn(sub, Duration::from_secs(60), move |ccd| {
+            // We've been called before the next image has come in.
+            if let Some(image_data) = ccd
+                .get_values::<HashMap<String, crate::Blob>>()?
+                .get("CCD1")
+            {
+                if let Some(bytes) = &image_data.value {
+                    Ok(notify::Status::Complete(FitsImage::new(bytes.clone())))
+                } else {
+                    dbg!("No image data");
+                    Err(ChangeError::PropertyError)
+                }
+            } else {
+                dbg!("Missing CCD1");
+                Err(ChangeError::PropertyError)
+            }
+        })
+        .await?)
+    }
+
     /// Returns a [FitsImage] after exposing the camera device for `exposure` seconds.
     ///   Currently this method is only tested on the ZWO ASI 294MM Pro.  `enable_blob` must be
     ///   called against the `"CCD1"` parameter prior to the usage of this method.
