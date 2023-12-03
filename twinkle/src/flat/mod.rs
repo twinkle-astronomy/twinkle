@@ -84,7 +84,7 @@ impl Runner {
                             gain: config.gain,
                             offset: config.offset,
                             exposure: config.exposure,
-                            fp_level: 0.0,
+                            fp_level: 100.0,
                         };
                         let (fits, _prev_fp_level) =
                             Runner::run(&task_status, config, telescope.clone()).await;
