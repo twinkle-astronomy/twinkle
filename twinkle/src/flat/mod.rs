@@ -1,7 +1,7 @@
 use crate::{Action, Telescope};
 use client::notify::Notify;
 use fits_inspect::analysis::Statistics;
-use indi::client::device::FitsImage;
+use indi::{client::device::FitsImage, SwitchState};
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
@@ -15,6 +15,7 @@ pub struct Config {
     pub gain: f64,
     pub offset: f64,
     pub exposure: Duration,
+    pub fp_level: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub struct SetConfig {
     pub binnings: HashMap<u8, bool>,
     pub gain: f64,
     pub offset: f64,
+    pub exposure: Duration,
 }
 
 impl SetConfig {
@@ -71,7 +73,6 @@ impl Runner {
 
         let task_status = status.clone();
         let task = tokio::spawn(async move {
-            let mut exposure = Duration::from_millis(100);
             for (filter, _) in config.filters.iter().filter(|(_k, v)| **v) {
                 for (bin, _) in config.binnings.iter().filter(|(_k, v)| **v) {
                     for i in 1..=config.count {
@@ -82,11 +83,12 @@ impl Runner {
                             binning: *bin as f64,
                             gain: config.gain,
                             offset: config.offset,
-                            exposure,
+                            exposure: config.exposure,
+                            fp_level: 0.0,
                         };
-                        let (fits, prev_exposure) =
+                        let (fits, _prev_fp_level) =
                             Runner::run(&task_status, config, telescope.clone()).await;
-                        exposure = prev_exposure;
+
                         let root = telescope.root_path();
                         let filename = Path::new(&root);
                         let filename = filename
@@ -110,7 +112,7 @@ impl Runner {
         status: &Arc<Notify<Status>>,
         config: Config,
         telescope: Arc<Telescope>,
-    ) -> (Arc<FitsImage>, Duration) {
+    ) -> (Arc<FitsImage>, f64) {
         let camera = telescope
             .get_primary_camera()
             .await
@@ -120,11 +122,25 @@ impl Runner {
             .await
             .expect("Getting filter wheel");
 
+        let flat_panel = telescope
+            .get_flat_panel()
+            .await
+            .expect("Getting flat panel");
+
         tokio::try_join!(
             camera.change("CONNECTION", vec![("CONNECT", true)]),
             filter_wheel.change("CONNECTION", vec![("CONNECT", true)]),
+            flat_panel.change("CONNECTION", vec![("CONNECT", true)]),
         )
         .expect("Connecting to devices");
+
+        flat_panel
+            .change(
+                "FLAT_LIGHT_CONTROL",
+                vec![("FLAT_LIGHT_ON", SwitchState::On)],
+            )
+            .await
+            .expect("Setting brightness");
 
         let camera_ccd = telescope
             .get_primary_camera_ccd()
@@ -148,13 +164,25 @@ impl Runner {
         )
         .expect("Configuring camera");
 
-        let mut exposure = config.exposure;
+        let mut fp_level = config.fp_level;
 
         loop {
-            exposure = exposure.max(Duration::from_secs(2)).min(Duration::from_secs(3));
-            println!("Exposing for {}s", exposure.as_millis() as f64 / 1000f64);
+            fp_level = fp_level.max(0.0).min(1000.0);
+            println!("Setting panel brightness: {}", fp_level);
+            flat_panel
+                .change(
+                    "FLAT_LIGHT_INTENSITY",
+                    vec![("FLAT_LIGHT_INTENSITY_VALUE", fp_level)],
+                )
+                .await
+                .expect("Setting brightness");
+
+            println!(
+                "Exposing for {}s",
+                config.exposure.as_millis() as f64 / 1000f64
+            );
             let fits_data = camera
-                .capture_image_from_param(exposure, &camera_ccd)
+                .capture_image_from_param(config.exposure, &camera_ccd)
                 .await
                 .expect("Capturing image");
 
@@ -171,23 +199,19 @@ impl Runner {
 
             let target_median = config.adu_target;
             if target_median.abs_diff(stats.median) <= config.adu_margin {
-                exposure = Duration::from_secs_f64(
-                    (target_median as f64) / (stats.median as f64) * exposure.as_secs_f64(),
-                );
+                fp_level = (target_median as f64) / (stats.median as f64) * fp_level;
                 println!("Finished getting flat");
-                break (fits_data, exposure);
+                break (fits_data, fp_level);
             } else if stats.median as f32 > 0.8 * u16::MAX as f32 {
                 println!("halving");
-                exposure = Duration::from_secs_f64(exposure.as_secs_f64() / 2.0);
+                fp_level = fp_level / 2.0;
             } else if (stats.median as f32) < { 0.1 * u16::MAX as f32 } {
                 println!("Doubling");
-                exposure = Duration::from_secs_f64(exposure.as_secs_f64() * 2.0);
+                fp_level = fp_level * 2.0;
             } else {
                 println!("adjusting");
 
-                exposure = Duration::from_secs_f64(
-                    (target_median as f64) / (stats.median as f64) * exposure.as_secs_f64(),
-                );
+                fp_level = (target_median as f64) / (stats.median as f64) * fp_level;
             }
         }
     }

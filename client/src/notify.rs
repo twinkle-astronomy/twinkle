@@ -259,7 +259,6 @@ impl<'a, T> Drop for NotifyMutexGuard<'a, T> {
             let sender = self.to_notify.to_notify.lock().unwrap();
             sender.send(self.guard.deref().clone()).ok();
         }
-        drop(&mut self.guard);
     }
 }
 #[cfg(test)]

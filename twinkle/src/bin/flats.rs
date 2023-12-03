@@ -42,17 +42,19 @@ impl FlatApp {
             primary_camera: String::from("ZWO CCD ASI294MM Pro"),
             focuser: String::from("ASI EAF"),
             filter_wheel: String::from("ASI EFW"),
+            flat_panel: String::from("Deep Sky Dad FP1"),
         };
         let telescope = Arc::new(Telescope::new(addr, config));
 
         let flat_config = SetConfig {
-            count: 10,
+            count: 30,
             filters: HashMap::default(),
-            adu_target: 1000, //u16::MAX / 2,
+            adu_target: u16::MAX / 2,
             adu_margin: 1000,
             binnings: HashMap::default(),
-            gain: 240.0,
+            gain: 120.0,
             offset: 10.0,
+            exposure: std::time::Duration::from_secs(2),
         };
 
         let newed: FlatApp = FlatApp {

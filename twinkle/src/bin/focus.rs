@@ -70,6 +70,7 @@ async fn main() {
         primary_camera: String::from("ZWO CCD ASI294MM Pro"),
         focuser: String::from("ASI EAF"),
         filter_wheel: String::from("ASI EFW"),
+        flat_panel: String::from("Deep Sky Dad FP1"),
     };
 
     let telescope = Telescope::new(addr, config);
