@@ -9,5 +9,8 @@ members = [
 	"fits_inspect",
 ]
 
+[workspace.dependencies]
+twinkle_client = "0.1.0"
+
 [profile.dev.package.fits_inspect]
 opt-level=3

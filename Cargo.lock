@@ -1645,7 +1645,7 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
- "twinkle_client",
+ "twinkle_client 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2124,7 +2124,7 @@ dependencies = [
 
 [[package]]
 name = "indi"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "base64 0.13.1",
  "bytes",
@@ -2141,7 +2141,7 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-stream",
- "twinkle_client",
+ "twinkle_client 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4002,13 +4002,25 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing-subscriber",
- "twinkle_client",
+ "twinkle_client 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid",
 ]
 
 [[package]]
 name = "twinkle_client"
 version = "0.1.0"
+dependencies = [
+ "pin-project",
+ "pin-project-lite",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
+name = "twinkle_client"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0888ab0ac3daf5bfb64af857b1ec0411037894ca715ee21ae23ba5a78e921338"
 dependencies = [
  "pin-project",
  "pin-project-lite",

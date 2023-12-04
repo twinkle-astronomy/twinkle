@@ -28,4 +28,4 @@ actix = "0.13.0"
 futures-util = { version = "0.3.28", features = ["channel"] }
 actix-ws = "0.2.5"
 pin-project = "1.1.0"
-twinkle_client = { version = "0.1.0", path = "../twinkle_client" }
+twinkle_client.workspace = true
