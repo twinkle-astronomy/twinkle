@@ -13,7 +13,7 @@ use fitsio::{headers::ReadsKey, FitsFile};
 
 use super::ChangeError;
 use crate::*;
-use ::client::{
+use ::twinkle_client::{
     notify::{self, wait_fn, Notify},
     OnDropFutureExt,
 };
@@ -96,7 +96,7 @@ impl Device {
                 .insert(name.clone(), Arc::new(Notify::new(param)));
         }
         let param = self.parameters.get(&name).unwrap();
-        Ok(ParamUpdateResult::ExistingParam(param.lock().unwrap()))
+        Ok(ParamUpdateResult::DefParam(param.lock().unwrap()))
     }
 
     fn update_param<'a, T: CommandToUpdate>(
@@ -137,6 +137,7 @@ impl Device {
 
 pub enum ParamUpdateResult<'a> {
     NoUpdate,
+    DefParam(notify::NotifyMutexGuard<'a, Parameter>),
     ExistingParam(notify::NotifyMutexGuard<'a, Parameter>),
     DeletedParams(Vec<Arc<Notify<Parameter>>>),
 }

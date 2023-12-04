@@ -6,9 +6,9 @@ use std::{
     time::Duration,
 };
 
-use client::notify::{self, Notify};
 use indi::{client::device::ActiveDevice, Parameter};
 use tokio_stream::wrappers::BroadcastStream;
+use twinkle_client::notify::{self, Notify};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 mod backend;

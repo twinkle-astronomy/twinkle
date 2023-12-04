@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-	"client",
+	"twinkle_client",
 	"indi",
 	"phd2",
 	"twinkle",

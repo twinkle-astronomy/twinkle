@@ -7,9 +7,9 @@ use actix_web::{
     App, Error, HttpRequest, HttpResponse, HttpServer,
 };
 
-use client::{notify::Notify, StreamExt as _};
 use indi::client::device::Device;
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
+use twinkle_client::{notify::Notify, StreamExt as _};
 
 /// Handshake and start WebSocket handler with heartbeats.
 async fn chat_ws(

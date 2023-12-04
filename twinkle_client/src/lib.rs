@@ -22,7 +22,7 @@ where
     /// to completion, and when it isn't.
     /// # Example
     /// ```
-    /// use client::OnDropFutureExt;
+    /// use twinkle_client::OnDropFutureExt;
     /// use std::sync::{Mutex, Arc};
     /// #[tokio::main]
     /// async fn main() {

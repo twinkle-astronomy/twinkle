@@ -77,7 +77,7 @@ impl<T> Notify<T> {
     /// Returns a new `Notify<T>`
     /// # Example
     /// ```
-    /// use client::Notify;
+    /// use twinkle_client::Notify;
     /// let notify: Notify<i32> = Notify::new(42);
     /// ```
     pub fn new(value: T) -> Notify<T> {
@@ -91,7 +91,7 @@ impl<T> Notify<T> {
     /// Returns a new `Notify<T>` with a given channel size
     /// # Example
     /// ```
-    /// use client::Notify;
+    /// use twinkle_client::Notify;
     /// let notify: Notify<i32> = Notify::new(42);
     /// ```
     pub fn new_with_size(value: T, size: usize) -> Notify<T> {
@@ -104,7 +104,7 @@ impl<T> Notify<T> {
 }
 
 impl<T: Debug + Sync + Send + 'static> Notify<T> {
-    /// Returns a [`NotifyMutexGuard<T>`](crate::client::notify::NotifyMutexGuard) that allows you to read
+    /// Returns a [`NotifyMutexGuard<T>`](crate::twinkle_client::notify::NotifyMutexGuard) that allows you to read
     /// (via the [Deref] trait) and write (via the [DerefMut] trait)
     /// the value stored in the `Notify<T>`.  The lock is exclusive,
     /// and only one lock will be held at a time. Use this method to find the current
@@ -114,7 +114,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///
     /// # Example
     /// ```
-    /// use client::Notify;
+    /// use twinkle_client::Notify;
     /// let notify: Notify<i32> = Notify::new(42);
     /// assert_eq!(*notify.lock().unwrap(), 42);
     /// {
@@ -141,7 +141,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///
     /// # Example
     /// ```
-    /// use client::Notify;
+    /// use twinkle_client::Notify;
     /// use tokio_stream::StreamExt;
     /// use std::sync::Arc;
     /// fn increment( notify: &mut Notify<i32>) {
@@ -184,7 +184,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///
     /// # Example
     /// ```
-    /// use client::Notify;
+    /// use twinkle_client::Notify;
     /// use tokio_stream::StreamExt;
     /// use std::sync::Arc;
     /// fn increment( notify: &mut Notify<i32>) {

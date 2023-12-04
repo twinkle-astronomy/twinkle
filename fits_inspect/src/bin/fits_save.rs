@@ -5,8 +5,8 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::time::Duration;
 
-use client::notify::wait_fn;
 use indi::TypeError;
+use twinkle_client::notify::wait_fn;
 
 #[tokio::main]
 async fn main() {
@@ -36,7 +36,7 @@ async fn main() {
 
     wait_fn::<(), TypeError, _, _>(imager.subscribe().unwrap(), Duration::MAX, |imager| {
         if imager.gen() == imager_gen {
-            return Ok(client::notify::Status::Pending);
+            return Ok(twinkle_client::notify::Status::Pending);
         }
         imager_gen = imager.gen();
 
@@ -62,7 +62,7 @@ async fn main() {
                 .write_all(&image)
                 .expect("Unable to write file");
         }
-        Ok(client::notify::Status::Pending)
+        Ok(twinkle_client::notify::Status::Pending)
     })
     .await
     .expect("Aquiring images");

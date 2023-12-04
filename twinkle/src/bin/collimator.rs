@@ -2,7 +2,6 @@
 
 use std::{env, net::TcpStream, sync::Arc, thread};
 
-use client::notify;
 use egui::mutex::Mutex;
 use fits_inspect::{
     analysis::{collimation::CollimationCalculator, Statistics},
@@ -13,6 +12,7 @@ use indi::client::{device::FitsImage, ClientConnection};
 use ndarray::ArrayD;
 use tokio::runtime::Runtime;
 use tokio_stream::StreamExt;
+use twinkle_client::notify;
 
 #[derive(PartialEq, Debug, Clone)]
 enum Algo {

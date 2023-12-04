@@ -1,6 +1,6 @@
 pub mod device;
 // pub mod notify;
-use client;
+use twinkle_client;
 
 use std::{
     collections::HashMap,
@@ -19,7 +19,7 @@ use crate::{
     Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
     INDI_PROTOCOL_VERSION,
 };
-use client::notify::{self, wait_fn, Notify};
+use twinkle_client::notify::{self, wait_fn, Notify};
 
 #[derive(Debug)]
 pub enum ChangeError<E> {
