@@ -5,9 +5,9 @@ use client;
 use std::{
     collections::HashMap,
     io::{BufReader, BufWriter, Write},
-    net::TcpStream,
-    sync::{Arc, PoisonError},
-    thread,
+    net::{Shutdown, TcpStream},
+    sync::{Arc, Mutex, PoisonError},
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -27,6 +27,7 @@ pub enum ChangeError<E> {
     DeError(serialization::DeError),
     IoError(std::io::Error),
     Disconnected(crossbeam_channel::SendError<Command>),
+    SendError(device::SendError<Command>),
     Canceled,
     Timeout,
     EndOfStream,
@@ -50,6 +51,11 @@ impl<T> From<notify::Error<ChangeError<T>>> for ChangeError<T> {
 impl<E> From<std::io::Error> for ChangeError<E> {
     fn from(value: std::io::Error) -> Self {
         ChangeError::<E>::IoError(value)
+    }
+}
+impl<E> From<device::SendError<Command>> for ChangeError<E> {
+    fn from(value: device::SendError<Command>) -> Self {
+        ChangeError::<E>::SendError(value)
     }
 }
 impl<E> From<notify::Error<E>> for ChangeError<E> {
@@ -120,35 +126,29 @@ pub fn new<T: ClientConnection>(
     connection: T,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> Result<Client<T>, std::io::Error> {
-    connection
-        .write(&GetProperties {
-            version: INDI_PROTOCOL_VERSION.to_string(),
-            device: device.map(|x| String::from(x)),
-            name: parameter.map(|x| String::from(x)),
-        })
-        .expect("Unable to write command");
-    let (feedback, incoming_commands) = crossbeam_channel::unbounded();
-    let c = Client {
-        devices: Arc::new(Notify::new(HashMap::new())),
-        connection,
-        feedback,
-    };
+) -> Result<Client<T>, serialization::DeError> {
+    connection.write(&GetProperties {
+        version: INDI_PROTOCOL_VERSION.to_string(),
+        device: device.map(|x| String::from(x)),
+        name: parameter.map(|x| String::from(x)),
+    })?;
+    let (feedback, incoming_commands) = crossbeam_channel::unbounded::<Command>();
+    let feedback = Arc::new(Mutex::new(Some(feedback)));
 
-    let thread_connection = c.connection.clone_writer()?;
-    thread::spawn(move || {
+    let thread_connection = connection.clone_writer()?;
+    let writer_thread = thread::spawn(move || -> Result<(), serialization::DeError> {
         let mut xml_writer = Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
         for command in incoming_commands.iter() {
-            command
-                .write(&mut xml_writer)
-                .expect("Writing command to connection");
-            xml_writer.get_mut().flush().expect("Flushing connection");
+            command.write(&mut xml_writer)?;
+            xml_writer.get_mut().flush()?;
         }
+        Ok(())
     });
-
-    let thread_devices = c.devices.clone();
-    let connection_iter = c.connection.iter()?;
-    thread::spawn(move || {
+    let devices = Arc::new(Notify::new(HashMap::new()));
+    let thread_devices = devices.clone();
+    let connection_iter = connection.iter()?;
+    let thread_feedback = feedback.clone();
+    let reader_thread = thread::spawn(move || {
         for command in connection_iter {
             match command {
                 Ok(command) => {
@@ -170,15 +170,36 @@ pub fn new<T: ClientConnection>(
                 }
             }
         }
+        if let Ok(mut lock) = thread_feedback.lock() {
+            *lock = None;
+        }
     });
+    let c = Client {
+        devices,
+        feedback,
+        connection,
+        _writer_thread: Arc::new(writer_thread),
+        _reader_thread: Arc::new(reader_thread),
+    };
     Ok(c)
 }
 
 /// Struct used to keep track of a the devices and their properties.
-pub struct Client<T: ClientConnection + 'static> {
+pub struct Client<T: ClientConnection> {
     devices: Arc<Notify<MemoryDeviceStore>>,
+    feedback: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
     connection: T,
-    feedback: crossbeam_channel::Sender<Command>,
+    // Used for testing
+    _writer_thread: Arc<JoinHandle<Result<(), DeError>>>,
+    _reader_thread: Arc<JoinHandle<()>>,
+}
+
+impl<T: ClientConnection> Drop for Client<T> {
+    fn drop(&mut self) {
+        if let Err(e) = self.shutdown() {
+            dbg!(e);
+        }
+    }
 }
 
 impl<T: ClientConnection> Client<T> {
@@ -225,6 +246,10 @@ impl<T: ClientConnection> Client<T> {
     pub fn get_devices(&self) -> Arc<Notify<MemoryDeviceStore>> {
         self.devices.clone()
     }
+
+    pub fn shutdown(&self) -> Result<(), std::io::Error> {
+        self.connection.shutdown()
+    }
 }
 
 pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device>>>;
@@ -260,8 +285,8 @@ impl DeviceStore for MemoryDeviceStore {
 }
 
 pub trait ClientConnection {
-    type Read: std::io::Read + Send;
-    type Write: std::io::Write + Send;
+    type Read: std::io::Read + Send + 'static;
+    type Write: std::io::Write + Send + 'static;
 
     /// Creates an interator that yields commands from the the connected INDI server.
     /// Example usage:
@@ -314,6 +339,8 @@ pub trait ClientConnection {
         Ok(())
     }
 
+    fn shutdown(&self) -> Result<(), std::io::Error>;
+
     fn clone_reader(&self) -> Result<Self::Read, std::io::Error>;
     fn clone_writer(&self) -> Result<Self::Write, std::io::Error>;
 }
@@ -322,10 +349,62 @@ impl ClientConnection for TcpStream {
     type Read = TcpStream;
     type Write = TcpStream;
 
+    fn shutdown(&self) -> Result<(), std::io::Error> {
+        self.shutdown(Shutdown::Both)
+    }
+
     fn clone_reader(&self) -> Result<TcpStream, std::io::Error> {
         self.try_clone()
     }
     fn clone_writer(&self) -> Result<TcpStream, std::io::Error> {
         self.try_clone()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Instant;
+
+    use super::*;
+
+    fn wait_finished_timeout<T>(join_handle: &JoinHandle<T>, timeout: Duration) -> Result<(), ()> {
+        let start = Instant::now();
+        loop {
+            if join_handle.is_finished() {
+                return Ok(());
+            }
+            if start.elapsed() > timeout {
+                return Err(());
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+    #[test]
+    fn test_threads_stop_on_shutdown() {
+        let connection = TcpStream::connect("indi:7624").expect("connecting to indi");
+        let client = new(connection, None, None).expect("Making client");
+        assert!(wait_finished_timeout(&client._reader_thread, Duration::from_millis(100)).is_err());
+        assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_err());
+        client.shutdown().expect("Shuting down connection");
+
+        assert!(wait_finished_timeout(&client._reader_thread, Duration::from_millis(1000)).is_ok());
+        assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(1000)).is_ok());
+    }
+    #[test]
+    fn test_threads_stop_on_drop() {
+        let (_reader_thread, _writer_thread) = {
+            let connection = TcpStream::connect("indi:7624").expect("connecting to indi");
+            let client = new(connection, None, None).expect("Making client");
+            assert!(
+                wait_finished_timeout(&client._reader_thread, Duration::from_millis(100)).is_err()
+            );
+            assert!(
+                wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_err()
+            );
+
+            (client._reader_thread.clone(), client._writer_thread.clone())
+        };
+
+        assert!(wait_finished_timeout(&_reader_thread, Duration::from_millis(1000)).is_ok());
     }
 }

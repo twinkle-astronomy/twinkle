@@ -5,54 +5,22 @@ volumes:
     grafana_data: {}
 
 services:
-  prometheus:
-    image: prom/prometheus:v2.36.2
+  twinkle:
+    image: twinkle
+    build:
+      context: .
+      target: dev
     volumes:
-      - ./prometheus/:/etc/prometheus/
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    ports:
-      - 9090:9090
-
-  grafana:
-    image: grafana/grafana
+      - .:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - prometheus
-    ports:
-      - 3000:3000
-    volumes:
-      - grafana_data:/var/lib/grafana
+      - indi
 
-  indi_exporter:
-    image: indi_exporter
-    restart: always
+  indi:
+    image: indi
     build:
-      context: .
-      target: dev
-    volumes:
-      - .:/app
-    command:
-      "cargo run --bin indi_exporter -- ${INDI_EXPORTER_ARGS:-host.docker.internal:7624}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - 9186:9186
-
-  phd2_exporter:
-    image: phd2_exporter
-    restart: always
-    build:
-      context: .
-      target: dev
-    volumes:
-      - .:/app
-    command:
-      "cargo run --bin phd2_exporter -- ${PHD2_EXPORTER_ARGS:-host.docker.internal:4400}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - 9187:9187
+      dockerfile: Dockerfile.indi_server
+    command: indiserver indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel
+    # ports:
+    #   - "7624:7624"

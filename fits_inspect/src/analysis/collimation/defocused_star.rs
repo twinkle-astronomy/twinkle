@@ -60,12 +60,12 @@ impl CollimationCalculator for DefocusedStar {
             BORDER_CONSTANT,
             morphology_default_border_value()?,
         )?;
-        let (input, _) = (output, input);
+        let (mut input, _) = (output, input);
 
         let mut contours: opencv::core::Vector<opencv::core::Vector<opencv::core::Point>> =
             Default::default();
         opencv::imgproc::find_contours(
-            &input,
+            &mut input,
             &mut contours,
             RETR_LIST,
             CHAIN_APPROX_NONE,

@@ -1,6 +1,7 @@
 FROM rust:1.72-buster as dev
 
 RUN apt-get update && apt-get install -y --no-install-recommends libcfitsio-dev libopencv-dev clang libclang-dev && rm -rf /var/lib/apt/lists/*
+RUN rustup component add rustfmt
 
 RUN mkdir /app
 ENV HOME="/app"

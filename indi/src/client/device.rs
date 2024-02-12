@@ -232,19 +232,31 @@ impl FitsImage {
     }
 }
 
+#[derive(Debug)]
+pub enum SendError<T> {
+    Disconnected,
+    SendError(crossbeam_channel::SendError<T>),
+}
+
+impl<T> From<crossbeam_channel::SendError<T>> for SendError<T> {
+    fn from(value: crossbeam_channel::SendError<T>) -> Self {
+        SendError::SendError(value)
+    }
+}
+
 /// Object representing a device connected to an INDI server.
 #[derive(Clone)]
 pub struct ActiveDevice {
     name: String,
     device: Arc<Notify<Device>>,
-    command_sender: crossbeam_channel::Sender<Command>,
+    command_sender: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
 }
 
 impl ActiveDevice {
     pub fn new(
         name: String,
         device: Arc<Notify<Device>>,
-        command_sender: crossbeam_channel::Sender<Command>,
+        command_sender: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
     ) -> ActiveDevice {
         ActiveDevice {
             name,
@@ -255,8 +267,15 @@ impl ActiveDevice {
 
     /// Returns the sender used to send commands
     ///  to the associated INDI server connection.
-    pub fn sender(&self) -> &crossbeam_channel::Sender<Command> {
-        &self.command_sender
+    pub fn send(&self, c: Command) -> Result<(), SendError<Command>> {
+        let lock = self.command_sender.lock().expect("mutex");
+        match lock.as_ref() {
+            Some(sender) => {
+                sender.send(c)?;
+                Ok(())
+            }
+            None => Err(SendError::Disconnected),
+        }
     }
 }
 
@@ -327,11 +346,12 @@ impl ActiveDevice {
                 let c = values
                     .clone()
                     .to_command(device_name, String::from(param_name));
-                self.sender().send(c)?;
+                self.send(c)?;
             }
 
             param.get_timeout().unwrap_or(60)
-        }.min(1);
+        }
+        .min(1);
 
         let res = wait_fn::<_, ChangeError<Command>, _, _>(
             subscription,
@@ -381,7 +401,7 @@ impl ActiveDevice {
             let _ = self.get_parameter(name).await?;
         }
         let device_name = self.device.lock()?.name.clone();
-        if let Err(_) = self.sender().send(Command::EnableBlob(EnableBlob {
+        if let Err(_) = self.send(Command::EnableBlob(EnableBlob {
             device: device_name,
             name: name.map(|x| String::from(x)),
             enabled,
@@ -414,7 +434,10 @@ impl ActiveDevice {
     }
 
     /// Waits for and returns the next image from the given parameter.
-    pub async fn next_image(&self, image_param: &Notify<Parameter>) -> Result<FitsImage, ChangeError<Command>> {
+    pub async fn next_image(
+        &self,
+        image_param: &Notify<Parameter>,
+    ) -> Result<FitsImage, ChangeError<Command>> {
         let sub = image_param.changes();
 
         Ok(wait_fn(sub, Duration::from_secs(60), move |ccd| {
@@ -481,7 +504,7 @@ impl ActiveDevice {
 
         let c = vec![("CCD_EXPOSURE_VALUE", exposure)]
             .to_command(device_name.clone(), String::from("CCD_EXPOSURE"));
-        self.sender().send(c)?;
+        self.send(c)?;
 
         let mut previous_exposure_secs = exposure;
 
@@ -532,7 +555,7 @@ impl ActiveDevice {
             if *exposing_ondrop.lock().unwrap() {
                 let c = vec![("CCD_ABORT_EXPOSURE", true)]
                     .to_command(device_name.clone(), String::from("CCD_ABORT_EXPOSURE"));
-                if let Err(e) = self.sender().send(c) {
+                if let Err(e) = self.send(c) {
                     dbg!(e);
                 }
             }
