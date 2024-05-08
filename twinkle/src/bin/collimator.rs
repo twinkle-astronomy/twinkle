@@ -16,7 +16,7 @@ use twinkle_client::notify;
 
 #[derive(PartialEq, Debug, Clone)]
 enum Algo {
-    DefocusedStar,
+    // DefocusedStar,
     PeakOffset,
 }
 
@@ -24,7 +24,7 @@ enum Algo {
 struct Settings {
     center_radius: f32,
     image: Arc<ArrayD<u16>>,
-    defocused: fits_inspect::analysis::collimation::DefocusedStar,
+    // defocused: fits_inspect::analysis::collimation::DefocusedStar,
     peak_offset: fits_inspect::analysis::collimation::StarPeakOffset,
     algo: Algo,
 }
@@ -53,9 +53,9 @@ impl FitsViewerApp {
                 Settings {
                     center_radius: 0.02,
                     image: image.clone(),
-                    defocused: Default::default(),
+                    // defocused: Default::default(),
                     peak_offset: Default::default(),
-                    algo: Algo::DefocusedStar,
+                    algo: Algo::PeakOffset,
                 },
                 1,
             )),
@@ -78,17 +78,17 @@ impl FitsViewerApp {
                         };
                         let stats = Statistics::new(&settings.image.view());
                         match settings.algo {
-                            Algo::DefocusedStar => {
-                                let circles = settings
-                                    .defocused
-                                    .calculate(&settings.image)
-                                    .unwrap_or_else(|_x| Box::new(vec![].into_iter()));
+                            // Algo::DefocusedStar => {
+                            //     let circles = settings
+                            //         .defocused
+                            //         .calculate(&settings.image)
+                            //         .unwrap_or_else(|_x| Box::new(vec![].into_iter()));
 
-                                let mut fits_widget = calc_render.lock();
-                                fits_widget.set_fits(settings.image.clone());
-                                fits_widget.reset_stretch(&stats);
-                                fits_widget.set_elipses(circles.chain([center.into()]));
-                            }
+                            //     let mut fits_widget = calc_render.lock();
+                            //     fits_widget.set_fits(settings.image.clone());
+                            //     fits_widget.reset_stretch(&stats);
+                            //     fits_widget.set_elipses(circles.chain([center.into()]));
+                            // }
                             Algo::PeakOffset => {
                                 let circles = settings
                                     .peak_offset
@@ -174,7 +174,7 @@ impl eframe::App for FitsViewerApp {
             );
 
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut settings.algo, Algo::DefocusedStar, "Defocused Star");
+                // ui.selectable_value(&mut settings.algo, Algo::DefocusedStar, "Defocused Star");
                 ui.selectable_value(&mut settings.algo, Algo::PeakOffset, "Peak Offset");
             });
             ui.horizontal(|ui| {
@@ -182,13 +182,13 @@ impl eframe::App for FitsViewerApp {
             });
             // ui.separator();
             match settings.algo {
-                Algo::DefocusedStar => {
-                    ui.add(egui::Slider::new(&mut settings.defocused.blur, 0..=20).text("Blur"));
-                    ui.add(
-                        egui::Slider::new(&mut settings.defocused.threshold, 0.0..=100.0)
-                            .text("Threshold"),
-                    );
-                }
+                // Algo::DefocusedStar => {
+                //     ui.add(egui::Slider::new(&mut settings.defocused.blur, 0..=20).text("Blur"));
+                //     ui.add(
+                //         egui::Slider::new(&mut settings.defocused.threshold, 0.0..=100.0)
+                //             .text("Threshold"),
+                //     );
+                // }
                 Algo::PeakOffset => {
                     ui.add(
                         egui::Slider::new(&mut settings.peak_offset.threshold, 1.0..=20.0)

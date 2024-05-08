@@ -352,7 +352,7 @@ impl ActiveDevice {
 
             param.get_timeout().unwrap_or(60)
         }
-        .min(1);
+        .max(1);
 
         let res = wait_fn::<_, ChangeError<Command>, _, _>(
             subscription,

@@ -73,6 +73,7 @@ impl Runner {
 
         let task_status = status.clone();
         let task = tokio::spawn(async move {
+            let mut fp_level = 100.0;
             for (filter, _) in config.filters.iter().filter(|(_k, v)| **v) {
                 for (bin, _) in config.binnings.iter().filter(|(_k, v)| **v) {
                     for i in 1..=config.count {
@@ -84,11 +85,11 @@ impl Runner {
                             gain: config.gain,
                             offset: config.offset,
                             exposure: config.exposure,
-                            fp_level: 100.0,
+                            fp_level,
                         };
-                        let (fits, _prev_fp_level) =
+                        let (fits, next_fp_level) =
                             Runner::run(&task_status, config, telescope.clone()).await;
-
+                        fp_level = next_fp_level;
                         let root = telescope.root_path();
                         let filename = Path::new(&root);
                         let filename = filename

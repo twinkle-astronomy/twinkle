@@ -41,7 +41,7 @@ impl FlatApp {
             },
             primary_camera: String::from("ZWO CCD ASI294MM Pro"),
             focuser: String::from("ASI EAF"),
-            filter_wheel: String::from("ASI EFW"),
+            filter_wheel: String::from("ZWO EFW"),
             flat_panel: String::from("Deep Sky Dad FP1"),
         };
         let telescope = Arc::new(Telescope::new(addr, config));
@@ -83,7 +83,7 @@ impl FlatApp {
                 ui.label("Filter");
 
                 let filters = self.telescope.block_on(async {
-                    let efw = self.telescope.get_filter_wheel().await.unwrap();
+                    let efw = self.telescope.get_filter_wheel().await.expect("getting filter wheel");
 
                     efw.change("CONNECTION", vec![("CONNECT", true)])
                         .await
