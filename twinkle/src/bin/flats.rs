@@ -50,11 +50,11 @@ impl FlatApp {
             count: 30,
             filters: HashMap::default(),
             adu_target: u16::MAX / 2,
-            adu_margin: 1000,
+            adu_margin: 5000,
             binnings: HashMap::default(),
             gain: 120.0,
             offset: 10.0,
-            exposure: std::time::Duration::from_secs(2),
+            exposure: std::time::Duration::from_secs(3),
         };
 
         let newed: FlatApp = FlatApp {

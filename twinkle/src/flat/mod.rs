@@ -104,6 +104,16 @@ impl Runner {
                     }
                 }
             }
+            telescope
+                .get_flat_panel()
+                .await
+                .expect("Getting flat panel")
+                .change(
+                    "FLAT_LIGHT_CONTROL",
+                    vec![("FLAT_LIGHT_ON", SwitchState::Off)],
+                )
+                .await
+                .expect("Turning off FP");
         });
 
         Runner { status, task }

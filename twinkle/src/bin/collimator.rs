@@ -43,9 +43,9 @@ impl FitsViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Option<Self> {
         let gl = cc.gl.as_ref()?;
 
-        let mut fptr = FitsFile::open("~/test/test27.fits").unwrap();
-        let hdu = fptr.primary_hdu().unwrap();
-        let image: Arc<ArrayD<u16>> = Arc::new(hdu.read_image(&mut fptr).unwrap());
+        //let mut fptr = FitsFile::open("~/test/test27.fits").unwrap();
+        //let hdu = fptr.primary_hdu().unwrap();
+        let image: Arc<ArrayD<u16>> = Default::default();//Arc::new(hdu.read_image(&mut fptr).unwrap());
 
         let newed = FitsViewerApp {
             fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
