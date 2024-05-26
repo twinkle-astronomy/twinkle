@@ -1,10 +1,11 @@
-use std::sync::{Arc, PoisonError};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
-    sync::{Mutex, MutexGuard},
 };
+
+use tokio::sync::{Mutex, MutexGuard};
 
 use tokio_stream::StreamExt as _;
 
@@ -13,15 +14,9 @@ pub enum Error<E> {
     Timeout,
     Canceled,
     EndOfStream,
-    PoisonError,
     Abort(E),
 }
 
-impl<E, T> From<PoisonError<E>> for Error<T> {
-    fn from(_: PoisonError<E>) -> Self {
-        Error::PoisonError
-    }
-}
 pub enum Status<S> {
     Pending,
     Complete(S),
@@ -64,7 +59,7 @@ pub async fn wait_fn<S, E, T: Clone + Send + 'static, F: FnMut(T) -> Result<Stat
 /// other parts of your application to subscribe and wait for changes.
 pub struct Notify<T> {
     subject: Mutex<Arc<T>>,
-    to_notify: Mutex<tokio::sync::broadcast::Sender<Arc<T>>>,
+    to_notify: tokio::sync::broadcast::Sender<Arc<T>>,
 }
 
 impl<T: Debug> Debug for Notify<T> {
@@ -77,28 +72,28 @@ impl<T> Notify<T> {
     /// Returns a new `Notify<T>`
     /// # Example
     /// ```
-    /// use twinkle_client::Notify;
+    /// use twinkle_client::notify::Notify;
     /// let notify: Notify<i32> = Notify::new(42);
     /// ```
     pub fn new(value: T) -> Notify<T> {
         let (tx, _) = tokio::sync::broadcast::channel(1024);
         Notify {
             subject: Mutex::new(Arc::new(value)),
-            to_notify: Mutex::new(tx),
+            to_notify: tx,
         }
     }
 
     /// Returns a new `Notify<T>` with a given channel size
     /// # Example
     /// ```
-    /// use twinkle_client::Notify;
+    /// use twinkle_client::notify::Notify;
     /// let notify: Notify<i32> = Notify::new(42);
     /// ```
     pub fn new_with_size(value: T, size: usize) -> Notify<T> {
         let (tx, _) = tokio::sync::broadcast::channel(size);
         Notify {
             subject: Mutex::new(Arc::new(value)),
-            to_notify: Mutex::new(tx),
+            to_notify: tx,
         }
     }
 }
@@ -109,43 +104,43 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     /// the value stored in the `Notify<T>`.  The lock is exclusive,
     /// and only one lock will be held at a time. Use this method to find the current
     /// value, or to modify the value.
-    /// # Errors
-    /// If another user of this notify panicked while holding the lock, then this call will return an error.  See [std::sync::Mutex] for more details.
     ///
     /// # Example
     /// ```
-    /// use twinkle_client::Notify;
-    /// let notify: Notify<i32> = Notify::new(42);
-    /// assert_eq!(*notify.lock().unwrap(), 42);
-    /// {
-    ///     let mut lock = notify.lock().unwrap();
-    ///     *lock = 43;
+    /// use twinkle_client::notify::Notify;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let notify: Notify<i32> = Notify::new(42);
+    ///     assert_eq!(*notify.lock().await, 42);
+    ///     {
+    ///         let mut lock = notify.lock().await;
+    ///         *lock = 43;
+    ///     }
+    ///     assert_eq!(*notify.lock().await, 43);
     /// }
-    /// assert_eq!(*notify.lock().unwrap(), 43);
+
     /// ```
-    pub fn lock(&self) -> Result<NotifyMutexGuard<T>, PoisonError<MutexGuard<Arc<T>>>> {
-        Ok(NotifyMutexGuard {
-            guard: self.subject.lock()?,
-            to_notify: self,
+    pub async fn lock(&self) -> NotifyMutexGuard<T> {
+        NotifyMutexGuard {
+            guard: self.subject.lock().await,
+            to_notify: &self.to_notify,
             should_notify: false,
-        })
+        }
     }
 
     /// Returns a [`BroadcastStream<Arc<T>>`](tokio_stream::wrappers::BroadcastStream) of the values
     /// wrapped in an `Arc` held by `self` over time.  The returned stream's first value will be the current value
     /// at the time this method is called, and new values will be sent to the stream.  The stream will terminate
     /// when self is dropped. Calling this method locks the value momentarily to read the value, but the value is
-    /// not locked on return.  
-    /// # Errors
-    /// If another user of this notify panicked while holding the lock, then this call will return an error.  See [std::sync::Mutex] for more details.
+    /// not locked on return.
     ///
     /// # Example
     /// ```
-    /// use twinkle_client::Notify;
+    /// use twinkle_client::notify::Notify;
     /// use tokio_stream::StreamExt;
     /// use std::sync::Arc;
-    /// fn increment( notify: &mut Notify<i32>) {
-    ///     let mut lock = notify.lock().unwrap();
+    /// async fn increment( notify: &mut Notify<i32>) {
+    ///     let mut lock = notify.lock().await;
     ///     *lock = *lock + 1;
     /// }
     ///
@@ -153,10 +148,10 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     /// async fn main() {
     ///     let mut sub = {
     ///         let mut notify = Notify::new(0);
-    ///         let sub = notify.subscribe().unwrap();
-    ///         increment(&mut notify);
-    ///         increment(&mut notify);
-    ///         increment(&mut notify);
+    ///         let sub = notify.subscribe().await;
+    ///         increment(&mut notify).await;
+    ///         increment(&mut notify).await;
+    ///         increment(&mut notify).await;
     ///         sub
     ///     };
     ///     
@@ -167,15 +162,11 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await, None);
     /// }
     /// ```
-    pub fn subscribe(
-        &self,
-    ) -> Result<tokio_stream::wrappers::BroadcastStream<Arc<T>>, PoisonError<MutexGuard<Arc<T>>>>
-    {
-        let subject = self.subject.lock()?;
-        let sender = self.to_notify.lock().unwrap();
-        let recv = sender.subscribe();
-        sender.send(subject.deref().clone()).ok();
-        Ok(tokio_stream::wrappers::BroadcastStream::new(recv))
+    pub async fn subscribe(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
+        let subject = self.subject.lock().await;
+        let recv = self.to_notify.subscribe();
+        self.to_notify.send(subject.deref().clone()).ok();
+        tokio_stream::wrappers::BroadcastStream::new(recv)
     }
 
     /// Returns a [`BroadcastStream<Arc<T>>`](tokio_stream::wrappers::BroadcastStream) of the values
@@ -184,11 +175,11 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///
     /// # Example
     /// ```
-    /// use twinkle_client::Notify;
+    /// use twinkle_client::notify::Notify;
     /// use tokio_stream::StreamExt;
     /// use std::sync::Arc;
-    /// fn increment( notify: &mut Notify<i32>) {
-    ///     let mut lock = notify.lock().unwrap();
+    /// async fn increment( notify: &mut Notify<i32>) {
+    ///     let mut lock = notify.lock().await;
     ///     *lock = *lock + 1;
     /// }
     ///
@@ -196,10 +187,10 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     /// async fn main() {
     ///     let mut sub = {
     ///         let mut notify = Notify::new(0);
-    ///         let sub = notify.changes();
-    ///         increment(&mut notify);
-    ///         increment(&mut notify);
-    ///         increment(&mut notify);
+    ///         let sub = notify.changes().await;
+    ///         increment(&mut notify).await;
+    ///         increment(&mut notify).await;
+    ///         increment(&mut notify).await;
     ///         sub
     ///     };
     ///     
@@ -209,20 +200,20 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await, None);
     /// }
     /// ```
-    pub fn changes(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
-        tokio_stream::wrappers::BroadcastStream::new(self.to_notify.lock().unwrap().subscribe())
+    pub async fn changes(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
+        tokio_stream::wrappers::BroadcastStream::new(self.to_notify.subscribe())
     }
 }
 
 pub struct NotifyMutexGuard<'a, T> {
     guard: MutexGuard<'a, Arc<T>>,
-    to_notify: &'a Notify<T>,
+    to_notify: &'a tokio::sync::broadcast::Sender<std::sync::Arc<T>>,
     should_notify: bool,
 }
 
 impl<'a, T: Debug> Debug for NotifyMutexGuard<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.to_notify.subject.fmt(f)
+        self.guard.fmt(f)
     }
 }
 
@@ -256,14 +247,14 @@ impl<'a, T> Drop for NotifyMutexGuard<'a, T> {
     /// then the current value will be broadcast to all broadcast streams listening for changes.
     fn drop(&mut self) {
         if self.should_notify {
-            let sender = self.to_notify.to_notify.lock().unwrap();
-            sender.send(self.guard.deref().clone()).ok();
+            self.to_notify.send(self.guard.deref().clone()).ok();
         }
     }
 }
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::sync::Mutex as StdMutex;
     use std::{thread, time::Duration};
 
     #[tokio::test]
@@ -273,7 +264,7 @@ mod test {
             let n = Arc::new(Notify::new(-1));
 
             for _ in 0..10 {
-                let mut r = n.changes();
+                let mut r = n.changes().await;
                 joins.push(tokio::spawn(async move {
                     let mut prev = r.next().await.unwrap().unwrap();
                     loop {
@@ -292,7 +283,7 @@ mod test {
             }
 
             for i in 0..=90 {
-                let mut l = n.lock().unwrap();
+                let mut l = n.lock().await;
                 *l = i;
             }
         }
@@ -304,14 +295,14 @@ mod test {
     #[tokio::test]
     async fn test_notify_on_mut() {
         let n = Arc::new(Notify::new(0));
-        let mut r = n.changes();
+        let mut r = n.changes().await;
         let thread_n = n.clone();
-        let j = thread::spawn(move || {
+        let j = tokio::spawn(async move {
             {
-                let _no_mut = thread_n.lock();
+                let _no_mut = thread_n.lock().await;
             }
             {
-                let mut with_mut = thread_n.lock().unwrap();
+                let mut with_mut = thread_n.lock().await;
                 *with_mut = 1;
             }
         });
@@ -323,18 +314,18 @@ mod test {
             .is_err());
         assert_eq!(*update, 1);
 
-        j.join().unwrap();
+        j.await.unwrap();
     }
 
     #[tokio::test]
     async fn test_wakes() {
         let notify: Arc<Notify<u32>> = Arc::new(Notify::new(0));
 
-        let count = Arc::new(Mutex::new(0));
+        let count = Arc::new(StdMutex::new(0));
         let count_thread = count.clone();
         let thread_notify = notify.clone();
         let j = tokio::spawn(wait_fn::<(), (), _, _>(
-            thread_notify.subscribe().unwrap(),
+            thread_notify.subscribe().await,
             Duration::from_secs(1),
             move |iteration| {
                 {
@@ -351,7 +342,7 @@ mod test {
         // ugly race-based thread syncronization
         thread::sleep(Duration::from_millis(100));
         for i in 0..=9 {
-            let mut lock = notify.lock().unwrap();
+            let mut lock = notify.lock().await;
             *lock = i;
         }
 
@@ -366,7 +357,7 @@ mod test {
     async fn test_cancel_wait_fn() {
         async {}.await;
         let notify: Arc<Notify<u32>> = Arc::new(Notify::new(0));
-        let subscription = notify.subscribe().unwrap();
+        let subscription = notify.subscribe().await;
         // let mut thread_subscription = subscription.clone();
         let fut = async move {
             wait_fn::<(), (), Arc<u32>, _>(subscription, Duration::from_secs(10), |x| {
