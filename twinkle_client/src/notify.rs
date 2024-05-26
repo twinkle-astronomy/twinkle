@@ -187,7 +187,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     /// async fn main() {
     ///     let mut sub = {
     ///         let mut notify = Notify::new(0);
-    ///         let sub = notify.changes().await;
+    ///         let sub = notify.changes();
     ///         increment(&mut notify).await;
     ///         increment(&mut notify).await;
     ///         increment(&mut notify).await;
@@ -200,7 +200,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await, None);
     /// }
     /// ```
-    pub async fn changes(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
+    pub fn changes(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
         tokio_stream::wrappers::BroadcastStream::new(self.to_notify.subscribe())
     }
 }
@@ -264,7 +264,7 @@ mod test {
             let n = Arc::new(Notify::new(-1));
 
             for _ in 0..10 {
-                let mut r = n.changes().await;
+                let mut r = n.changes();
                 joins.push(tokio::spawn(async move {
                     let mut prev = r.next().await.unwrap().unwrap();
                     loop {
@@ -295,7 +295,7 @@ mod test {
     #[tokio::test]
     async fn test_notify_on_mut() {
         let n = Arc::new(Notify::new(0));
-        let mut r = n.changes().await;
+        let mut r = n.changes();
         let thread_n = n.clone();
         let j = tokio::spawn(async move {
             {
