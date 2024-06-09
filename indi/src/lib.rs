@@ -23,13 +23,13 @@
 //! ```no_run
 //! use std::net::TcpStream;
 //! use indi::client::ClientConnection;
-//!
+//! use crate::indi::client::CommandWriter;
 //! fn main() {
 //!     // Connect to local INDI server.
 //!     let connection = TcpStream::connect("127.0.0.1:7624").expect("Connecting to INDI server");
 //!
 //!     // Write command to server instructing it to track all properties.
-//!     connection.write(&indi::serialization::GetProperties {
+//!     connection.writer().unwrap().write(&indi::serialization::GetProperties {
 //!         version: indi::INDI_PROTOCOL_VERSION.to_string(),
 //!         device: None,
 //!         name: None,
@@ -37,7 +37,7 @@
 //!     .expect("Sending GetProperties command");
 //!
 //!     // Loop through commands recieved from the INDI server
-//!     for command in connection.iter().expect("Creating iterator over commands") {
+//!     for command in connection.reader().expect("Creating iterator over commands") {
 //!         println!("Received from server: {:?}", command);
 //!     }
 //! }

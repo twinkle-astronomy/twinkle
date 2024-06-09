@@ -1,22 +1,18 @@
 pub mod device;
-// pub mod notify;
+pub mod tcpstream;
+
 use twinkle_client;
 
 use std::{
     collections::HashMap,
-    io::{BufReader, BufWriter, Write},
-    net::{Shutdown, TcpStream},
     sync::{Arc, Mutex, PoisonError},
     thread::sleep,
     time::Duration,
 };
 
-use quick_xml::{de::IoReader, Writer};
-
 use self::device::ParamUpdateResult;
 use crate::{
-    serialization::{self, CommandIter},
-    Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
+    serialization, Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
     INDI_PROTOCOL_VERSION,
 };
 pub use twinkle_client::notify::{self, wait_fn, Notify};
@@ -126,28 +122,30 @@ pub fn new<T: ClientConnection>(
     device: Option<&str>,
     parameter: Option<&str>,
 ) -> Result<Client<T>, serialization::DeError> {
-    connection.write(&GetProperties {
+    let (feedback, incoming_commands) = crossbeam_channel::unbounded::<Command>();
+    let feedback = Arc::new(Mutex::new(Some(feedback)));
+
+    let writer = connection.writer()?;
+
+    writer.write(&GetProperties {
         version: INDI_PROTOCOL_VERSION.to_string(),
         device: device.map(|x| String::from(x)),
         name: parameter.map(|x| String::from(x)),
     })?;
-    let (feedback, incoming_commands) = crossbeam_channel::unbounded::<Command>();
-    let feedback = Arc::new(Mutex::new(Some(feedback)));
-
-    let thread_connection = connection.clone_writer()?;
     let writer_thread =
         tokio::task::spawn_blocking(move || -> Result<(), serialization::DeError> {
-            let mut xml_writer =
-                Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
+            // let mut xml_writer =
+            //     Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
             for command in incoming_commands.iter() {
-                command.write(&mut xml_writer)?;
-                xml_writer.get_mut().flush()?;
+                writer.write(&command)?;
+                // command.write(&mut xml_writer)?;
+                // xml_writer.get_mut().flush()?;
             }
             Ok(())
         });
     let devices = Arc::new(Notify::new(HashMap::new()));
     let thread_devices = devices.clone();
-    let connection_iter = connection.iter()?;
+    let connection_iter = connection.reader()?;
     let thread_feedback = feedback.clone();
     let reader_thread = tokio::spawn(async move {
         for command in connection_iter {
@@ -302,8 +300,9 @@ pub trait ClientConnection {
     /// use crate::indi::client::{ClientConnection, DeviceStore};
     /// use crate::indi::client::device::Device;
     /// use std::net::TcpStream;
+    /// use crate::indi::client::CommandWriter;
     /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
-    /// connection.write(&indi::serialization::GetProperties {
+    /// connection.writer().unwrap().write(&indi::serialization::GetProperties {
     ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
     ///     device: None,
     ///     name: None,
@@ -311,113 +310,32 @@ pub trait ClientConnection {
     ///
     /// let mut client = HashMap::<String, Device>::new();
     ///
-    /// for command in connection.iter().unwrap() {
+    /// for command in connection.reader().unwrap() {
     ///     println!("Command: {:?}", command);
     /// }
-    fn iter<'a>(
+    fn reader(
         &self,
-    ) -> Result<
-        CommandIter<'a, IoReader<BufReader<<Self as ClientConnection>::Read>>>,
-        std::io::Error,
-    > {
-        Ok(CommandIter::new(BufReader::new(self.clone_reader()?)))
-    }
+    ) -> Result<impl Iterator<Item = Result<Command, DeError>> + Send + 'static, std::io::Error>;
 
     /// Sends the given INDI command to the connected server.  Consumes the command.
     /// Example usage:
     /// ```no_run
     /// use crate::indi::client::ClientConnection;
     /// use std::net::TcpStream;
+    /// use std::io::Write;
+    /// use crate::indi::client::CommandWriter;
     /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
-    /// connection.write(&indi::serialization::GetProperties {
+    /// connection.writer().unwrap().write(&indi::serialization::GetProperties {
     ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
     ///     device: None,
     ///     name: None,
     /// }).unwrap();
     ///
-    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>
-    where
-        <Self as ClientConnection>::Write: std::io::Write,
-    {
-        let mut xml_writer = Writer::new_with_indent(BufWriter::new(self.clone_writer()?), b' ', 2);
-
-        command.write(&mut xml_writer)?;
-        xml_writer.into_inner().flush()?;
-        Ok(())
-    }
+    fn writer(&self) -> Result<impl CommandWriter + Send + 'static, DeError>;
 
     fn shutdown(&self) -> Result<(), std::io::Error>;
-
-    fn clone_reader(&self) -> Result<Self::Read, std::io::Error>;
-    fn clone_writer(&self) -> Result<Self::Write, std::io::Error>;
 }
 
-impl ClientConnection for TcpStream {
-    type Read = TcpStream;
-    type Write = TcpStream;
-
-    fn iter<'a>(
-        &self,
-    ) -> Result<
-        CommandIter<'a, IoReader<BufReader<<Self as ClientConnection>::Read>>>,
-        std::io::Error,
-    > {
-        Ok(CommandIter::new(BufReader::new(self.clone_reader()?)))
-    }
-
-    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>
-    where
-        <Self as ClientConnection>::Write: std::io::Write,
-    {
-        let mut xml_writer = Writer::new_with_indent(BufWriter::new(self.clone_writer()?), b' ', 2);
-
-        command.write(&mut xml_writer)?;
-        xml_writer.into_inner().flush()?;
-        Ok(())
-    }
-
-    fn shutdown(&self) -> Result<(), std::io::Error> {
-        self.shutdown(Shutdown::Both)
-    }
-
-    fn clone_reader(&self) -> Result<TcpStream, std::io::Error> {
-        self.try_clone()
-    }
-    fn clone_writer(&self) -> Result<TcpStream, std::io::Error> {
-        self.try_clone()
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::thread;
-    use std::time::Instant;
-
-    use super::*;
-
-    fn wait_finished_timeout<T>(
-        join_handle: &tokio::task::JoinHandle<T>,
-        timeout: Duration,
-    ) -> Result<(), ()> {
-        let start = Instant::now();
-
-        loop {
-            if join_handle.is_finished() {
-                return Ok(());
-            }
-            if start.elapsed() > timeout {
-                return Err(());
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-    }
-
-    #[tokio::test]
-    async fn test_threads_stop_on_shutdown() {
-        let connection = TcpStream::connect("indi:7624").expect("connecting to indi");
-        let client = new(connection, None, None).expect("Making client");
-        assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_err());
-        client.shutdown().expect("Shuting down connection");
-        assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_ok());
-    }
+pub trait CommandWriter {
+    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>;
 }
