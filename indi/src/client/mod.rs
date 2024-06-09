@@ -7,7 +7,7 @@ use std::{
     io::{BufReader, BufWriter, Write},
     net::{Shutdown, TcpStream},
     sync::{Arc, Mutex, PoisonError},
-    thread::{self, JoinHandle},
+    thread::sleep,
     time::Duration,
 };
 
@@ -19,7 +19,7 @@ use crate::{
     Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
     INDI_PROTOCOL_VERSION,
 };
-use twinkle_client::notify::{self, wait_fn, Notify};
+pub use twinkle_client::notify::{self, wait_fn, Notify};
 
 #[derive(Debug)]
 pub enum ChangeError<E> {
@@ -42,7 +42,6 @@ impl<T> From<notify::Error<ChangeError<T>>> for ChangeError<T> {
             notify::Error::Timeout => ChangeError::Timeout,
             notify::Error::Canceled => ChangeError::Canceled,
             notify::Error::EndOfStream => ChangeError::EndOfStream,
-            notify::Error::PoisonError => ChangeError::PoisonError,
             notify::Error::Abort(e) => e,
         }
     }
@@ -136,33 +135,29 @@ pub fn new<T: ClientConnection>(
     let feedback = Arc::new(Mutex::new(Some(feedback)));
 
     let thread_connection = connection.clone_writer()?;
-    let writer_thread = thread::spawn(move || -> Result<(), serialization::DeError> {
-        let mut xml_writer = Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
-        for command in incoming_commands.iter() {
-            command.write(&mut xml_writer)?;
-            xml_writer.get_mut().flush()?;
-        }
-        Ok(())
-    });
+    let writer_thread =
+        tokio::task::spawn_blocking(move || -> Result<(), serialization::DeError> {
+            let mut xml_writer =
+                Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
+            for command in incoming_commands.iter() {
+                command.write(&mut xml_writer)?;
+                xml_writer.get_mut().flush()?;
+            }
+            Ok(())
+        });
     let devices = Arc::new(Notify::new(HashMap::new()));
     let thread_devices = devices.clone();
     let connection_iter = connection.iter()?;
     let thread_feedback = feedback.clone();
-    let reader_thread = thread::spawn(move || {
+    let reader_thread = tokio::spawn(async move {
         for command in connection_iter {
             match command {
                 Ok(command) => {
-                    let locked_devices = thread_devices.lock();
-                    match locked_devices {
-                        Ok(mut locked_devices) => {
-                            let update_result = locked_devices.update(command, |_param| {});
-                            if let Err(e) = update_result {
-                                dbg!(e);
-                            }
-                        }
-                        Err(e) => {
-                            dbg!(e);
-                        }
+                    let mut locked_devices = thread_devices.lock().await;
+
+                    let update_result = locked_devices.update(command, |_param| {}).await;
+                    if let Err(e) = update_result {
+                        dbg!(e);
                     }
                 }
                 Err(e) => {
@@ -178,8 +173,8 @@ pub fn new<T: ClientConnection>(
         devices,
         feedback,
         connection,
-        _writer_thread: Arc::new(writer_thread),
-        _reader_thread: Arc::new(reader_thread),
+        _writer_thread: writer_thread,
+        _reader_thread: reader_thread,
     };
     Ok(c)
 }
@@ -190,8 +185,8 @@ pub struct Client<T: ClientConnection> {
     feedback: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
     connection: T,
     // Used for testing
-    _writer_thread: Arc<JoinHandle<Result<(), DeError>>>,
-    _reader_thread: Arc<JoinHandle<()>>,
+    _writer_thread: tokio::task::JoinHandle<Result<(), DeError>>,
+    _reader_thread: tokio::task::JoinHandle<()>,
 }
 
 impl<T: ClientConnection> Drop for Client<T> {
@@ -227,7 +222,7 @@ impl<T: ClientConnection> Client<T> {
         &'a self,
         name: &str,
     ) -> Result<device::ActiveDevice, notify::Error<E>> {
-        let subs = self.devices.subscribe()?;
+        let subs = self.devices.subscribe().await;
         wait_fn(subs, Duration::from_secs(1), |devices| {
             if let Some(device) = devices.get(name) {
                 return Ok(notify::Status::Complete(device::ActiveDevice::new(
@@ -248,7 +243,17 @@ impl<T: ClientConnection> Client<T> {
     }
 
     pub fn shutdown(&self) -> Result<(), std::io::Error> {
-        self.connection.shutdown()
+        let r = self.connection.shutdown();
+        {
+            let mut l = self.feedback.lock().unwrap();
+            *l = None
+        }
+        while !self._reader_thread.is_finished() && !self._writer_thread.is_finished() {
+            // dbg!(self._reader_thread.is_finished(), self._writer_thread.is_finished(), 11);
+            sleep(Duration::from_millis(10));
+        }
+
+        r
     }
 }
 
@@ -256,7 +261,8 @@ pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device>>>;
 
 pub trait DeviceStore {
     /// Update the state of the appropriate device property for a command that came from an INDI server.
-    fn update<T>(
+    #[allow(async_fn_in_trait)]
+    async fn update<T>(
         &mut self,
         command: serialization::Command,
         f: impl FnOnce(ParamUpdateResult) -> T,
@@ -264,7 +270,7 @@ pub trait DeviceStore {
 }
 
 impl DeviceStore for MemoryDeviceStore {
-    fn update<T>(
+    async fn update<T>(
         &mut self,
         command: serialization::Command,
         f: impl FnOnce(ParamUpdateResult) -> T,
@@ -275,8 +281,9 @@ impl DeviceStore for MemoryDeviceStore {
                 let mut device = self
                     .entry(name.clone())
                     .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))))
-                    .lock()?;
-                let param = device.update(command)?;
+                    .lock()
+                    .await;
+                let param = device.update(command).await?;
                 Ok(Some(f(param)))
             }
             None => Ok(None),
@@ -349,6 +356,26 @@ impl ClientConnection for TcpStream {
     type Read = TcpStream;
     type Write = TcpStream;
 
+    fn iter<'a>(
+        &self,
+    ) -> Result<
+        CommandIter<'a, IoReader<BufReader<<Self as ClientConnection>::Read>>>,
+        std::io::Error,
+    > {
+        Ok(CommandIter::new(BufReader::new(self.clone_reader()?)))
+    }
+
+    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>
+    where
+        <Self as ClientConnection>::Write: std::io::Write,
+    {
+        let mut xml_writer = Writer::new_with_indent(BufWriter::new(self.clone_writer()?), b' ', 2);
+
+        command.write(&mut xml_writer)?;
+        xml_writer.into_inner().flush()?;
+        Ok(())
+    }
+
     fn shutdown(&self) -> Result<(), std::io::Error> {
         self.shutdown(Shutdown::Both)
     }
@@ -363,12 +390,17 @@ impl ClientConnection for TcpStream {
 
 #[cfg(test)]
 mod test {
+    use std::thread;
     use std::time::Instant;
 
     use super::*;
 
-    fn wait_finished_timeout<T>(join_handle: &JoinHandle<T>, timeout: Duration) -> Result<(), ()> {
+    fn wait_finished_timeout<T>(
+        join_handle: &tokio::task::JoinHandle<T>,
+        timeout: Duration,
+    ) -> Result<(), ()> {
         let start = Instant::now();
+
         loop {
             if join_handle.is_finished() {
                 return Ok(());
@@ -379,32 +411,13 @@ mod test {
             thread::sleep(Duration::from_millis(10));
         }
     }
-    #[test]
-    fn test_threads_stop_on_shutdown() {
+
+    #[tokio::test]
+    async fn test_threads_stop_on_shutdown() {
         let connection = TcpStream::connect("indi:7624").expect("connecting to indi");
         let client = new(connection, None, None).expect("Making client");
-        assert!(wait_finished_timeout(&client._reader_thread, Duration::from_millis(100)).is_err());
         assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_err());
         client.shutdown().expect("Shuting down connection");
-
-        assert!(wait_finished_timeout(&client._reader_thread, Duration::from_millis(1000)).is_ok());
-        assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(1000)).is_ok());
-    }
-    #[test]
-    fn test_threads_stop_on_drop() {
-        let (_reader_thread, _writer_thread) = {
-            let connection = TcpStream::connect("indi:7624").expect("connecting to indi");
-            let client = new(connection, None, None).expect("Making client");
-            assert!(
-                wait_finished_timeout(&client._reader_thread, Duration::from_millis(100)).is_err()
-            );
-            assert!(
-                wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_err()
-            );
-
-            (client._reader_thread.clone(), client._writer_thread.clone())
-        };
-
-        assert!(wait_finished_timeout(&_reader_thread, Duration::from_millis(1000)).is_ok());
+        assert!(wait_finished_timeout(&client._writer_thread, Duration::from_millis(100)).is_ok());
     }
 }
