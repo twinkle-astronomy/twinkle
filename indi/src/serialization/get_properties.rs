@@ -1,37 +1,13 @@
-use quick_xml::Writer;
-
-use super::super::*;
-use super::*;
-
-impl XmlSerialization for GetProperties {
-    fn write<'a, T: std::io::Write>(
-        &self,
-        xml_writer: &'a mut Writer<T>,
-    ) -> XmlResult<&'a mut Writer<T>> {
-        let mut creator = xml_writer
-            .create_element("getProperties")
-            .with_attribute(("version", &*self.version));
-
-        if let Some(device) = &self.device {
-            creator = creator.with_attribute(("device", &device[..]));
-        }
-        if let Some(name) = &self.name {
-            creator = creator.with_attribute(("name", &name[..]));
-        }
-
-        creator.write_empty()?;
-        Ok(xml_writer)
-    }
-}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::io::Cursor;
+    use std::str::FromStr;
+
+    use crate::GetProperties;
 
     #[test]
     fn test_send_get_properties() {
-        let mut writer = Writer::new(Cursor::new(Vec::new()));
+        // let mut writer = Writer::new(Cursor::new(Vec::new()));
 
         let command = GetProperties {
             version: String::from_str("1.7").unwrap(),
@@ -39,11 +15,9 @@ mod tests {
             name: None,
         };
 
-        command.write(&mut writer).unwrap();
-
-        let result = writer.into_inner().into_inner();
+        let result = quick_xml::se::to_string(&command).unwrap();
         assert_eq!(
-            String::from_utf8(result).unwrap(),
+            result,
             String::from_str("<getProperties version=\"1.7\" device=\"CCD Simulator\"/>").unwrap()
         );
     }

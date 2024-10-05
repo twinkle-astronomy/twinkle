@@ -21,23 +21,30 @@
 //! The simpliest way to use this crate is to open a [TcpStream](std::net::TcpStream) and read/write INDI [commands](crate::serialization::Command).
 //! #### Example
 //! ```no_run
-//! use std::net::TcpStream;
-//! use indi::client::ClientConnection;
-//! use crate::indi::client::CommandWriter;
-//! fn main() {
+//! use tokio::net::TcpStream;
+//! use tokio_stream::{Stream, StreamExt};
+//! use crate::indi::client::{AsyncClientConnection,AsyncReadConnection,AsyncWriteConnection};
+//! #[tokio::main]
+//! async fn main() {
 //!     // Connect to local INDI server.
-//!     let connection = TcpStream::connect("127.0.0.1:7624").expect("Connecting to INDI server");
+//!     let connection = TcpStream::connect("127.0.0.1:7624").await.expect("Connecting to INDI server");
+//!     let (mut writer, mut reader) = connection.to_indi();
 //!
 //!     // Write command to server instructing it to track all properties.
-//!     connection.writer().unwrap().write(&indi::serialization::GetProperties {
+//!     writer.write(indi::serialization::Command::GetProperties(indi::serialization::GetProperties {
 //!         version: indi::INDI_PROTOCOL_VERSION.to_string(),
 //!         device: None,
 //!         name: None,
-//!     })
+//!     }))
+//!     .await
 //!     .expect("Sending GetProperties command");
 //!
 //!     // Loop through commands recieved from the INDI server
-//!     for command in connection.reader().expect("Creating iterator over commands") {
+//!     loop {
+//!         let command = match reader.read().await {
+//!             Some(command) => command,
+//!             None => break,
+//!         }.unwrap();
 //!         println!("Received from server: {:?}", command);
 //!     }
 //! }
@@ -50,13 +57,13 @@
 //! #### Example
 //! ```no_run
 //! use std::time::Duration;
-//! use std::net::TcpStream;
+//! use tokio::net::TcpStream;
 //!
 //! #[tokio::main]
 //! async fn main() {
 //!     // Create a client with a connection to localhost listening for all device properties.
 //!     let client = indi::client::new(
-//!         TcpStream::connect("127.0.0.1:7624").expect("Connecting to INDI server"),
+//!         TcpStream::connect("127.0.0.1:7624").await.expect("Connecting to INDI server"),
 //!         None,
 //!         None).expect("Initializing connection");
 //!
@@ -97,10 +104,8 @@
 //! }
 
 use quick_xml::events::attributes::AttrError;
-use quick_xml::events::BytesText;
-use quick_xml::Result as XmlResult;
-use quick_xml::Writer;
 use serde::Deserialize;
+use serde::Serialize;
 
 use std::borrow::Cow;
 
@@ -123,7 +128,7 @@ use serialization::*;
 
 pub mod client;
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum PropertyState {
     Idle,
     Ok,
@@ -131,20 +136,20 @@ pub enum PropertyState {
     Alert,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum SwitchState {
     On,
     Off,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum SwitchRule {
     OneOfMany,
     AtMostOne,
     AnyOfMany,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum PropertyPerm {
     #[serde(rename = "ro")]
     RO,
@@ -154,7 +159,7 @@ pub enum PropertyPerm {
     RW,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum BlobEnable {
     Never,
     Also,

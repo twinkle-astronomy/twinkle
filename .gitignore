@@ -1,2 +1,9 @@
 target/
 .bash_history
+.vscode-server
+.local/
+.ssh/
+.gitconfig
+.dotnet
+.cache
+.gnupg

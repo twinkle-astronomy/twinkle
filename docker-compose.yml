@@ -7,6 +7,7 @@ volumes:
 services:
   twinkle:
     image: twinkle
+    tty: true
     build:
       context: .
       target: dev
@@ -21,6 +22,6 @@ services:
     image: indi
     build:
       dockerfile: Dockerfile.indi_server
-    command: indiserver indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel
-    # ports:
-    #   - "7624:7624"
+    command: indiserver -vvv indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel
+    ports:
+      - "7624:7624"

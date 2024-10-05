@@ -1,5 +1,5 @@
 extern crate actix_web;
-use std::{collections::HashMap, env, net::TcpStream, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc};
 
 use actix_web::{
     middleware,
@@ -8,6 +8,7 @@ use actix_web::{
 };
 
 use indi::client::device::Device;
+use tokio::net::TcpStream;
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use twinkle_client::{notify::Notify, StreamExt as _};
 
@@ -47,7 +48,7 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug,actix_server=debug");
 
     let args: Vec<String> = env::args().collect();
-    let connection = TcpStream::connect(&args[1]).unwrap();
+    let connection = TcpStream::connect(&args[1]).await.unwrap();
     let client = indi::client::new(connection, None, None).unwrap();
 
     let devices = client.get_devices();

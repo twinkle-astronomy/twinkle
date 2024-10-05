@@ -28,7 +28,7 @@ impl FlatApp {
             filter_wheel: String::from("ASI EFW"),
             flat_panel: String::from("Deep Sky Dad FP1"),
         };
-        let telescope = Arc::new(Telescope::new(addr, config));
+        let telescope = Arc::new(Telescope::new_sync(addr, config));
         let fits_render = Arc::new(Mutex::new(FitsRender::new(cc.gl.as_ref().unwrap())));
         let background_ctx = cc.egui_ctx.clone();
         let background_fits_render = fits_render.clone();

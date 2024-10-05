@@ -1,16 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::{env, net::TcpStream, sync::Arc, thread};
+use std::{env, sync::Arc};
 
 use egui::mutex::Mutex;
 use fits_inspect::{
     analysis::{collimation::CollimationCalculator, Statistics},
     egui::{fits_render::Circle, FitsRender, FitsWidget},
 };
+
 use fitsio::FitsFile;
-use indi::client::{device::FitsImage, ClientConnection};
+use indi::client::{device::FitsImage, AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
 use ndarray::ArrayD;
-use tokio::runtime::Runtime;
+use tokio::{net::TcpStream, runtime::Runtime};
 use tokio_stream::StreamExt;
 use twinkle_client::notify;
 
@@ -43,9 +44,9 @@ impl FitsViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Option<Self> {
         let gl = cc.gl.as_ref()?;
 
-        //let mut fptr = FitsFile::open("~/test/test27.fits").unwrap();
-        //let hdu = fptr.primary_hdu().unwrap();
-        let image: Arc<ArrayD<u16>> = Default::default();//Arc::new(hdu.read_image(&mut fptr).unwrap());
+        let mut fptr = FitsFile::open("./file.fits").unwrap();
+        let hdu = fptr.primary_hdu().unwrap();
+        let image: Arc<ArrayD<u16>> = Arc::new(hdu.read_image(&mut fptr).unwrap());
 
         let newed = FitsViewerApp {
             fits_widget: Arc::new(Mutex::new(FitsRender::new(gl))),
@@ -112,29 +113,32 @@ impl FitsViewerApp {
                 }
             }
         });
-        thread::spawn(move || {
+        tokio::spawn(async move {
             let args: Vec<String> = env::args().collect();
 
-            let connection = TcpStream::connect(&args[1]).unwrap();
-            connection
-                .write(&indi::serialization::GetProperties {
+            let (mut writer, mut reader) = TcpStream::connect(&args[1]).await.unwrap().to_indi();
+            // let mut writer = connection.writer().unwrap();
+            writer
+                .write(indi::serialization::Command::GetProperties(indi::serialization::GetProperties {
                     version: indi::INDI_PROTOCOL_VERSION.to_string(),
                     device: None,
                     name: None,
-                })
+                })).await
                 .unwrap();
 
-            connection
-                .write(&indi::serialization::EnableBlob {
+            writer
+                .write(indi::serialization::Command::EnableBlob(indi::serialization::EnableBlob {
                     device: String::from("ZWO CCD ASI294MM Pro"),
                     name: None,
                     enabled: indi::BlobEnable::Only,
-                })
+                })).await
                 .unwrap();
 
-            let c_iter = connection.iter().unwrap();
-
-            for command in c_iter {
+            loop {
+                let command = match reader.read().await {
+                    Some(c) => c,
+                    None => break,
+                };
                 match command {
                     Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
                         println!("Got image for: {:?}", sbv.device);

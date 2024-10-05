@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
 	"twinkle_client",
+	"twinkle_server",
 	"indi",
 	"phd2",
 	"twinkle",

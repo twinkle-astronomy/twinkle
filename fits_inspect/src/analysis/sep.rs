@@ -286,13 +286,3 @@ impl Drop for Background {
         }
     }
 }
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn playground() {
-        dbg!(std::env::current_exe().unwrap());
-
-        todo!();
-    }
-}

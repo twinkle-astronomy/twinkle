@@ -44,7 +44,7 @@ impl FlatApp {
             filter_wheel: String::from("ZWO EFW"),
             flat_panel: String::from("Deep Sky Dad FP1"),
         };
-        let telescope = Arc::new(Telescope::new(addr, config));
+        let telescope = Arc::new(Telescope::new_sync(addr, config));
 
         let flat_config = SetConfig {
             count: 30,
@@ -124,7 +124,7 @@ impl FlatApp {
                 let bins = self.telescope.block_on(async {
                     let camera = self.telescope.get_primary_camera().await.unwrap();
                     let bin_param = camera.get_parameter("CCD_BINNING").await.unwrap();
-                    let lock = bin_param.lock().unwrap();
+                    let lock = bin_param.lock().await;
                     let values = lock.get_values::<HashMap<String, Number>>().unwrap();
                     (values["HOR_BIN"].min as u8)..=(values["HOR_BIN"].max as u8)
                 });

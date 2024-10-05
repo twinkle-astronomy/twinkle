@@ -7,7 +7,6 @@ use crate::{BlobVector, Parameter};
 use super::super::*;
 use super::{
     CommandToUpdate, CommandtoParam, DefBlobVector, SetBlobVector, Timestamp, UpdateError,
-    XmlSerialization,
 };
 
 impl CommandtoParam for DefBlobVector {
@@ -69,29 +68,6 @@ impl CommandToUpdate for SetBlobVector {
     }
 }
 
-impl XmlSerialization for crate::serialization::EnableBlob {
-    fn write<'a, T: std::io::Write>(
-        &self,
-        xml_writer: &'a mut Writer<T>,
-    ) -> XmlResult<&'a mut Writer<T>> {
-        let mut creator = xml_writer
-            .create_element("enableBLOB")
-            .with_attribute(("device", &*self.device));
-
-        if let Some(name) = &self.name {
-            creator = creator.with_attribute(("name", &name[..]));
-        }
-
-        match self.enabled {
-            BlobEnable::Never => creator.write_text_content(BytesText::new("Never")),
-            BlobEnable::Also => creator.write_text_content(BytesText::new("Also")),
-            BlobEnable::Only => creator.write_text_content(BytesText::new("Only")),
-        }?;
-
-        Ok(xml_writer)
-    }
-}
-
 impl From<Vec<u8>> for super::Blob {
     fn from(value: Vec<u8>) -> Self {
         super::Blob(value)
@@ -119,17 +95,22 @@ impl<'de> Deserialize<'de> for super::Blob {
     }
 }
 
+impl Serialize for super::Blob {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        serializer.serialize_str(&base64::encode(&self.0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use quick_xml::Writer;
-
     use crate::{
         serialization::{DefBlob, EnableBlob, OneBlob},
         BlobEnable, PropertyState,
     };
 
     use super::*;
-    use std::io::Cursor;
 
     #[test]
     fn test_parse_blob() {
@@ -164,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_send_enable_blob() {
-        let mut writer = Writer::new(Cursor::new(Vec::new()));
+        // let mut writer = Writer::new(Cursor::new(Vec::new()));
 
         let command = EnableBlob {
             device: String::from("CCD Simulator"),
@@ -172,11 +153,9 @@ mod tests {
             enabled: BlobEnable::Also,
         };
 
-        command.write(&mut writer).unwrap();
-
-        let result = writer.into_inner().into_inner();
+        let result = quick_xml::se::to_string(&command).unwrap();
         assert_eq!(
-            String::from_utf8(result).unwrap(),
+            result,
             String::from_str("<enableBLOB device=\"CCD Simulator\">Also</enableBLOB>").unwrap()
         );
     }

@@ -73,7 +73,7 @@ async fn main() {
         flat_panel: String::from("Deep Sky Dad FP1"),
     };
 
-    let telescope = Telescope::new(addr, config);
+    let telescope = Telescope::new(addr, config).await;
 
     let camera = telescope
         .get_primary_camera()
@@ -88,7 +88,7 @@ async fn main() {
         .await
         .unwrap()
         .lock()
-        .unwrap()
+        .await
         .get_values::<HashMap<String, Number>>()
         .unwrap()
         .get("FOCUS_ABSOLUTE_POSITION")
@@ -118,7 +118,7 @@ async fn main() {
             .await
             .unwrap()
             .lock()
-            .unwrap()
+            .await
             .get_values::<HashMap<String, Number>>()
             .unwrap()
             .get("FOCUS_ABSOLUTE_POSITION")

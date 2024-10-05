@@ -5,6 +5,7 @@ use std::sync::PoisonError;
 
 pub mod text_vector;
 use quick_xml::de::{IoReader, XmlRead};
+use serde::Serialize;
 
 pub mod blob_vector;
 pub mod del_property;
@@ -16,14 +17,20 @@ use super::*;
 
 use serde::Deserialize;
 
-use quick_xml::Result as XmlResult;
-use quick_xml::Writer;
-
 #[cfg(test)]
 mod tests;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Timestamp(pub DateTime<Utc>);
+
+impl Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        let ts = self.to_rfc3339_opts(SecondsFormat::Millis, true);
+        serializer.serialize_str(&ts.as_str()[..ts.len() - 1])
+    }
+}
 
 impl<'de> Deserialize<'de> for Timestamp {
     fn deserialize<D>(deserializer: D) -> Result<Timestamp, D::Error>
@@ -57,7 +64,8 @@ impl Timestamp {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+
 pub enum Command {
     // Commands from Device to Connections
     #[serde(rename = "defTextVector")]
@@ -124,22 +132,6 @@ impl Command {
                 None => None,
             },
             Command::EnableBlob(c) => Some(&c.device),
-        }
-    }
-}
-
-impl XmlSerialization for Command {
-    fn write<'a, T: std::io::Write>(
-        &self,
-        xml_writer: &'a mut Writer<T>,
-    ) -> XmlResult<&'a mut Writer<T>> {
-        match self {
-            Command::NewTextVector(c) => c.write(xml_writer),
-            Command::NewNumberVector(c) => c.write(xml_writer),
-            Command::NewSwitchVector(c) => c.write(xml_writer),
-            Command::EnableBlob(c) => c.write(xml_writer),
-
-            _ => todo!(),
         }
     }
 }
@@ -276,7 +268,8 @@ impl From<UpdateError> for ClientErrors {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "defTextVector")]
 pub struct DefTextVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -301,7 +294,8 @@ pub struct DefTextVector {
     pub texts: Vec<DefText>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "defText")]
 pub struct DefText {
     #[serde(rename = "@name")]
     pub name: String,
@@ -311,7 +305,8 @@ pub struct DefText {
     pub value: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "setTextVector")]
 pub struct SetTextVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -330,7 +325,8 @@ pub struct SetTextVector {
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "newTextVector")]
 pub struct NewTextVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -343,7 +339,8 @@ pub struct NewTextVector {
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(rename = "oneText")]
 pub struct OneText {
     #[serde(rename = "@name")]
     pub name: String,
@@ -358,7 +355,8 @@ pub struct Sexagesimal {
     pub second: Option<f64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "defNumberVector")]
 pub struct DefNumberVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -383,7 +381,8 @@ pub struct DefNumberVector {
     pub numbers: Vec<DefNumber>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "defNumber")]
 pub struct DefNumber {
     #[serde(rename = "@name")]
     pub name: String,
@@ -401,7 +400,8 @@ pub struct DefNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "setNumberVector")]
 pub struct SetNumberVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -420,7 +420,8 @@ pub struct SetNumberVector {
     pub numbers: Vec<SetOneNumber>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "oneNumber")]
 pub struct SetOneNumber {
     #[serde(rename = "@name")]
     pub name: String,
@@ -434,7 +435,8 @@ pub struct SetOneNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "newNumberVector")]
 pub struct NewNumberVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -447,7 +449,8 @@ pub struct NewNumberVector {
     pub numbers: Vec<OneNumber>,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(rename = "oneNumber")]
 pub struct OneNumber {
     #[serde(rename = "@name")]
     pub name: String,
@@ -455,7 +458,8 @@ pub struct OneNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "defSwitchVector")]
 pub struct DefSwitchVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -482,7 +486,8 @@ pub struct DefSwitchVector {
     pub switches: Vec<DefSwitch>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "defSwitch")]
 pub struct DefSwitch {
     #[serde(rename = "@name")]
     pub name: String,
@@ -492,7 +497,8 @@ pub struct DefSwitch {
     pub value: SwitchState,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "setSwitchVector")]
 pub struct SetSwitchVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -510,7 +516,8 @@ pub struct SetSwitchVector {
     #[serde(rename = "oneSwitch")]
     pub switches: Vec<OneSwitch>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "newSwitchVector")]
 pub struct NewSwitchVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -523,7 +530,8 @@ pub struct NewSwitchVector {
     pub switches: Vec<OneSwitch>,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(rename = "oneSwitch")]
 pub struct OneSwitch {
     #[serde(rename = "@name")]
     pub name: String,
@@ -531,7 +539,8 @@ pub struct OneSwitch {
     pub value: SwitchState,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "defLightVector")]
 pub struct DefLightVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -552,7 +561,8 @@ pub struct DefLightVector {
     pub lights: Vec<DefLight>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "defLight")]
 pub struct DefLight {
     #[serde(rename = "@name")]
     name: String,
@@ -562,7 +572,8 @@ pub struct DefLight {
     value: PropertyState,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "setLightVector")]
 pub struct SetLightVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -579,7 +590,8 @@ pub struct SetLightVector {
     pub lights: Vec<OneLight>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "oneLight")]
 pub struct OneLight {
     #[serde(rename = "@name")]
     name: String,
@@ -587,7 +599,8 @@ pub struct OneLight {
     value: PropertyState,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "defBLOBVector")]
 pub struct DefBlobVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -612,7 +625,8 @@ pub struct DefBlobVector {
     pub blobs: Vec<DefBlob>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "defBLOB")]
 pub struct DefBlob {
     #[serde(rename = "@name")]
     name: String,
@@ -620,7 +634,8 @@ pub struct DefBlob {
     label: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename = "setBLOBVector")]
 pub struct SetBlobVector {
     #[serde(rename = "@device")]
     pub device: String,
@@ -642,7 +657,8 @@ pub struct SetBlobVector {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Blob(pub Vec<u8>);
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "oneBLOB")]
 pub struct OneBlob {
     #[serde(rename = "@name")]
     pub name: String,
@@ -656,18 +672,19 @@ pub struct OneBlob {
     pub value: Blob,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "enableBLOB")]
 pub struct EnableBlob {
     #[serde(rename = "@device")]
     pub device: String,
-    #[serde(rename = "@name")]
+    #[serde(rename = "@name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-
     #[serde(rename = "$text")]
     pub enabled: BlobEnable,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(rename = "message")]
 pub struct Message {
     #[serde(rename = "@device")]
     pub device: Option<String>,
@@ -677,7 +694,8 @@ pub struct Message {
     pub message: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "delProperty")]
 pub struct DelProperty {
     #[serde(rename = "@device")]
     pub device: String,
@@ -689,29 +707,34 @@ pub struct DelProperty {
     pub message: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "getProperties")]
 pub struct GetProperties {
     #[serde(rename = "@version")]
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "@device")]
     pub device: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "@name")]
     pub name: Option<String>,
 }
 
-pub trait XmlSerialization {
-    fn write<'a, T: std::io::Write>(
-        &self,
-        xml_writer: &'a mut Writer<T>,
-    ) -> XmlResult<&'a mut Writer<T>>;
-}
+// pub trait XmlSerialization {
+//     fn write<'a, T: std::io::Write>(
+//         &self,
+//         xml_writer: &'a mut Writer<T>,
+//     ) -> XmlResult<&'a mut Writer<T>>;
+// }
 
 #[derive(Debug)]
 pub enum DeError {
+    SerializationError(quick_xml::errors::serialize::DeError),
     XmlError(quick_xml::Error),
     XmlDeError(quick_xml::DeError),
     IoError(std::io::Error),
     DecodeUtf8(str::Utf8Error),
+    FromUtf8Error(std::string::FromUtf8Error),
     DecodeLatin(Cow<'static, str>),
     ParseIntError(num::ParseIntError),
     ParseFloatError(num::ParseFloatError),
@@ -722,11 +745,24 @@ pub enum DeError {
     UnexpectedAttr(String),
     UnexpectedEvent(String),
     UnexpectedTag(String),
+    AxumError(axum::Error),
 }
 
 impl From<quick_xml::Error> for DeError {
     fn from(err: quick_xml::Error) -> Self {
         DeError::XmlError(err)
+    }
+}
+
+impl From<axum::Error> for DeError {
+    fn from(err: axum::Error) -> Self {
+        DeError::AxumError(err)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for DeError {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        DeError::FromUtf8Error(err)
     }
 }
 

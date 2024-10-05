@@ -74,7 +74,7 @@ impl Device {
         return &self.groups;
     }
 
-    /// Returns a `&Vec<String>` of all currently parameters.
+    /// Returns a `&Vec<String>` of all current parameters.
     pub fn get_parameters(&self) -> &HashMap<String, Arc<Notify<Parameter>>> {
         return &self.parameters;
     }
@@ -236,11 +236,11 @@ impl FitsImage {
 #[derive(Debug)]
 pub enum SendError<T> {
     Disconnected,
-    SendError(crossbeam_channel::SendError<T>),
+    SendError(tokio::sync::mpsc::error::SendError<T>),
 }
 
-impl<T> From<crossbeam_channel::SendError<T>> for SendError<T> {
-    fn from(value: crossbeam_channel::SendError<T>) -> Self {
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for SendError<T> {
+    fn from(value: tokio::sync::mpsc::error::SendError<T>) -> Self {
         SendError::SendError(value)
     }
 }
@@ -250,14 +250,14 @@ impl<T> From<crossbeam_channel::SendError<T>> for SendError<T> {
 pub struct ActiveDevice {
     name: String,
     device: Arc<Notify<Device>>,
-    command_sender: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
+    command_sender: Option<tokio::sync::mpsc::UnboundedSender<serialization::Command>>,
 }
 
 impl ActiveDevice {
     pub fn new(
         name: String,
         device: Arc<Notify<Device>>,
-        command_sender: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
+        command_sender: Option<tokio::sync::mpsc::UnboundedSender<serialization::Command>>,
     ) -> ActiveDevice {
         ActiveDevice {
             name,
@@ -269,14 +269,10 @@ impl ActiveDevice {
     /// Returns the sender used to send commands
     ///  to the associated INDI server connection.
     pub fn send(&self, c: Command) -> Result<(), SendError<Command>> {
-        let lock = self.command_sender.lock().expect("mutex");
-        match lock.as_ref() {
-            Some(sender) => {
-                sender.send(c)?;
-                Ok(())
-            }
-            None => Err(SendError::Disconnected),
+        if let Some(command_sender) = &self.command_sender {
+            command_sender.send(c)?;
         }
+        Ok(())
     }
 }
 
@@ -476,7 +472,7 @@ impl ActiveDevice {
     /// use indi::client::Client;
     /// use indi::client::device::{ActiveDevice, FitsImage};
     /// use indi::*;
-    /// async fn capture_image_from_param_usage_example(client: Client<TcpStream>, blob_client: Client<TcpStream>) {
+    /// async fn capture_image_from_param_usage_example(client: Client, blob_client: Client) {
     ///     // Get the camera device from the client dedicated to transfering blob data.
     ///     let blob_camera = blob_client.get_device::<()>("ZWO CCD ASI294MM Pro").await.unwrap();
     ///     // Enable blobs

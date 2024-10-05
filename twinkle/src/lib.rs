@@ -1,14 +1,14 @@
 use std::{
     fmt::Display,
-    net::{TcpStream, ToSocketAddrs},
+    net::ToSocketAddrs,
     ops::Deref,
     sync::Arc,
     time::Duration,
 };
 
-use indi::{client::device::ActiveDevice, Parameter};
+use indi::{client::{device::ActiveDevice, notify, Notify}, Parameter};
+use tokio::net::TcpStream;
 use tokio_stream::wrappers::BroadcastStream;
-use twinkle_client::notify::{self, Notify};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 mod backend;
@@ -20,22 +20,23 @@ pub trait Action<T> {
 
 pub struct Telescope {
     pub config: TelescopeConfig,
-    pub client: indi::client::Client<TcpStream>,
-    pub image_client: indi::client::Client<TcpStream>,
+    pub client: indi::client::Client,
+    pub image_client: indi::client::Client,
     runtime: tokio::runtime::Runtime,
 }
 
 impl Telescope {
-    pub fn new(addr: impl ToSocketAddrs + Copy + Display, config: TelescopeConfig) -> Telescope {
+    pub async fn new(addr: impl tokio::net::ToSocketAddrs + Copy + Display, config: TelescopeConfig) -> Telescope {
+        // let c = TcpStream::connect(addr.into());
         let client = indi::client::new(
-            TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
+            TcpStream::connect(addr.clone()).await.expect(format!("Unable to connect to {}", addr).as_str()),
             None,
             None,
         )
         .expect("Connecting to INDI server");
 
         let image_client = indi::client::new(
-            TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
+            TcpStream::connect(addr.clone()).await.expect(format!("Unable to connect to {}", addr).as_str()),
             None,
             None, // Some(&config.primary_camera.clone()),
                   // Some("CCD1"),
@@ -52,6 +53,43 @@ impl Telescope {
                 .unwrap(),
         }
     }
+
+    pub fn new_sync(addr: impl ToSocketAddrs + Copy + Display, config: TelescopeConfig) -> Telescope {
+        // let c = TcpStream::connect(addr.into());
+        let c = std::net::TcpStream::connect(addr.clone()).expect(format!("Unable to connect to {}", addr).as_str());
+        c.set_nonblocking(true).unwrap();
+        let c = tokio::net::TcpStream::from_std(c).unwrap();
+        let client = indi::client::new(
+            c,
+            None,
+            None,
+        )
+        .expect("Connecting to INDI server");
+
+        let c = std::net::TcpStream::connect(addr.clone()).expect(format!("Unable to connect to {}", addr).as_str());
+        c.set_nonblocking(true).unwrap();
+        let c = tokio::net::TcpStream::from_std(c).unwrap();
+        let image_client = indi::client::new(
+            c,
+            None,
+            None, // Some(&config.primary_camera.clone()),
+                  // Some("CCD1"),
+        )
+        .expect("Connecting to INDI server");
+
+        Telescope {
+            config,
+            client,
+            image_client,
+            runtime: tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+        }
+    }
+
+
+
     pub async fn get_primary_camera(&self) -> Result<ActiveDevice, notify::Error<()>> {
         self.client.get_device(&self.config.primary_camera).await
     }

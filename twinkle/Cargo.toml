@@ -9,12 +9,11 @@ edition = "2021"
 eframe = { version = "0.20.1"}
 egui = "0.20.1"
 serde = { version = "1", features = ["derive"] }
-indi = { path = "../indi" }
 
 tracing-subscriber = "0.3.16"
-tokio = {version = "1.21.2", features = ["full"]}
+tokio = { version = "1", features = ["full"] }
 fits_inspect = { path = "../fits_inspect" }
-fitsio = {version = "0.21.2", features = ["array"] }
+fitsio = {version="0.21.2", features = ["array"] }
 tokio-stream = "0.1.12"
 ndarray = "0.15.6"
 actix-web = "4.3.1"
@@ -29,3 +28,4 @@ futures-util = { version = "0.3.28", features = ["channel"] }
 actix-ws = "0.2.5"
 pin-project = "1.1.0"
 twinkle_client.workspace = true
+indi = { path = "../indi" }

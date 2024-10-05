@@ -1,19 +1,18 @@
 pub mod device;
 pub mod tcpstream;
+pub mod websocket;
 
 use twinkle_client;
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, PoisonError},
-    thread::sleep,
+    sync::{Arc, PoisonError},
     time::Duration,
 };
 
 use self::device::ParamUpdateResult;
 use crate::{
-    serialization, Command, DeError, GetProperties, TypeError, UpdateError, XmlSerialization,
-    INDI_PROTOCOL_VERSION,
+    serialization, Command, DeError, GetProperties, TypeError, UpdateError, INDI_PROTOCOL_VERSION
 };
 pub use twinkle_client::notify::{self, wait_fn, Notify};
 
@@ -92,19 +91,18 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 ///
 /// # Examples
 /// ```no_run
-/// use std::net::TcpStream;
-/// use crate::indi::client::ClientConnection;
+/// use tokio::net::TcpStream;
 /// // Client that will track all devices and parameters to the connected INDI server at localhost.
-/// let client = indi::client::new(TcpStream::connect("localhost:7624").expect("Connecting to server"), None, None).expect("Initializing connection to INDI server");
-///
-/// // Client that will only track the blob parameter for an image.  It is recommended to use a dedicated
-/// //  client connection for retreiving images, as other indi updates will be delayed when images are being transfered.
-/// let image_client = indi::client::new(
-///     TcpStream::connect("localhost:7624").expect("Connecting to server"),
-///     Some("ZWO CCD ASI294MM Pro"),
-///     Some("CCD1"),
-/// ).expect("Connecting to INDI server");
 /// async {
+///     let client = indi::client::new(TcpStream::connect("localhost:7624").await.expect("Connecting to server"), None, None).expect("Initializing connection to INDI server");
+///
+///     // Client that will only track the blob parameter for an image.  It is recommended to use a dedicated
+///     //  client connection for retreiving images, as other indi updates will be delayed when images are being transfered.
+///     let image_client = indi::client::new(
+///         TcpStream::connect("localhost:7624").await.expect("Connecting to server"),
+///         Some("ZWO CCD ASI294MM Pro"),
+///         Some("CCD1"),
+///     ).expect("Connecting to INDI server");
 ///     // Retrieve the camera and set BlobEnable to `Only` to ensure this connection
 ///     //  is only used for transfering images.
 ///     let image_camera = image_client
@@ -117,38 +115,42 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 ///         .expect("enabling image retrieval");
 /// };
 /// ```
-pub fn new<T: ClientConnection>(
+pub fn new<T: AsyncClientConnection>(
     connection: T,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> Result<Client<T>, serialization::DeError> {
-    let (feedback, incoming_commands) = crossbeam_channel::unbounded::<Command>();
-    let feedback = Arc::new(Mutex::new(Some(feedback)));
+) -> Result<Client, serialization::DeError> {
+    let (feedback, mut incoming_commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
 
-    let writer = connection.writer()?;
-
-    writer.write(&GetProperties {
-        version: INDI_PROTOCOL_VERSION.to_string(),
-        device: device.map(|x| String::from(x)),
-        name: parameter.map(|x| String::from(x)),
-    })?;
+    let (mut writer, mut reader) = connection.to_indi();
+    let writer_device = device.map(|x| String::from(x));
+    let writer_parameter = parameter.map(|x| String::from(x));
     let writer_thread =
-        tokio::task::spawn_blocking(move || -> Result<(), serialization::DeError> {
-            // let mut xml_writer =
-            //     Writer::new_with_indent(BufWriter::new(thread_connection), b' ', 2);
-            for command in incoming_commands.iter() {
-                writer.write(&command)?;
-                // command.write(&mut xml_writer)?;
-                // xml_writer.get_mut().flush()?;
+        tokio::task::spawn(async move {
+            writer.write(serialization::Command::GetProperties(GetProperties {
+                version: INDI_PROTOCOL_VERSION.to_string(),
+                device: writer_device,
+                name: writer_parameter,
+            })).await?;
+
+            loop {
+                let command = match incoming_commands.recv().await {
+                    Some(c) => c,
+                    None => break
+                };
+                writer.write(command).await?;
             }
+            writer.shutdown().await?;
             Ok(())
         });
     let devices = Arc::new(Notify::new(HashMap::new()));
     let thread_devices = devices.clone();
-    let connection_iter = connection.reader()?;
-    let thread_feedback = feedback.clone();
     let reader_thread = tokio::spawn(async move {
-        for command in connection_iter {
+        loop {
+            let command = match reader.read().await {
+                Some(c) => c,
+                None => break,
+            };
             match command {
                 Ok(command) => {
                     let mut locked_devices = thread_devices.lock().await;
@@ -163,39 +165,32 @@ pub fn new<T: ClientConnection>(
                 }
             }
         }
-        if let Ok(mut lock) = thread_feedback.lock() {
-            *lock = None;
-        }
     });
     let c = Client {
         devices,
-        feedback,
-        connection,
-        _writer_thread: writer_thread,
-        _reader_thread: reader_thread,
+        feedback: Some(feedback),
+        _workers: Some(( writer_thread, reader_thread ))
     };
     Ok(c)
 }
 
 /// Struct used to keep track of a the devices and their properties.
-pub struct Client<T: ClientConnection> {
+pub struct Client {
     devices: Arc<Notify<MemoryDeviceStore>>,
-    feedback: Arc<Mutex<Option<crossbeam_channel::Sender<Command>>>>,
-    connection: T,
+    feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
+    // connection: T,
     // Used for testing
-    _writer_thread: tokio::task::JoinHandle<Result<(), DeError>>,
-    _reader_thread: tokio::task::JoinHandle<()>,
+    _workers: Option<(tokio::task::JoinHandle<Result<(), DeError>>, tokio::task::JoinHandle<()>)>,
 }
+ 
 
-impl<T: ClientConnection> Drop for Client<T> {
+impl Drop for Client {
     fn drop(&mut self) {
-        if let Err(e) = self.shutdown() {
-            dbg!(e);
-        }
+        self.shutdown();
     }
 }
 
-impl<T: ClientConnection> Client<T> {
+impl Client {
     /// Async method that will wait up to 1 second for the device named `name` to be defined
     ///  by the INDI server.  The returned `ActiveDevice` (if present) will be associated with
     ///  the `self` client for communicating changes with the INDI server it came from.
@@ -205,15 +200,15 @@ impl<T: ClientConnection> Client<T> {
     ///
     /// # Example
     /// ```no_run
-    /// use std::net::TcpStream;
+    /// use tokio::net::TcpStream;
     /// // Client that will track all devices and parameters to the connected INDI server at localhost.
-    /// let client = indi::client::new(TcpStream::connect("localhost:7624").expect("Connecting to server"), None, None).expect("Initializing connection to INDI server");
+    /// 
     /// async {
-    /// let filter_wheel = client
-    ///     .get_device::<()>("ASI EFW")
-    ///     .await
-    ///     .expect("Getting filter wheel");
-    ///
+    ///     let client = indi::client::new(TcpStream::connect("localhost:7624").await.expect("Connecting to server"), None, None).expect("Initializing connection to INDI server");
+    ///     let filter_wheel = client
+    ///         .get_device::<()>("ASI EFW")
+    ///         .await
+    ///         .expect("Getting filter wheel");
     /// };
     /// ```
     pub async fn get_device<'a, E>(
@@ -240,18 +235,8 @@ impl<T: ClientConnection> Client<T> {
         self.devices.clone()
     }
 
-    pub fn shutdown(&self) -> Result<(), std::io::Error> {
-        let r = self.connection.shutdown();
-        {
-            let mut l = self.feedback.lock().unwrap();
-            *l = None
-        }
-        while !self._reader_thread.is_finished() && !self._writer_thread.is_finished() {
-            // dbg!(self._reader_thread.is_finished(), self._writer_thread.is_finished(), 11);
-            sleep(Duration::from_millis(10));
-        }
-
-        r
+    pub fn shutdown(&mut self) {
+        self.feedback.take();
     }
 }
 
@@ -289,53 +274,19 @@ impl DeviceStore for MemoryDeviceStore {
     }
 }
 
-pub trait ClientConnection {
-    type Read: std::io::Read + Send + 'static;
-    type Write: std::io::Write + Send + 'static;
+pub trait AsyncClientConnection {
+    type Reader: AsyncReadConnection + Unpin + Send + 'static;
+    type Writer: AsyncWriteConnection + Unpin + Send + 'static;
 
-    /// Creates an interator that yields commands from the the connected INDI server.
-    /// Example usage:
-    /// ```no_run
-    /// use std::collections::HashMap;
-    /// use crate::indi::client::{ClientConnection, DeviceStore};
-    /// use crate::indi::client::device::Device;
-    /// use std::net::TcpStream;
-    /// use crate::indi::client::CommandWriter;
-    /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
-    /// connection.writer().unwrap().write(&indi::serialization::GetProperties {
-    ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
-    ///     device: None,
-    ///     name: None,
-    /// }).unwrap();
-    ///
-    /// let mut client = HashMap::<String, Device>::new();
-    ///
-    /// for command in connection.reader().unwrap() {
-    ///     println!("Command: {:?}", command);
-    /// }
-    fn reader(
-        &self,
-    ) -> Result<impl Iterator<Item = Result<Command, DeError>> + Send + 'static, std::io::Error>;
-
-    /// Sends the given INDI command to the connected server.  Consumes the command.
-    /// Example usage:
-    /// ```no_run
-    /// use crate::indi::client::ClientConnection;
-    /// use std::net::TcpStream;
-    /// use std::io::Write;
-    /// use crate::indi::client::CommandWriter;
-    /// let mut connection = TcpStream::connect("localhost:7624").unwrap();
-    /// connection.writer().unwrap().write(&indi::serialization::GetProperties {
-    ///     version: indi::INDI_PROTOCOL_VERSION.to_string(),
-    ///     device: None,
-    ///     name: None,
-    /// }).unwrap();
-    ///
-    fn writer(&self) -> Result<impl CommandWriter + Send + 'static, DeError>;
-
-    fn shutdown(&self) -> Result<(), std::io::Error>;
+    fn to_indi(self) -> (Self::Writer, Self::Reader);
 }
 
-pub trait CommandWriter {
-    fn write<X: XmlSerialization>(&self, command: &X) -> Result<(), DeError>;
+pub trait AsyncReadConnection {
+    fn read(&mut self) -> impl std::future::Future<Output = Option<Result<crate::Command, crate::DeError>>> + Send;
+}
+
+pub trait AsyncWriteConnection {
+    fn write(&mut self, cmd: Command) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
+
+    fn shutdown(&mut self) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
 }

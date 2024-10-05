@@ -6,15 +6,15 @@
 //     Connected,
 // }
 
-struct DropFn {
-    func: Box<dyn Fn() -> ()>,
-}
+// struct DropFn {
+//     func: Box<dyn Fn() -> ()>,
+// }
 
-impl Drop for DropFn {
-    fn drop(&mut self) {
-        (self.func)();
-    }
-}
+// impl Drop for DropFn {
+//     fn drop(&mut self) {
+//         (self.func)();
+//     }
+// }
 /*
 pub struct Backend {
     client: Arc<Mutex<indi::Client>>,

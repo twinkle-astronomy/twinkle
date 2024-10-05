@@ -1,21 +1,23 @@
-use std::{env, net::TcpStream, ops::Deref, thread, time::Duration};
+use std::{env, ops::Deref, time::Duration};
 
 use indi::client::ChangeError;
+use tokio::net::TcpStream;
 
-fn main() -> Result<(), ChangeError<()>> {
+#[tokio::main]
+async fn main() -> Result<(), ChangeError<()>> {
     let args: Vec<String> = env::args().collect();
     let addr = &args[1];
 
     let client = indi::client::new(
-        TcpStream::connect(addr).expect(format!("Unable to connect to {}", addr).as_str()),
+        TcpStream::connect(addr).await.expect(format!("Unable to connect to {}", addr).as_str()),
         None,
         None,
     )?;
 
-    thread::sleep(Duration::from_secs(10));
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     let binding = client.get_devices();
-    let devices = binding.lock().unwrap();
+    let devices = binding.lock().await;
     println!("{:#?}", devices.deref());
     Ok(())
 }

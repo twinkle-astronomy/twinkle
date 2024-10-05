@@ -1,6 +1,11 @@
-FROM rust:1.72-buster as dev
+FROM rust:1.80-bullseye as dev
 
-RUN apt-get update && apt-get install -y --no-install-recommends libcfitsio-dev libopencv-dev clang libclang-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcfitsio-dev \
+    libopencv-dev \
+    clang \
+    libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt
 
 RUN mkdir /app
@@ -14,7 +19,7 @@ ARG USER_ID=1000
 ARG GROUP_ID=1000
 
 RUN groupadd -g ${GROUP_ID} ${USER} && \
-    useradd -l -u ${USER_ID} -g ${USER} ${USER}
+    useradd -l -u ${USER_ID} -g ${USER} -s /bin/bash ${USER}
 
 RUN chown ${USER}:${USER} /app
 USER ${USER}
