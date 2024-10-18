@@ -12,7 +12,7 @@ use std::{
 
 use self::device::ParamUpdateResult;
 use crate::{
-    serialization, Command, DeError, GetProperties, TypeError, UpdateError, INDI_PROTOCOL_VERSION
+    serialization, Command, DeError, GetProperties, TypeError, UpdateError, INDI_PROTOCOL_VERSION,
 };
 pub use twinkle_client::notify::{self, wait_fn, Notify};
 
@@ -125,24 +125,25 @@ pub fn new<T: AsyncClientConnection>(
     let (mut writer, mut reader) = connection.to_indi();
     let writer_device = device.map(|x| String::from(x));
     let writer_parameter = parameter.map(|x| String::from(x));
-    let writer_thread =
-        tokio::task::spawn(async move {
-            writer.write(serialization::Command::GetProperties(GetProperties {
+    let writer_thread = tokio::task::spawn(async move {
+        writer
+            .write(serialization::Command::GetProperties(GetProperties {
                 version: INDI_PROTOCOL_VERSION.to_string(),
                 device: writer_device,
                 name: writer_parameter,
-            })).await?;
+            }))
+            .await?;
 
-            loop {
-                let command = match incoming_commands.recv().await {
-                    Some(c) => c,
-                    None => break
-                };
-                writer.write(command).await?;
-            }
-            writer.shutdown().await?;
-            Ok(())
-        });
+        loop {
+            let command = match incoming_commands.recv().await {
+                Some(c) => c,
+                None => break,
+            };
+            writer.write(command).await?;
+        }
+        writer.shutdown().await?;
+        Ok(())
+    });
     let devices = Arc::new(Notify::new(HashMap::new()));
     let thread_devices = devices.clone();
     let reader_thread = tokio::spawn(async move {
@@ -169,7 +170,7 @@ pub fn new<T: AsyncClientConnection>(
     let c = Client {
         devices,
         feedback: Some(feedback),
-        _workers: Some(( writer_thread, reader_thread ))
+        _workers: Some((writer_thread, reader_thread)),
     };
     Ok(c)
 }
@@ -180,9 +181,11 @@ pub struct Client {
     feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
     // connection: T,
     // Used for testing
-    _workers: Option<(tokio::task::JoinHandle<Result<(), DeError>>, tokio::task::JoinHandle<()>)>,
+    _workers: Option<(
+        tokio::task::JoinHandle<Result<(), DeError>>,
+        tokio::task::JoinHandle<()>,
+    )>,
 }
- 
 
 impl Drop for Client {
     fn drop(&mut self) {
@@ -202,7 +205,7 @@ impl Client {
     /// ```no_run
     /// use tokio::net::TcpStream;
     /// // Client that will track all devices and parameters to the connected INDI server at localhost.
-    /// 
+    ///
     /// async {
     ///     let client = indi::client::new(TcpStream::connect("localhost:7624").await.expect("Connecting to server"), None, None).expect("Initializing connection to INDI server");
     ///     let filter_wheel = client
@@ -282,11 +285,16 @@ pub trait AsyncClientConnection {
 }
 
 pub trait AsyncReadConnection {
-    fn read(&mut self) -> impl std::future::Future<Output = Option<Result<crate::Command, crate::DeError>>> + Send;
+    fn read(
+        &mut self,
+    ) -> impl std::future::Future<Output = Option<Result<crate::Command, crate::DeError>>> + Send;
 }
 
 pub trait AsyncWriteConnection {
-    fn write(&mut self, cmd: Command) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
+    fn write(
+        &mut self,
+        cmd: Command,
+    ) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
 
     fn shutdown(&mut self) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
 }

@@ -26,7 +26,8 @@ pub struct Timestamp(pub DateTime<Utc>);
 impl Serialize for Timestamp {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         let ts = self.to_rfc3339_opts(SecondsFormat::Millis, true);
         serializer.serialize_str(&ts.as_str()[..ts.len() - 1])
     }
@@ -746,6 +747,7 @@ pub enum DeError {
     UnexpectedEvent(String),
     UnexpectedTag(String),
     AxumError(axum::Error),
+    Tungstenite(tokio_tungstenite::tungstenite::Error),
 }
 
 impl From<quick_xml::Error> for DeError {
@@ -763,6 +765,12 @@ impl From<axum::Error> for DeError {
 impl From<std::string::FromUtf8Error> for DeError {
     fn from(err: std::string::FromUtf8Error) -> Self {
         DeError::FromUtf8Error(err)
+    }
+}
+
+impl From<tokio_tungstenite::tungstenite::Error> for DeError {
+    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
+        DeError::Tungstenite(err)
     }
 }
 

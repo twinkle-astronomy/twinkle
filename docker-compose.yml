@@ -1,5 +1,3 @@
-version: '3.7'
-
 volumes:
     prometheus_data: {}
     grafana_data: {}
@@ -20,8 +18,6 @@ services:
 
   indi:
     image: indi
-    build:
-      dockerfile: Dockerfile.indi_server
     command: indiserver -vvv indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel
     ports:
       - "7624:7624"

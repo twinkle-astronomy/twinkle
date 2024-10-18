@@ -1,11 +1,16 @@
 use quick_xml::{events::Event, NsReader};
-use tokio::{io::{AsyncRead, AsyncWriteExt}, net::{tcp::{OwnedReadHalf, OwnedWriteHalf}, TcpStream}};
+use tokio::{
+    io::{AsyncRead, AsyncWriteExt},
+    net::{
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpStream,
+    },
+};
 
 use crate::Command;
 use tokio::io::BufReader;
 
 use super::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
-
 
 impl AsyncClientConnection for TcpStream {
     type Reader = AsyncIndiReader<OwnedReadHalf>;
@@ -20,12 +25,11 @@ impl AsyncClientConnection for TcpStream {
 }
 
 pub struct AsyncIndiReader<T> {
-    reader: NsReader<BufReader<T>>
-
+    reader: NsReader<BufReader<T>>,
 }
 
 impl<T: AsyncRead + Unpin> AsyncIndiReader<T> {
-    fn new(reader: quick_xml::reader::NsReader<BufReader<T>>) -> AsyncIndiReader<T>  {
+    fn new(reader: quick_xml::reader::NsReader<BufReader<T>>) -> AsyncIndiReader<T> {
         AsyncIndiReader { reader }
     }
 
@@ -36,7 +40,7 @@ impl<T: AsyncRead + Unpin> AsyncIndiReader<T> {
         loop {
             let event = match self.reader.read_event_into_async(&mut buffer).await {
                 Ok(e) => e,
-                Err(e) => return Some(Err(e.into()))
+                Err(e) => return Some(Err(e.into())),
             };
             match event {
                 Event::Start(e) => {
@@ -46,7 +50,7 @@ impl<T: AsyncRead + Unpin> AsyncIndiReader<T> {
                     for attr in e.attributes() {
                         let attr = match attr {
                             Ok(d) => d,
-                            Err(e) => return Some(Err(e.into()))
+                            Err(e) => return Some(Err(e.into())),
                         };
                         document.extend_from_slice(b" ");
                         document.extend_from_slice(attr.key.as_ref());
@@ -64,8 +68,7 @@ impl<T: AsyncRead + Unpin> AsyncIndiReader<T> {
                     if depth == 0 {
                         let doc = match String::from_utf8(document) {
                             Ok(d) => d,
-                            Err(e) => return Some(Err(e.into()))
-
+                            Err(e) => return Some(Err(e.into())),
                         };
                         return Some(Ok(doc));
                     }
@@ -87,28 +90,28 @@ impl<T: AsyncRead + Unpin + Send> AsyncReadConnection for AsyncIndiReader<T> {
     async fn read(&mut self) -> Option<Result<crate::Command, crate::DeError>> {
         let doc = match self.read_xml_documents().await? {
             Ok(doc) => doc,
-            Err(e) => return Some(Err(e.into()))
+            Err(e) => return Some(Err(e.into())),
         };
         let cmd = quick_xml::de::from_str::<crate::Command>(&doc).map_err(|x| x.into());
-        
-        return Some(cmd)
+
+        return Some(cmd);
     }
 }
 
 pub struct AsyncIndiWriter {
-    writer: OwnedWriteHalf
+    writer: OwnedWriteHalf,
 }
 
 impl AsyncWriteConnection for AsyncIndiWriter {
     async fn write(&mut self, cmd: Command) -> Result<(), crate::DeError> {
         let buffer = quick_xml::se::to_string(&cmd)?;
         self.writer.write(buffer.as_bytes()).await?;
-        
+
         self.writer.write(b"\n").await?;
         self.writer.flush().await?;
         Ok(())
     }
-    
+
     async fn shutdown(&mut self) -> Result<(), crate::DeError> {
         Ok(self.writer.shutdown().await?)
     }
@@ -116,17 +119,18 @@ impl AsyncWriteConnection for AsyncIndiWriter {
 
 #[cfg(test)]
 mod test {
-    use crate::client::new;
     use super::*;
+    use crate::client::new;
 
     #[tokio::test]
     async fn test_threads_stop_on_shutdown() {
-        let connection = TcpStream::connect("indi:7624").await.expect("connecting to indi");
+        let connection = TcpStream::connect("indi:7624")
+            .await
+            .expect("connecting to indi");
         let mut client = new(connection, None, None).expect("Making client");
         client.shutdown();
         if let Some((reader, writer)) = client._workers.take() {
             let _ = tokio::join!(reader, writer);
         }
-
     }
 }

@@ -98,7 +98,8 @@ impl<'de> Deserialize<'de> for super::Blob {
 impl Serialize for super::Blob {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         serializer.serialize_str(&base64::encode(&self.0))
     }
 }

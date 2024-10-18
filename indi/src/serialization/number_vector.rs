@@ -11,7 +11,12 @@ impl<'de> Deserialize<'de> for Sexagesimal {
         let s: String = Deserialize::deserialize(deserializer)?;
         let mut components = s.split([' ', ':']);
 
-        let hour = components.next().map(str::parse).transpose().unwrap().unwrap();
+        let hour = components
+            .next()
+            .map(str::parse)
+            .transpose()
+            .unwrap()
+            .unwrap();
         let minute = components.next().map(str::parse).transpose().unwrap();
         let second = components.next().map(str::parse).transpose().unwrap();
 
@@ -26,7 +31,8 @@ impl<'de> Deserialize<'de> for Sexagesimal {
 impl Serialize for Sexagesimal {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         serializer.serialize_str(format!("{}", self).as_str())
     }
 }
@@ -274,8 +280,14 @@ mod tests {
         let event: Result<Sexagesimal, _> = quick_xml::de::from_str(xml);
 
         if let Ok(e) = event {
-            assert_eq!(Sexagesimal { hour: -10., minute: Some(30.3), second: None}, e.into());
-
+            assert_eq!(
+                Sexagesimal {
+                    hour: -10.,
+                    minute: Some(30.3),
+                    second: None
+                },
+                e.into()
+            );
         } else {
             panic!("Unexpected");
         }
@@ -288,7 +300,14 @@ mod tests {
         let event: Result<Sexagesimal, _> = quick_xml::de::from_str(xml);
 
         if let Ok(e) = event {
-            assert_eq!(Sexagesimal { hour: -10.0, minute: Some(30.), second: Some(18.)}, e.into());
+            assert_eq!(
+                Sexagesimal {
+                    hour: -10.0,
+                    minute: Some(30.),
+                    second: Some(18.)
+                },
+                e.into()
+            );
         } else {
             panic!("Unexpected");
         }

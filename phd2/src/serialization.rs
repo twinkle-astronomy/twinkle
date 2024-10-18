@@ -76,7 +76,7 @@ pub enum State {
     Looping,
 }
 #[derive(Debug)]
-pub struct InvalidState(String);
+pub struct InvalidState(pub String);
 
 impl TryFrom<&str> for State {
     type Error = InvalidState;
@@ -504,7 +504,7 @@ pub struct Profile {
 }
 
 #[derive(Debug)]
-pub struct Base64Image(Vec<u16>);
+pub struct Base64Image(pub Vec<u16>);
 
 struct Base64ImageVisitor;
 impl<'de> Visitor<'de> for Base64ImageVisitor {

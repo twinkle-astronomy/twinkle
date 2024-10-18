@@ -29,6 +29,7 @@ twinkle_client = "0.2.1"
 axum = { version = "0.7.5", features = ["ws"] }
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
 futures = "0.3"
+tokio-tungstenite = "0.24.0"
 
 [dev-dependencies]
 #bytes = "1.2.1"
