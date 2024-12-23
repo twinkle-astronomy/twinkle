@@ -746,7 +746,9 @@ pub enum DeError {
     UnexpectedAttr(String),
     UnexpectedEvent(String),
     UnexpectedTag(String),
+    #[cfg(feature = "client")]
     AxumError(axum::Error),
+    #[cfg(feature = "client")]
     Tungstenite(tokio_tungstenite::tungstenite::Error),
 }
 
@@ -756,6 +758,7 @@ impl From<quick_xml::Error> for DeError {
     }
 }
 
+#[cfg(feature = "client")]
 impl From<axum::Error> for DeError {
     fn from(err: axum::Error) -> Self {
         DeError::AxumError(err)
@@ -768,6 +771,7 @@ impl From<std::string::FromUtf8Error> for DeError {
     }
 }
 
+#[cfg(feature = "client")]
 impl From<tokio_tungstenite::tungstenite::Error> for DeError {
     fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
         DeError::Tungstenite(err)
@@ -842,10 +846,12 @@ impl<'a, T: BufRead> CommandIter<'a, IoReader<T>> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(feature = "client")]
     use std::io::Cursor;
 
     use super::*;
 
+    #[cfg(feature = "client")]
     #[tokio::test]
     pub async fn play() {
         let xml = r#"

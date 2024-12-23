@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0.203", features = ["derive"] }
-indi = { path = "../indi" }
+indi = { path = "../indi", features = ["full"] }
 serde_json = "1.0.117"
 futures = "0.3"
 headers = "0.4"

@@ -73,7 +73,18 @@ impl<S: Stream<Item = Result<axum::extract::ws::Message, axum::Error>> + Send + 
 
                     return Some(Ok(deser));
                 }
-                _ => unimplemented!(),
+                axum::extract::ws::Message::Ping(p) => {
+                    dbg!(p);
+                },
+                axum::extract::ws::Message::Pong(p) => {
+                    dbg!(p);
+                },
+                axum::extract::ws::Message::Close(_) => {
+                    return None;
+                },
+                axum::extract::ws::Message::Binary(p) => {
+                    dbg!(p);
+                },
             }
         }
     }

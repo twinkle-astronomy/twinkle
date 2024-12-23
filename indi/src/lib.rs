@@ -126,6 +126,7 @@ pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 pub mod serialization;
 use serialization::*;
 
+#[cfg(feature = "client")]
 pub mod client;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
