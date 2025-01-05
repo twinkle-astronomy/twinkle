@@ -1,0 +1,9 @@
+[package]
+name = "gtk_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gtk = { version = "0.9.5", package = "gtk4", features = ["v4_8"] }
+indi = { path = "../indi" }
+

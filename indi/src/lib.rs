@@ -120,6 +120,7 @@ use chrono::prelude::*;
 use std::str::FromStr;
 
 use std::collections::HashMap;
+pub use tokio;
 
 pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 

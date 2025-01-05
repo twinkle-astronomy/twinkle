@@ -7,11 +7,11 @@ members = [
 	"indi",
 	"phd2",
 	"twinkle",
-	"fits_inspect",
+	"fits_inspect", "gtk_client", "leptos_client",
 ]
 
 [workspace.dependencies]
-twinkle_client = "0.1.0"
+twinkle_client = {path = "twinkle_client"}
 
 [profile.dev.package.fits_inspect]
 opt-level=3

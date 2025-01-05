@@ -102,7 +102,7 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 ///         TcpStream::connect("localhost:7624").await.expect("Connecting to server"),
 ///         Some("ZWO CCD ASI294MM Pro"),
 ///         Some("CCD1"),
-///     ).expect("Connecting to INDI server");
+///     );
 ///     // Retrieve the camera and set BlobEnable to `Only` to ensure this connection
 ///     //  is only used for transfering images.
 ///     let image_camera = image_client
@@ -119,7 +119,7 @@ pub fn new<T: AsyncClientConnection>(
     connection: T,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> Result<Client, serialization::DeError> {
+) -> Client {
     let (feedback, mut incoming_commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
 
     let (mut writer, mut reader) = connection.to_indi();
@@ -172,7 +172,7 @@ pub fn new<T: AsyncClientConnection>(
         feedback: Some(feedback),
         _workers: Some((writer_thread, reader_thread)),
     };
-    Ok(c)
+    c
 }
 
 /// Struct used to keep track of a the devices and their properties.
@@ -297,4 +297,37 @@ pub trait AsyncWriteConnection {
     ) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
 
     fn shutdown(&mut self) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
+}
+
+
+
+#[cfg(test)]
+mod test {
+    use tokio::time::timeout;
+    use tokio_stream::StreamExt;
+
+    use super::*;
+    #[tokio::test]
+    async fn test_device_store() {
+        let notify: Arc<Notify<HashMap<&'static str, Arc<Notify<usize>>>>> = Arc::new(Notify::new(HashMap::new()));
+        {
+            let mut lock = notify.lock().await;
+            lock.insert("foo", Arc::new(Notify::new(0)));
+        }
+        let mut sub = {
+            notify.lock().await.get("foo").unwrap().subscribe().await
+        };
+        let task = tokio::spawn(async move {
+            loop {
+                if let None = sub.next().await {
+                    break;
+                }
+            }
+        });
+
+        notify.lock().await.remove("foo");
+
+        timeout(Duration::from_millis(100), task).await.unwrap().unwrap();
+
+    }
 }

@@ -12,8 +12,7 @@ use twinkle_client::notify::wait_fn;
 async fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let client = indi::client::new(TcpStream::connect(&args[1]).await.unwrap(), None, None)
-        .expect("connecting to indi server");
+    let client = indi::client::new(TcpStream::connect(&args[1]).await.unwrap(), None, None);
     let camera = client
         .get_device::<()>("ZWO CCD ASI294MM Pro")
         .await

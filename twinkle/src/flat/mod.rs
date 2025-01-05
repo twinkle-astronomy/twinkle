@@ -98,7 +98,7 @@ impl Runner {
                             .join(format!("Flat_{}_{:02}.fits", filter, i));
                         fits.save(filename).expect("Saving image");
                         {
-                            let mut lock = task_status.lock().unwrap();
+                            let mut lock = task_status.lock().await;
                             lock.complete += 1;
                         }
                     }
@@ -203,7 +203,7 @@ impl Runner {
 
             let fits_data = Arc::new(fits_data);
             {
-                let mut lock = status.lock().unwrap();
+                let mut lock = status.lock().await;
                 lock.image = Some(fits_data.clone());
             }
             println!(" median adu: {}", &stats.median);
@@ -229,7 +229,7 @@ impl Runner {
 }
 
 impl Action<Status> for Runner {
-    fn status(&self) -> BroadcastStream<std::sync::Arc<Status>> {
-        self.status.subscribe().unwrap()
+    async fn status(&self) -> BroadcastStream<std::sync::Arc<Status>> {
+        self.status.subscribe().await
     }
 }

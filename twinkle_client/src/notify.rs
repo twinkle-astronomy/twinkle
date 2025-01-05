@@ -7,7 +7,9 @@ use std::{
 
 use tokio::sync::{Mutex, MutexGuard};
 
+pub use tokio_stream;
 use tokio_stream::StreamExt as _;
+
 
 #[derive(Debug, PartialEq)]
 pub enum Error<E> {
@@ -375,4 +377,5 @@ mod test {
         j.abort();
         assert!(j.await.is_err());
     }
+
 }

@@ -127,7 +127,7 @@ mod test {
         let connection = TcpStream::connect("indi:7624")
             .await
             .expect("connecting to indi");
-        let mut client = new(connection, None, None).expect("Making client");
+        let mut client = new(connection, None, None);
         client.shutdown();
         if let Some((reader, writer)) = client._workers.take() {
             let _ = tokio::join!(reader, writer);

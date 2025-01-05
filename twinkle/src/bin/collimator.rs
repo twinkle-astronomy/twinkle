@@ -64,11 +64,10 @@ impl FitsViewerApp {
 
         let settings = newed.settings.clone();
 
-        let mut sub = settings.subscribe().unwrap();
-
         let calc_render = newed.fits_widget.clone();
         let calc_context = cc.egui_ctx.clone();
         tokio::spawn(async move {
+            let mut sub = settings.subscribe().await;
             loop {
                 match sub.next().await {
                     Some(Ok(settings)) => {
@@ -113,6 +112,8 @@ impl FitsViewerApp {
                 }
             }
         });
+
+        let settings = newed.settings.clone();
         tokio::spawn(async move {
             let args: Vec<String> = env::args().collect();
 
@@ -151,7 +152,7 @@ impl FitsViewerApp {
                         let data: Arc<ArrayD<u16>> =
                             Arc::new(fits.read_image().expect("Reading captured image"));
 
-                        let mut lock = settings.lock().unwrap();
+                        let mut lock = settings.lock().await;
                         lock.image = data;
                     }
                     _ => {}
@@ -166,8 +167,11 @@ impl eframe::App for FitsViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let fits_widget = self.fits_widget.clone();
         egui::SidePanel::left("control").show(ctx, |ui| {
-            let old_settings = self.settings.lock().unwrap();
-            let mut settings = old_settings.clone();
+            let mut settings = tokio::runtime::Handle::current().block_on( async {
+                let old_settings = self.settings.lock().await;
+                old_settings.clone()
+
+            });
 
             ui.add(
                 egui::Slider::new(&mut settings.center_radius, 0.0..=1.0)

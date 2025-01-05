@@ -15,7 +15,7 @@ mod backend;
 pub mod flat;
 
 pub trait Action<T> {
-    fn status(&self) -> BroadcastStream<std::sync::Arc<T>>;
+    fn status(&self) -> impl std::future::Future<Output = BroadcastStream<std::sync::Arc<T>>> + Send;
 }
 
 pub struct Telescope {
@@ -32,16 +32,14 @@ impl Telescope {
             TcpStream::connect(addr.clone()).await.expect(format!("Unable to connect to {}", addr).as_str()),
             None,
             None,
-        )
-        .expect("Connecting to INDI server");
+        );
 
         let image_client = indi::client::new(
             TcpStream::connect(addr.clone()).await.expect(format!("Unable to connect to {}", addr).as_str()),
             None,
             None, // Some(&config.primary_camera.clone()),
                   // Some("CCD1"),
-        )
-        .expect("Connecting to INDI server");
+        );
 
         Telescope {
             config,
@@ -63,8 +61,7 @@ impl Telescope {
             c,
             None,
             None,
-        )
-        .expect("Connecting to INDI server");
+        );
 
         let c = std::net::TcpStream::connect(addr.clone()).expect(format!("Unable to connect to {}", addr).as_str());
         c.set_nonblocking(true).unwrap();
@@ -74,8 +71,7 @@ impl Telescope {
             None,
             None, // Some(&config.primary_camera.clone()),
                   // Some("CCD1"),
-        )
-        .expect("Connecting to INDI server");
+        );
 
         Telescope {
             config,

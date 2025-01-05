@@ -10,7 +10,7 @@ use futures::{
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::AsyncReadConnection;
-
+pub use tokio_tungstenite;
 use tokio_tungstenite::WebSocketStream;
 
 impl AsyncClientConnection for WebSocket {

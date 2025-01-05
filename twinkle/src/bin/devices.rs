@@ -1,4 +1,4 @@
-use std::{env, ops::Deref, time::Duration};
+use std::{env, ops::Deref, time::{Duration, Instant}};
 
 use indi::client::ChangeError;
 use tokio::net::TcpStream;
@@ -12,9 +12,9 @@ async fn main() -> Result<(), ChangeError<()>> {
         TcpStream::connect(addr).await.expect(format!("Unable to connect to {}", addr).as_str()),
         None,
         None,
-    )?;
+    );
 
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let binding = client.get_devices();
     let devices = binding.lock().await;
