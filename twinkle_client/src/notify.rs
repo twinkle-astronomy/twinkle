@@ -98,6 +98,12 @@ impl<T> Notify<T> {
     }
 }
 
+impl<T> From<T> for Notify<T> {
+    fn from(value: T) -> Self {
+        Notify::new(value)
+    }
+}
+
 impl<T: Debug + Sync + Send + 'static> Notify<T> {
     /// Returns a [`NotifyMutexGuard<T>`](crate::twinkle_client::notify::NotifyMutexGuard) that allows you to read
     /// (via the [Deref] trait) and write (via the [DerefMut] trait)
@@ -108,8 +114,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     /// # Example
     /// ```
     /// use twinkle_client::notify::Notify;
-    /// #[tokio::main]
-    /// async fn main() {
+    /// async move {
     ///     let notify: Notify<i32> = Notify::new(42);
     ///     assert_eq!(*notify.lock().await, 42);
     ///     {
@@ -117,7 +122,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///         *lock = 43;
     ///     }
     ///     assert_eq!(*notify.lock().await, 43);
-    /// }
+    /// };
 
     /// ```
     pub async fn lock(&self) -> NotifyMutexGuard<T> {
@@ -144,8 +149,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     *lock = *lock + 1;
     /// }
     ///
-    /// #[tokio::main]
-    /// async fn main() {
+    /// async move {
     ///     let mut sub = {
     ///         let mut notify = Notify::new(0);
     ///         let sub = notify.subscribe().await;
@@ -160,7 +164,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await.unwrap().unwrap(), Arc::new(2));
     ///     assert_eq!(sub.next().await.unwrap().unwrap(), Arc::new(3));
     ///     assert_eq!(sub.next().await, None);
-    /// }
+    /// };
     /// ```
     pub async fn subscribe(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
         let subject = self.subject.lock().await;
@@ -183,8 +187,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     *lock = *lock + 1;
     /// }
     ///
-    /// #[tokio::main]
-    /// async fn main() {
+    /// async move {
     ///     let mut sub = {
     ///         let mut notify = Notify::new(0);
     ///         let sub = notify.changes();
@@ -198,7 +201,7 @@ impl<T: Debug + Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await.unwrap().unwrap(), Arc::new(2));
     ///     assert_eq!(sub.next().await.unwrap().unwrap(), Arc::new(3));
     ///     assert_eq!(sub.next().await, None);
-    /// }
+    /// };
     /// ```
     pub fn changes(&self) -> tokio_stream::wrappers::BroadcastStream<Arc<T>> {
         tokio_stream::wrappers::BroadcastStream::new(self.to_notify.subscribe())

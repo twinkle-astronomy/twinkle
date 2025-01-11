@@ -24,8 +24,7 @@ where
     /// ```
     /// use twinkle_client::OnDropFutureExt;
     /// use std::sync::{Mutex, Arc};
-    /// #[tokio::main]
-    /// async fn main() {
+    /// async move {
     ///     let val1 = Arc::new(Mutex::new(0));
     ///     let val2 = val1.clone();
     ///     let val3 = val1.clone();
@@ -42,7 +41,7 @@ where
     ///     });
     ///     future.await;
     ///     assert_eq!(*val3.lock().unwrap(), 2);
-    /// }
+    /// };
     fn on_drop<D: FnMut()>(self, on_drop: D) -> OnDropFuture<Self, D>;
 }
 impl<F: Future> OnDropFutureExt for F {
