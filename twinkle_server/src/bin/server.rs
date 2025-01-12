@@ -2,10 +2,12 @@ use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade}, http::StatusCode, response::IntoResponse, routing::get, Router
 };
 
+use tracing::{info_span, Instrument};
 
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use indi::client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
+use tracing::{error, info, Level};
 
 // Requests
 #[derive(Deserialize, Serialize)]
@@ -17,13 +19,15 @@ struct CreateConnection {
 async fn main() {
     // initialize tracing
     tracing_subscriber::fmt()
-    .with_max_level(tracing::Level::DEBUG)
+    .with_max_level(tracing::Level::INFO)
+    .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW | 
+                     tracing_subscriber::fmt::format::FmtSpan::CLOSE) 
     .init();
 
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
-        .route("/", get(create_connection));
+        .route("/indi", get(create_connection));
 
     // run our app with hyper
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
@@ -35,15 +39,19 @@ async fn main() {
 
 
 async fn create_connection(ws: WebSocketUpgrade) -> Result<impl IntoResponse, StatusCode>  {
-    Ok(ws.on_upgrade(move |socket| handle_indi_connection(socket)))
+    Ok(ws.on_upgrade(move |socket|
+        handle_indi_connection(socket)
+    ))
 }
 
+#[tracing::instrument(level = "info", skip(socket))]
 async fn handle_indi_connection(socket: WebSocket) {
     let connection = match TcpStream::connect("indi:7624").await {
         Ok(c) => {
             c
         },
-        Err(_) => {
+        Err(e) => {
+            error!("Error: {:?}", e);
             socket.close().await.ok();
             return
         }
@@ -57,7 +65,6 @@ async fn handle_indi_connection(socket: WebSocket) {
                 Some(Ok(c)) => c,
                 Some(Err(_)) | None => break,
             };
-            dbg!(&cmd);
 
             if let Err(e) = indi_writer.write(cmd).await {
                 dbg!(e);
@@ -69,7 +76,6 @@ async fn handle_indi_connection(socket: WebSocket) {
         loop {
             match indi_reader.read().await {
                 Some(Ok(cmd)) => {
-                    dbg!(&cmd);
                     websocket_write.write(cmd).await.unwrap();
                     
                 },

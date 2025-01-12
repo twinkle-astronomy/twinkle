@@ -17,7 +17,7 @@ services:
       - indi
 
   indi:
-    image: indi
+    image: ghcr.io/twinkle-astronomy/indi_server:v2.1.1-202412060709
     command: indiserver -vvv indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel
     ports:
       - "7624:7624"

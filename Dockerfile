@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt
+RUN rustup target add wasm32-unknown-unknown
 
 RUN mkdir /app
 ENV HOME="/app"
@@ -23,6 +24,8 @@ RUN groupadd -g ${GROUP_ID} ${USER} && \
 
 RUN chown ${USER}:${USER} /app
 USER ${USER}
+
+RUN cargo install trunk
 
 from dev as phd2_exporter_builder
 COPY . /app

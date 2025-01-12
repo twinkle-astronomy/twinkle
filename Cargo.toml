@@ -9,7 +9,7 @@ members = [
 #	"twinkle",
 #	"fits_inspect",
 	"leptos-frontend",
-	"rigel",
+	#"rigel",
 ]
 
 [workspace.dependencies]

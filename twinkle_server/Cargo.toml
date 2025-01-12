@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0.203", features = ["derive"] }
-indi = { path = "../indi", features = ["full"] }
+indi = { path = "../indi", features = ["default", "fitsio"] }
 serde_json = "1.0.117"
 futures = "0.3"
 headers = "0.4"
