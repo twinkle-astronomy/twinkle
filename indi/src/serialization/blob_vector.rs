@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer};
 
-use std::{num::Wrapping, sync::Arc};
+use std::sync::Arc;
 
 use crate::{BlobVector, Parameter};
 
@@ -16,9 +16,8 @@ impl CommandtoParam for DefBlobVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
+    fn to_param(self) -> Parameter {
         Parameter::BlobVector(BlobVector {
-            gen,
             name: self.name,
             group: self.group,
             label: self.label,

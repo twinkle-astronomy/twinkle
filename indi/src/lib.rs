@@ -95,13 +95,16 @@
 //!         camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
 //!         )
 //!         .expect("Configuring camera");
+//!     #[cfg(feature = "fitsio")]
+//!     {
+//!         // Capture a 5 second exposure from the camera
+//!         let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
 //!
-//!     // Capture a 5 second exposure from the camera
-//!     let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
-//!
-//!     // Save the fits file to disk.
-//!     fits.save("flat.fits").expect("Saving image");
+//!         // Save the fits file to disk.
+//!         fits.save("flat.fits").expect("Saving image");
+//!     }
 //! }
+pub use tokio;
 
 use quick_xml::events::attributes::AttrError;
 use serde::Deserialize;
@@ -110,7 +113,6 @@ use serde::Serialize;
 use std::borrow::Cow;
 
 use std::num;
-use std::num::Wrapping;
 
 use std::str;
 use std::sync::Arc;
@@ -126,7 +128,6 @@ pub static INDI_PROTOCOL_VERSION: &str = "1.7";
 pub mod serialization;
 use serialization::*;
 
-#[cfg(feature = "client")]
 pub mod client;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -181,7 +182,6 @@ pub struct Switch {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SwitchVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -215,7 +215,6 @@ pub struct Number {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct NumberVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -244,7 +243,6 @@ pub struct Light {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LightVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -280,7 +278,6 @@ impl FromParamValue for HashMap<String, Text> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TextVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -302,7 +299,6 @@ pub struct Blob {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BlobVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -383,27 +379,8 @@ impl Parameter {
     pub fn get_values<T: FromParamValue>(&self) -> Result<&T, TypeError> {
         T::values_from(self)
     }
-
-    pub fn gen(&self) -> core::num::Wrapping<usize> {
-        match self {
-            Parameter::TextVector(p) => p.gen,
-            Parameter::NumberVector(p) => p.gen,
-            Parameter::SwitchVector(p) => p.gen,
-            Parameter::LightVector(p) => p.gen,
-            Parameter::BlobVector(p) => p.gen,
-        }
-    }
-
-    pub fn gen_mut(&mut self) -> &mut core::num::Wrapping<usize> {
-        match self {
-            Parameter::TextVector(p) => &mut p.gen,
-            Parameter::NumberVector(p) => &mut p.gen,
-            Parameter::SwitchVector(p) => &mut p.gen,
-            Parameter::LightVector(p) => &mut p.gen,
-            Parameter::BlobVector(p) => &mut p.gen,
-        }
-    }
 }
+
 #[derive(Debug)]
 pub enum TypeError {
     TypeMismatch,

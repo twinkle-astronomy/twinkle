@@ -88,9 +88,8 @@ impl CommandtoParam for DefNumberVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
+    fn to_param(self) -> Parameter {
         Parameter::NumberVector(NumberVector {
-            gen,
             name: self.name,
             group: self.group,
             label: self.label,

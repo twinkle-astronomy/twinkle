@@ -1,7 +1,13 @@
-pub mod device;
+pub mod active_device;
+pub mod sink;
+pub mod stream;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tcpstream;
 pub mod websocket;
 
+use crate::device;
+use std::fmt::Debug;
+use tracing::error;
 use twinkle_client;
 
 use std::{
@@ -10,11 +16,22 @@ use std::{
     time::Duration,
 };
 
-use self::device::ParamUpdateResult;
 use crate::{
-    serialization, Command, DeError, GetProperties, TypeError, UpdateError, INDI_PROTOCOL_VERSION,
+    serialization, Command, DeError, GetProperties, Parameter, TypeError, UpdateError,
+    INDI_PROTOCOL_VERSION,
 };
 pub use twinkle_client::notify::{self, wait_fn, Notify};
+
+#[cfg(target_family = "wasm")]
+pub trait MaybeSend {}
+#[cfg(target_family = "wasm")]
+impl<T> MaybeSend for T {}
+
+// Helper trait that requires Send for non-wasm
+#[cfg(not(target_family = "wasm"))]
+pub trait MaybeSend: Send {}
+#[cfg(not(target_family = "wasm"))]
+impl<T: Send> MaybeSend for T {}
 
 #[derive(Debug)]
 pub enum ChangeError<E> {
@@ -22,7 +39,7 @@ pub enum ChangeError<E> {
     DeError(serialization::DeError),
     IoError(std::io::Error),
     Disconnected(crossbeam_channel::SendError<Command>),
-    SendError(device::SendError<Command>),
+    SendError(active_device::SendError<Command>),
     Canceled,
     Timeout,
     EndOfStream,
@@ -47,8 +64,8 @@ impl<E> From<std::io::Error> for ChangeError<E> {
         ChangeError::<E>::IoError(value)
     }
 }
-impl<E> From<device::SendError<Command>> for ChangeError<E> {
-    fn from(value: device::SendError<Command>) -> Self {
+impl<E> From<active_device::SendError<Command>> for ChangeError<E> {
+    fn from(value: active_device::SendError<Command>) -> Self {
         ChangeError::<E>::SendError(value)
     }
 }
@@ -125,28 +142,33 @@ pub fn new<T: AsyncClientConnection>(
     let (mut writer, mut reader) = connection.to_indi();
     let writer_device = device.map(|x| String::from(x));
     let writer_parameter = parameter.map(|x| String::from(x));
-    let writer_thread = tokio::task::spawn(async move {
-        writer
-            .write(serialization::Command::GetProperties(GetProperties {
-                version: INDI_PROTOCOL_VERSION.to_string(),
-                device: writer_device,
-                name: writer_parameter,
-            }))
-            .await?;
-
-        loop {
-            let command = match incoming_commands.recv().await {
-                Some(c) => c,
-                None => break,
-            };
-            writer.write(command).await?;
+    feedback
+        .send(serialization::Command::GetProperties(GetProperties {
+            version: INDI_PROTOCOL_VERSION.to_string(),
+            device: writer_device,
+            name: writer_parameter,
+        }))
+        .unwrap();
+    let writer_future = async move {
+        if let Err(e) = async {
+            loop {
+                let command = match incoming_commands.recv().await {
+                    Some(c) => c,
+                    None => break,
+                };
+                writer.write(command).await?;
+            }
+            writer.shutdown().await?;
+            Ok::<(), DeError>(())
         }
-        writer.shutdown().await?;
-        Ok(())
-    });
+        .await
+        {
+            error!("Writer error: {:?}", e);
+        }
+    };
     let devices = Arc::new(Notify::new(HashMap::new()));
     let thread_devices = devices.clone();
-    let reader_thread = tokio::spawn(async move {
+    let reader_future = async move {
         loop {
             let command = match reader.read().await {
                 Some(c) => c,
@@ -156,21 +178,36 @@ pub fn new<T: AsyncClientConnection>(
                 Ok(command) => {
                     let mut locked_devices = thread_devices.lock().await;
 
-                    let update_result = locked_devices.update(command, |_param| {}).await;
+                    let update_result = locked_devices.update(command).await;
                     if let Err(e) = update_result {
-                        dbg!(e);
+                        error!("Device update error: {:?}", e);
                     }
                 }
                 Err(e) => {
-                    dbg!(&e);
+                    error!("Command error: {:?}", e);
                 }
             }
         }
-    });
-    let c = Client {
-        devices,
-        feedback: Some(feedback),
-        _workers: Some((writer_thread, reader_thread)),
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let c = {
+        let (writer_thread, reader_thread) =
+            { (tokio::spawn(writer_future), tokio::spawn(reader_future)) };
+        Client {
+            devices,
+            feedback: Some(feedback),
+            _workers: Some((writer_thread, reader_thread)),
+        }
+    };
+    #[cfg(target_arch = "wasm32")]
+    let c = {
+        wasm_bindgen_futures::spawn_local(writer_future);
+        wasm_bindgen_futures::spawn_local(reader_future);
+        Client {
+            devices,
+            feedback: Some(feedback),
+        }
     };
     Ok(c)
 }
@@ -181,10 +218,8 @@ pub struct Client {
     feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
     // connection: T,
     // Used for testing
-    _workers: Option<(
-        tokio::task::JoinHandle<Result<(), DeError>>,
-        tokio::task::JoinHandle<()>,
-    )>,
+    #[cfg(not(target_arch = "wasm32"))]
+    _workers: Option<(tokio::task::JoinHandle<()>, tokio::task::JoinHandle<()>)>,
 }
 
 impl Drop for Client {
@@ -217,11 +252,11 @@ impl Client {
     pub async fn get_device<'a, E>(
         &'a self,
         name: &str,
-    ) -> Result<device::ActiveDevice, notify::Error<E>> {
+    ) -> Result<active_device::ActiveDevice, notify::Error<E>> {
         let subs = self.devices.subscribe().await;
         wait_fn(subs, Duration::from_secs(1), |devices| {
             if let Some(device) = devices.get(name) {
-                return Ok(notify::Status::Complete(device::ActiveDevice::new(
+                return Ok(notify::Status::Complete(active_device::ActiveDevice::new(
                     String::from(name),
                     device.clone(),
                     self.feedback.clone(),
@@ -243,43 +278,34 @@ impl Client {
     }
 }
 
-pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device>>>;
+pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device<Notify<Parameter>>>>>;
 
 pub trait DeviceStore {
     /// Update the state of the appropriate device property for a command that came from an INDI server.
     #[allow(async_fn_in_trait)]
-    async fn update<T>(
-        &mut self,
-        command: serialization::Command,
-        f: impl FnOnce(ParamUpdateResult) -> T,
-    ) -> Result<Option<T>, UpdateError>;
+    async fn update(&mut self, command: serialization::Command) -> Result<(), UpdateError>;
 }
 
 impl DeviceStore for MemoryDeviceStore {
-    async fn update<T>(
-        &mut self,
-        command: serialization::Command,
-        f: impl FnOnce(ParamUpdateResult) -> T,
-    ) -> Result<Option<T>, UpdateError> {
+    async fn update(&mut self, command: serialization::Command) -> Result<(), UpdateError> {
         let name = command.device_name();
         match name {
             Some(name) => {
-                let mut device = self
+                let device = self
                     .entry(name.clone())
-                    .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))))
-                    .lock()
-                    .await;
-                let param = device.update(command).await?;
-                Ok(Some(f(param)))
+                    .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))));
+                let mut device_guard = device.lock().await;
+                device_guard.update(command).await?;
+                Ok(())
             }
-            None => Ok(None),
+            None => Ok(()),
         }
     }
 }
 
 pub trait AsyncClientConnection {
-    type Reader: AsyncReadConnection + Unpin + Send + 'static;
-    type Writer: AsyncWriteConnection + Unpin + Send + 'static;
+    type Reader: AsyncReadConnection + Unpin + MaybeSend + 'static;
+    type Writer: AsyncWriteConnection + Unpin + MaybeSend + 'static;
 
     fn to_indi(self) -> (Self::Writer, Self::Reader);
 }
@@ -287,14 +313,16 @@ pub trait AsyncClientConnection {
 pub trait AsyncReadConnection {
     fn read(
         &mut self,
-    ) -> impl std::future::Future<Output = Option<Result<crate::Command, crate::DeError>>> + Send;
+    ) -> impl std::future::Future<Output = Option<Result<crate::Command, crate::DeError>>> + MaybeSend;
 }
 
 pub trait AsyncWriteConnection {
     fn write(
         &mut self,
         cmd: Command,
-    ) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), crate::DeError>> + MaybeSend;
 
-    fn shutdown(&mut self) -> impl std::future::Future<Output = Result<(), crate::DeError>> + Send;
+    fn shutdown(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<(), crate::DeError>> + MaybeSend;
 }

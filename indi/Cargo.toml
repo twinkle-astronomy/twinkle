@@ -1,7 +1,7 @@
 [package]
 name = "indi"
 description = "Client library for interfacing with the Instrument Neutral Distributed Interface (INDI) protocol."
-version = "4.0.0"
+version = "5.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -11,7 +11,7 @@ repository = "https://github.com/cconstantine/twinkle/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-quick-xml = {version="~0.33.0", features=["encoding", "serialize", "serde"]}
+quick-xml = {version="~0.33.0", features=["encoding", "serialize", "serde", "tokio", "async-tokio"]}
 chrono = {version = "~0.4" }
 encoding = {version = "0.2" }
 base64 = {version = "0.13.0" }
@@ -22,32 +22,32 @@ libc = {version = "0.2.139", optional=true }
 ndarray = {version = "0.15.6" }
 crossbeam-channel = {version = "0.5.6" }
 once_cell = {version = "1.17.1" }
-tokio = {version = "1.40", features = ["macros", "rt-multi-thread"], optional=true}
-tokio-stream = { version = "0", features = ["sync"], optional=true }
+tokio = {version = "1.40", features = ["macros"]}
+tokio-stream = { version = "0", features = ["sync"] }
 serde = { version = "1.0.164", features = ["derive"] }
-twinkle_client = { version = "0.2.1", optional=true }
-axum = { version = "0.7.5", features = ["ws"], optional=true }
-axum-extra = { version = "0.9.3", features = ["typed-header"], optional=true }
-futures = { version = "0.3" , optional=true }
-tokio-tungstenite = {version = "0.24.0", optional=true }
+twinkle_client = { version = "0.2.2" }
+tracing = "0.1.41"
+futures = { version = "0.3" }
+wasm-bindgen-futures = {version="0.4", optional=true}
+tokio-tungstenite-wasm = {version="0.4", optional=true}
 
 [dev-dependencies]
-#bytes = "1.2.1"
+tokio = { version = "1", features = ["full"] }
 
 [features]
-default = ["serde"]
-full = ["serde", "client"]
-serde = []
-client=[
-    "dep:fitsio",
-    "dep:tokio",
-    "dep:tokio-stream",
-    "dep:axum",
-    "dep:axum-extra",
-    "dep:tokio-tungstenite",
-    "dep:futures",
-    "dep:twinkle_client",
+default = []
+full = ["fitsio"]
+fitsio = [
     "dep:libc",
-    "quick-xml/tokio",
-    "quick-xml/async-tokio"
+    "dep:fitsio",
 ]
+
+wasm = [
+    "dep:wasm-bindgen-futures",
+    "dep:tokio-tungstenite-wasm"
+]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+axum = { version = "0.7.5", features = ["ws"] }
+axum-extra = { version = "0.9.3", features = ["typed-header"]}
+tokio-tungstenite = {version = "0.24.0"}
