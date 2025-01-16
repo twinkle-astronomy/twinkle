@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 use analysis::Statistics;
 use calibration::{CalibrationDescription, Dark, Flat, HasCalibration};
 use fitsio::FitsFile;
-use indi::client::device::FitsImage;
+use indi::client::active_device::FitsImage;
 use ndarray::{
     array, Array, Array2, ArrayBase, ArrayD, ArrayView, Dim, Dimension, IntoDimension, Ix2, IxDyn,
     IxDynImpl, OwnedRepr, SliceInfo, SliceInfoElem, ViewRepr, Zip,

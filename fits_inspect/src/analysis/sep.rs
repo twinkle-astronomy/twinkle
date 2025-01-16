@@ -61,12 +61,15 @@ impl<'a> Image {
             ndtype: sep_sys::SEP_TFLOAT,
             mdtype: sep_sys::SEP_TFLOAT,
             sdtype: sep_sys::SEP_TFLOAT,
-            w: image.shape()[1] as i32,
-            h: image.shape()[0] as i32,
+            w: image.shape()[1] as i64,
+            h: image.shape()[0] as i64,
             noiseval: 0.0 as f64,
             noise_type: sep_sys::SEP_NOISE_NONE,
             gain: 0.0 as f64,
             maskthresh: 0.0 as f64,
+            segids: todo!(),
+            idcounts: todo!(),
+            numids: todo!(),
         };
 
         let background = Self::background(&sep_sys_image)?;
@@ -209,13 +212,13 @@ impl<'a> Image {
 #[derive(Serialize, Debug)]
 pub struct CatalogEntry {
     pub thresh: f32,
-    pub npix: i32,
-    pub tnpix: i32,
+    pub npix: i64,
+    pub tnpix: i64,
 
-    pub xmin: i32,
-    pub xmax: i32,
-    pub ymin: i32,
-    pub ymax: i32,
+    pub xmin: i64,
+    pub xmax: i64,
+    pub ymin: i64,
+    pub ymax: i64,
 
     pub x: f64,
     pub y: f64,
@@ -235,10 +238,10 @@ pub struct CatalogEntry {
 
     pub cpeak: f32,
     pub peak: f32,
-    pub xcpeak: i32,
-    pub ycpeak: i32,
-    pub xpeak: i32,
-    pub ypeak: i32,
+    pub xcpeak: i64,
+    pub ycpeak: i64,
+    pub xpeak: i64,
+    pub ypeak: i64,
     pub flag: i16,
 }
 

@@ -1,4 +1,4 @@
-FROM rust:1.80-bullseye as dev
+FROM rust:1.84-bullseye as dev
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcfitsio-dev \

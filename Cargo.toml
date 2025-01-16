@@ -1,25 +1,21 @@
+[profile.dev.package.fits_inspect]
+opt-level = 3
+
 [workspace]
+members = [
+    "egui-frontend",
+    "fits_inspect",
+    "indi",
+    "leptos-frontend",
+    "phd2",
+    "twinkle_client",
+    "twinkle_server",
+]
 resolver = "2"
 
-members = [
-"twinkle_client",
-	"twinkle_server",
-	"indi",
-#	"phd2",
-#	"twinkle",
-#	"fits_inspect",
-	"leptos-frontend",
-	#"rigel",
-]
-
-[workspace.dependencies]
-#twinkle_client = "0.1.0"
-
-[profile.dev.package.fits_inspect]
-opt-level=3
-
 [[workspace.metadata.leptos]]
-# project name
 name = "leptos-project"
 bin-package = "rigel"
 lib-package = "rigel"
+
+[workspace.dependencies]

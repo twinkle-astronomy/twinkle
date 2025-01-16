@@ -1,28 +1,32 @@
 use axum::{
-    extract::ws::{WebSocket, WebSocketUpgrade}, http::StatusCode, response::IntoResponse, routing::get, Router
+    extract::ws::{WebSocket, WebSocketUpgrade},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::get,
+    Router,
 };
 
-use tracing::{info_span, Instrument};
-
+use indi::client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
-use indi::client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
-use tracing::{error, info, Level};
+use tracing::error;
 
 // Requests
 #[derive(Deserialize, Serialize)]
 struct CreateConnection {
-    addr: String
+    addr: String,
 }
 
 #[tokio::main]
 async fn main() {
     // initialize tracing
     tracing_subscriber::fmt()
-    .with_max_level(tracing::Level::INFO)
-    .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW | 
-                     tracing_subscriber::fmt::format::FmtSpan::CLOSE) 
-    .init();
+        .with_max_level(tracing::Level::DEBUG)
+        .with_span_events(
+            tracing_subscriber::fmt::format::FmtSpan::NEW
+                | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
+        )
+        .init();
 
     // build our application with a route
     let app = Router::new()
@@ -30,34 +34,27 @@ async fn main() {
         .route("/indi", get(create_connection));
 
     // run our app with hyper
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000").await.unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }
 
-
-async fn create_connection(ws: WebSocketUpgrade) -> Result<impl IntoResponse, StatusCode>  {
-    Ok(ws.on_upgrade(move |socket|
-        handle_indi_connection(socket)
-    ))
+async fn create_connection(ws: WebSocketUpgrade) -> Result<impl IntoResponse, StatusCode> {
+    Ok(ws.on_upgrade(move |socket| handle_indi_connection(socket)))
 }
 
 #[tracing::instrument(level = "info", skip(socket))]
 async fn handle_indi_connection(socket: WebSocket) {
     let connection = match TcpStream::connect("indi:7624").await {
-        Ok(c) => {
-            c
-        },
+        Ok(c) => c,
         Err(e) => {
             error!("Error: {:?}", e);
             socket.close().await.ok();
-            return
+            return;
         }
     };
     let (mut indi_writer, mut indi_reader) = connection.to_indi();
-    let (mut websocket_write, mut websocket_read ) = socket.to_indi();
+    let (mut websocket_write, mut websocket_read) = socket.to_indi();
 
     let writer = tokio::spawn(async move {
         loop {
@@ -65,9 +62,8 @@ async fn handle_indi_connection(socket: WebSocket) {
                 Some(Ok(c)) => c,
                 Some(Err(_)) | None => break,
             };
-
             if let Err(e) = indi_writer.write(cmd).await {
-                dbg!(e);
+                error!("Error sending command to indi server: {:?}", e);
             }
         }
     });
@@ -77,10 +73,9 @@ async fn handle_indi_connection(socket: WebSocket) {
             match indi_reader.read().await {
                 Some(Ok(cmd)) => {
                     websocket_write.write(cmd).await.unwrap();
-                    
-                },
+                }
                 Some(Err(e)) => {
-                    dbg!(&e);
+                    error!("Error reading from indi server: {:?}", &e);
                 }
                 None => break,
             }
@@ -91,4 +86,3 @@ async fn handle_indi_connection(socket: WebSocket) {
         tracing::error!("Error: {:?}", e);
     }
 }
-

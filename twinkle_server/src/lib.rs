@@ -5,7 +5,6 @@ pub mod stream;
 // use indi::{client::tokio_tcpstream::{AsyncClientConnection, AsyncWriteConnection}, serialization::{Command, DeError}};
 // use tokio::sync::mpsc::{self};
 
-
 // struct IndiWebSocket{
 //     websocket: WebSocket,
 // }
@@ -17,7 +16,7 @@ pub mod stream;
 //     fn to_indi(self) -> (Self::Writer, Self::Reader) {
 //         let (reader, writer) = self.websocket.split();
 //         // let reader = NsReader::from_reader(BufReader::new(reader));
-        
+
 //         // (WebSocketCommandWriter { writer }, AsyncIndiReader::new(reader))
 //         todo!()
 //     }
@@ -31,7 +30,7 @@ pub mod stream;
 //     fn write<X: Serialize>(&mut self, command: X) -> Result<(), DeError> {
 //         todo!()
 //     }
-    
+
 //     fn shutdown(&self) {
 //         todo!()
 //     }
@@ -49,7 +48,7 @@ pub mod stream;
 //     fn writer(self) -> Result<impl CommandWriter + Send + 'static, DeError> {
 //         Ok(WebSocketCommandWriter { })
 //     }
-    
+
 //     fn reader(
 //         self,
 //     ) -> Result<impl Iterator<Item = Result<Command, DeError>>, std::io::Error> {

@@ -1,10 +1,16 @@
-use indi::{client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection}, serialization::GetProperties, INDI_PROTOCOL_VERSION};
+use indi::{
+    client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection},
+    serialization::GetProperties,
+    INDI_PROTOCOL_VERSION,
+};
 use tokio_tungstenite::connect_async;
 use tracing::error;
 
 #[tokio::main]
 async fn main() {
-    let (websocket, _) = connect_async("ws://localhost:4000/".to_string()).await.unwrap();
+    let (websocket, _) = connect_async("ws://localhost:4000/".to_string())
+        .await
+        .unwrap();
 
     let (mut write, mut read) = websocket.to_indi();
 
@@ -15,7 +21,7 @@ async fn main() {
                     println!("-----------------");
                     dbg!(&msg);
                     println!("-----------------");
-                },
+                }
                 Some(Err(e)) => {
                     dbg!(e);
                 }
@@ -24,7 +30,6 @@ async fn main() {
                 }
             }
         }
-
     });
 
     let writer = tokio::spawn(async move {
