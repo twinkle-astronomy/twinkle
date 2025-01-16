@@ -21,7 +21,7 @@ use crate::{
     ToCommand, TryEq,
 };
 
-use super::ChangeError;
+use super::{active_parameter::ActiveParameter, ChangeError};
 
 /// A struct wrapping the raw bytes of a FitsImage.
 pub struct FitsImage {
@@ -183,6 +183,17 @@ impl ActiveDevice {
         .await
     }
 
+    pub async fn parameter(&self, param_name: &str) -> Option<ActiveParameter> {
+        Some(ActiveParameter::new(
+            self.clone(),
+            self.device
+                .lock()
+                .await
+                .get_parameters()
+                .get(param_name)?
+                .clone(),
+        ))
+    }
     /// Ensures that the parameter named `param_name` has the given value with the INDI server.
     /// If the INDI server's value does not match the `values` given, it will send the
     /// INDI server commands necessary to change values, and wait for the server
@@ -208,9 +219,9 @@ impl ActiveDevice {
     ///     ).await.expect("Changing filter");
     /// }
     /// ```
-    pub async fn change<P: Clone + TryEq<Parameter> + ToCommand<P> + 'static>(
-        &self,
-        param_name: &str,
+    pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand<P>>(
+        &'a self,
+        param_name: &'a str,
         values: P,
     ) -> Result<Arc<Parameter>, ChangeError<Command>> {
         let device_name = self.name.clone();

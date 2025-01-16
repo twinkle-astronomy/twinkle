@@ -237,8 +237,8 @@ impl FromParamValue for HashMap<String, Number> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Light {
-    label: Option<String>,
-    value: PropertyState,
+    pub label: Option<String>,
+    pub value: PropertyState,
 }
 
 #[derive(Debug, PartialEq, Clone)]

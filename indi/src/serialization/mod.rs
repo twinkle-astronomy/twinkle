@@ -293,7 +293,7 @@ pub struct DefTextVector {
     #[serde(rename = "@message")]
     pub message: Option<String>,
 
-    #[serde(rename = "defText")]
+    #[serde(rename = "defText", default)]
     pub texts: Vec<DefText>,
 }
 
@@ -324,7 +324,7 @@ pub struct SetTextVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneText")]
+    #[serde(rename = "oneText", default)]
     pub texts: Vec<OneText>,
 }
 
@@ -338,7 +338,7 @@ pub struct NewTextVector {
     #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
 
-    #[serde(rename = "oneText")]
+    #[serde(rename = "oneText", default)]
     pub texts: Vec<OneText>,
 }
 
@@ -380,7 +380,7 @@ pub struct DefNumberVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defNumber")]
+    #[serde(rename = "defNumber", default)]
     pub numbers: Vec<DefNumber>,
 }
 
@@ -419,7 +419,7 @@ pub struct SetNumberVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneNumber")]
+    #[serde(rename = "oneNumber", default)]
     pub numbers: Vec<SetOneNumber>,
 }
 
@@ -448,7 +448,7 @@ pub struct NewNumberVector {
     #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
 
-    #[serde(rename = "oneNumber")]
+    #[serde(rename = "oneNumber", default)]
     pub numbers: Vec<OneNumber>,
 }
 
@@ -485,7 +485,7 @@ pub struct DefSwitchVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defSwitch")]
+    #[serde(rename = "defSwitch", default)]
     pub switches: Vec<DefSwitch>,
 }
 
@@ -516,7 +516,7 @@ pub struct SetSwitchVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneSwitch")]
+    #[serde(rename = "oneSwitch", default)]
     pub switches: Vec<OneSwitch>,
 }
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -529,7 +529,7 @@ pub struct NewSwitchVector {
     #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
 
-    #[serde(rename = "oneSwitch")]
+    #[serde(rename = "oneSwitch", default)]
     pub switches: Vec<OneSwitch>,
 }
 
@@ -560,7 +560,7 @@ pub struct DefLightVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defLight")]
+    #[serde(rename = "defLight", default)]
     pub lights: Vec<DefLight>,
 }
 
@@ -589,7 +589,7 @@ pub struct SetLightVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneLight")]
+    #[serde(rename = "oneLight", default)]
     pub lights: Vec<OneLight>,
 }
 
@@ -624,7 +624,7 @@ pub struct DefBlobVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defBLOB")]
+    #[serde(rename = "defBLOB", default)]
     pub blobs: Vec<DefBlob>,
 }
 
@@ -653,7 +653,7 @@ pub struct SetBlobVector {
     #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneBLOB")]
+    #[serde(rename = "oneBLOB", default)]
     pub blobs: Vec<OneBlob>,
 }
 

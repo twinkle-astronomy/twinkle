@@ -1,4 +1,5 @@
 pub mod active_device;
+pub mod active_parameter;
 pub mod sink;
 pub mod stream;
 #[cfg(not(target_arch = "wasm32"))]
@@ -7,7 +8,7 @@ pub mod websocket;
 
 use crate::device;
 use std::fmt::Debug;
-use tracing::error;
+use tracing::{error, Instrument};
 use twinkle_client;
 
 use std::{
@@ -165,7 +166,8 @@ pub fn new<T: AsyncClientConnection>(
         {
             error!("Writer error: {:?}", e);
         }
-    };
+    }
+    .instrument(tracing::info_span!("indi_writer"));
     let devices = Arc::new(Notify::new(HashMap::new()));
     let thread_devices = devices.clone();
     let reader_future = async move {
@@ -188,7 +190,8 @@ pub fn new<T: AsyncClientConnection>(
                 }
             }
         }
-    };
+    }
+    .instrument(tracing::info_span!("indi_reader"));
 
     #[cfg(not(target_arch = "wasm32"))]
     let c = {
@@ -266,6 +269,16 @@ impl Client {
             Ok(notify::Status::Pending)
         })
         .await
+    }
+
+    pub async fn device<'a, E>(&'a self, name: &str) -> Option<active_device::ActiveDevice> {
+        self.devices.lock().await.get(name).map(|device| {
+            active_device::ActiveDevice::new(
+                String::from(name),
+                device.clone(),
+                self.feedback.clone(),
+            )
+        })
     }
 
     /// Returns the a read-only lock on client's MemoryDeviceStore.

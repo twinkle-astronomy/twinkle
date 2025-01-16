@@ -155,7 +155,9 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
         match &name {
             Some(name) => {
                 self.names.retain(|n| *n != *name);
-                self.parameters.remove(name);
+                if let None = self.parameters.remove(name) {
+                    return Err(UpdateError::ParameterMissing(name.clone()));
+                }
             }
             None => {
                 self.names.clear();
@@ -176,8 +178,10 @@ mod tests {
     #[derive(Debug)]
     struct TestLock<T>(std::sync::Mutex<T>);
     impl<T: Send> AsyncLockable<T> for TestLock<T> {
-        type Lock<'a> = MutexGuard<'a, T>
-        where Self: 'a;
+        type Lock<'a>
+            = MutexGuard<'a, T>
+        where
+            Self: 'a;
 
         fn new(value: T) -> Self {
             Self(Mutex::new(value))
@@ -541,5 +545,81 @@ mod tests {
                 panic!("Unexpected");
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_delete() {
+        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
+
+        let def_text = DefTextVector {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: String::from_str("Exposure").unwrap(),
+            label: Some(String::from_str("thingo").unwrap()),
+            group: Some(String::from_str("group").unwrap()),
+            state: PropertyState::Ok,
+            perm: PropertyPerm::RW,
+            timeout: Some(60),
+            timestamp: Some(timestamp),
+            message: None,
+            texts: vec![DefText {
+                name: String::from_str("seconds").unwrap(),
+                label: Some(String::from_str("asdf").unwrap()),
+                value: String::from_str("something").unwrap(),
+            }],
+        };
+        assert_eq!(device.get_parameters().len(), 0);
+        device
+            .update(serialization::Command::DefTextVector(def_text))
+            .await
+            .unwrap();
+        assert_eq!(device.get_parameters().len(), 1);
+
+        {
+            let param = device
+                .get_parameters()
+                .get("Exposure")
+                .unwrap()
+                .lock()
+                .await;
+            if let Parameter::TextVector(stored) = param.deref() {
+                assert_eq!(
+                    stored,
+                    &TextVector {
+                        name: String::from_str("Exposure").unwrap(),
+                        group: Some(String::from_str("group").unwrap()),
+                        label: Some(String::from_str("thingo").unwrap()),
+                        state: PropertyState::Ok,
+                        perm: PropertyPerm::RW,
+                        timeout: Some(60),
+                        timestamp: Some(timestamp.into_inner()),
+                        values: HashMap::from([(
+                            String::from_str("seconds").unwrap(),
+                            Text {
+                                label: Some(String::from_str("asdf").unwrap()),
+                                value: String::from_str("something").unwrap(),
+                            }
+                        )])
+                    }
+                );
+            } else {
+                panic!("Unexpected");
+            }
+        }
+        let timestamp = DateTime::from_str("2022-10-13T08:41:56.301Z")
+            .unwrap()
+            .into();
+        let del_number = DelProperty {
+            device: String::from_str("CCD Simulator").unwrap(),
+            name: Some(String::from_str("Exposure").unwrap()),
+            timestamp: Some(timestamp),
+            message: None,
+        };
+        assert_eq!(device.get_parameters().len(), 1);
+        device
+            .update(serialization::Command::DelProperty(del_number))
+            .await
+            .unwrap();
+        assert_eq!(device.get_parameters().len(), 0);
     }
 }

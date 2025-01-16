@@ -77,9 +77,34 @@ impl<T: AsyncRead + Unpin> AsyncIndiReader<T> {
                     document.extend_from_slice(&e.into_inner());
                 }
                 Event::Eof => return None,
-                _ => {
-                    // Handle other event types if needed
+                Event::Empty(e) => {
+                    document.extend_from_slice(b"<");
+                    document.extend_from_slice(e.name().as_ref());
+                    for attr in e.attributes() {
+                        let attr = match attr {
+                            Ok(d) => d,
+                            Err(e) => return Some(Err(e.into())),
+                        };
+                        document.extend_from_slice(b" ");
+                        document.extend_from_slice(attr.key.as_ref());
+                        document.extend_from_slice(b"=\"");
+                        document.extend_from_slice(&attr.value);
+                        document.extend_from_slice(b"\"");
+                    }
+
+                    document.extend_from_slice(b">");
+                    document.extend_from_slice(b"</");
+                    document.extend_from_slice(e.name().as_ref());
+                    document.extend_from_slice(b">");
+                    if depth == 0 {
+                        let doc = match String::from_utf8(document) {
+                            Ok(d) => d,
+                            Err(e) => return Some(Err(e.into())),
+                        };
+                        return Some(Ok(doc));
+                    }
                 }
+                _ => {}
             }
             buffer.clear();
         }
