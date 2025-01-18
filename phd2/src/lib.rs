@@ -112,8 +112,13 @@ impl<T: Send + tokio::io::AsyncRead + tokio::io::AsyncWrite + 'static> Phd2Conne
             let mut buf = String::new();
             loop {
                 buf.clear();
-                if read.read_line(&mut buf).await.unwrap() == 0 {
-                    break;
+                match read.read_line(&mut buf).await {
+                    Ok(0) => break,
+                    Err(e) => {
+                        dbg!(e);
+                        break
+                    },
+                    _ => {}
                 }
                 let obj = serde_json::from_str::<ServerMessage>(&buf);
 
