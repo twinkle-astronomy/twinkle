@@ -24,7 +24,7 @@ log = "0.4"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
-indi = { version = "5.0.0", path = "../indi", features = ["wasm"] }
+indi = { version = "5.0.0", features = ["wasm"] }
 tokio-tungstenite-wasm = "0.4.0"
 strum = { version = "0.26.3", features = ["derive"] }
 tokio = "1.43.0"

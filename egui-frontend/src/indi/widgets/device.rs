@@ -1,4 +1,9 @@
-use std::{cmp::Ordering, ops::Deref, sync::Arc};
+use std::{
+    cmp::Ordering,
+    collections::{hash_map::Entry, HashMap},
+    ops::Deref,
+    sync::Arc,
+};
 
 use egui::{Response, Ui, Widget};
 use futures::executor::block_on;
@@ -7,11 +12,15 @@ use itertools::Itertools;
 
 pub struct Device<'a> {
     device: &'a indi::client::active_device::ActiveDevice,
+    device_new: &'a mut HashMap<String, indi::Parameter>,
 }
 
 impl<'a> Device<'a> {
-    pub fn new(device: &'a indi::client::active_device::ActiveDevice) -> Self {
-        Device { device }
+    pub fn new(
+        device: &'a indi::client::active_device::ActiveDevice,
+        device_new: &'a mut HashMap<String, indi::Parameter>,
+    ) -> Self {
+        Device { device, device_new }
     }
 }
 
@@ -37,13 +46,68 @@ impl<'a> Widget for Device<'a> {
                     block_on(async {
                         let parameter = param.lock().await;
                         let param = parameter.as_ref();
-                        if let Some(label) = param.get_label() {
-                            ui.label(label);
-                        } else {
-                            ui.label(param.get_name());
+
+                        match param {
+                            indi::Parameter::NumberVector(vector) => {
+                                if let Entry::Occupied(entry) =
+                                    self.device_new.entry(param.get_name().clone())
+                                {
+                                    if !matches!(entry.get(), indi::Parameter::NumberVector(_)) {
+                                        entry.remove_entry();
+                                    }
+                                }
+                                let new_value = self
+                                    .device_new
+                                    .entry(param.get_name().clone())
+                                    .or_insert_with(|| param.clone());
+                                if let indi::Parameter::NumberVector(vector_new) = new_value {
+                                    if let Some(label) = param.get_label() {
+                                        ui.label(label);
+                                    } else {
+                                        ui.label(param.get_name());
+                                    }
+                                    ui.add(super::parameter::new(vector, self.device, vector_new));
+                                    ui.end_row();
+                                }
+                            }
+                            indi::Parameter::SwitchVector(vector) => {
+                                if let Some(label) = param.get_label() {
+                                    ui.label(label);
+                                } else {
+                                    ui.label(param.get_name());
+                                }
+
+                                ui.add(super::parameter::new(
+                                    vector,
+                                    self.device,
+                                    &mut vector.clone(),
+                                ));
+                                ui.end_row();
+                            }
+                            indi::Parameter::TextVector(vector) => {
+                                if let Entry::Occupied(entry) =
+                                    self.device_new.entry(param.get_name().clone())
+                                {
+                                    if !matches!(entry.get(), indi::Parameter::TextVector(_)) {
+                                        entry.remove_entry();
+                                    }
+                                }
+                                let new_value = self
+                                    .device_new
+                                    .entry(param.get_name().clone())
+                                    .or_insert_with(|| param.clone());
+                                if let indi::Parameter::TextVector(vector_new) = new_value {
+                                    if let Some(label) = param.get_label() {
+                                        ui.label(label);
+                                    } else {
+                                        ui.label(param.get_name());
+                                    }
+                                    ui.add(super::parameter::new(vector, self.device, vector_new));
+                                    ui.end_row();
+                                }
+                            }
+                            _ => {}
                         }
-                        ui.add(super::Parameter::new(param, self.device));
-                        ui.end_row();
                     });
                 }
             })

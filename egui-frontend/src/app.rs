@@ -3,7 +3,7 @@ use futures::executor::block_on;
 use itertools::Itertools;
 use log::info;
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use strum::Display;
 use tokio_stream::StreamExt;
 
@@ -24,6 +24,7 @@ struct ClientConnection {
 
 struct ClientState {
     client: indi::client::Client,
+    devices_new: HashMap<String, HashMap<String, indi::Parameter>>,
 }
 
 #[derive(Display)]
@@ -85,7 +86,7 @@ impl App {
         let mut sub = client.get_devices().subscribe().await;
         {
             let mut lock = connection.lock();
-            lock.status = ConnectionStatus::Connected(ClientState { client });
+            lock.status = ConnectionStatus::Connected(ClientState { client, devices_new: Default::default() });
         };
 
         loop {
@@ -182,12 +183,15 @@ impl eframe::App for App {
                                 .device::<()>(self.selected_device.as_str())
                                 .await
                         }) {
+                            let new_value = state.devices_new
+                                .entry(self.selected_device.clone())
+                                .or_insert_with(|| Default::default());
                             ui.separator();
                             ScrollArea::vertical()
                                 .max_height(ui.available_height())
                                 .auto_shrink([false; 2])
                                 .show(ui, |ui| {
-                                    ui.add(crate::indi::widgets::Device::new(&device));
+                                    ui.add(crate::indi::widgets::Device::new(&device, new_value));
                                 });
                         }
                     }

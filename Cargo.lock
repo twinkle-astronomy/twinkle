@@ -2001,7 +2001,7 @@ dependencies = [
  "egui 0.30.0",
  "env_logger 0.11.6",
  "futures 0.3.31",
- "indi",
+ "indi 5.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.14.0",
  "log 0.4.22",
  "parking_lot 0.12.3",
@@ -2444,7 +2444,7 @@ dependencies = [
  "egui 0.20.1",
  "fitsio",
  "image 0.24.9",
- "indi",
+ "indi 5.0.1",
  "median",
  "ndarray",
  "ndarray-conv",
@@ -3433,6 +3433,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "indi"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56f6c13d5a8b8013e5bd6592208f5fe223e68cd95f4612719e6ec761b1ec9e35"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "base64 0.13.1",
+ "chrono",
+ "crossbeam-channel",
+ "derivative 2.2.0",
+ "encoding",
+ "futures 0.3.31",
+ "log 0.4.22",
+ "ndarray",
+ "once_cell",
+ "quick-xml 0.33.0",
+ "serde",
+ "tokio 1.43.0",
+ "tokio-stream",
+ "tokio-tungstenite 0.24.0",
+ "tokio-tungstenite-wasm",
+ "tracing",
+ "twinkle_client 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "instant"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3651,7 +3679,7 @@ dependencies = [
  "console_error_panic_hook",
  "console_log",
  "futures 0.3.31",
- "indi",
+ "indi 5.0.1",
  "leptos",
  "log 0.4.22",
  "tokio-stream",
@@ -7347,7 +7375,7 @@ dependencies = [
  "axum-extra",
  "futures 0.3.31",
  "headers",
- "indi",
+ "indi 5.0.1",
  "pin-project-lite",
  "quick-xml 0.36.2",
  "serde",
