@@ -13,14 +13,16 @@ use itertools::Itertools;
 pub struct Device<'a> {
     device: &'a indi::client::active_device::ActiveDevice,
     device_new: &'a mut HashMap<String, indi::Parameter>,
+    group: &'a String,
 }
 
 impl<'a> Device<'a> {
     pub fn new(
         device: &'a indi::client::active_device::ActiveDevice,
         device_new: &'a mut HashMap<String, indi::Parameter>,
+        group: &'a String,
     ) -> Self {
-        Device { device, device_new }
+        Device { device, device_new, group }
     }
 }
 
@@ -46,6 +48,9 @@ impl<'a> Widget for Device<'a> {
                     block_on(async {
                         let parameter = param.lock().await;
                         let param = parameter.as_ref();
+                        if param.get_group().clone().is_some_and(|group| &group != self.group) {
+                            return
+                        }
 
                         match param {
                             indi::Parameter::NumberVector(vector) => {

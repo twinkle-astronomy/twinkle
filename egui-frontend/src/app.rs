@@ -1,4 +1,4 @@
-use egui::{Context, ScrollArea};
+use egui::{Context, ScrollArea, Window};
 use futures::executor::block_on;
 use itertools::Itertools;
 use log::info;
@@ -7,11 +7,13 @@ use std::{collections::HashMap, sync::Arc};
 use strum::Display;
 use tokio_stream::StreamExt;
 
+use crate::indi::views::tab::TabView;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
-    selected_device: String,
+    devices: TabView,
 
     #[serde(skip)]
     connection: Arc<Mutex<ClientConnection>>,
@@ -24,7 +26,7 @@ struct ClientConnection {
 
 struct ClientState {
     client: indi::client::Client,
-    devices_new: HashMap<String, HashMap<String, indi::Parameter>>,
+    devices: HashMap<String, crate::indi::views::device::Device>,
 }
 
 #[derive(Display)]
@@ -45,7 +47,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             connection: Default::default(),
-            selected_device: "".to_string(),
+            devices: Default::default(),
         }
     }
 }
@@ -86,7 +88,10 @@ impl App {
         let mut sub = client.get_devices().subscribe().await;
         {
             let mut lock = connection.lock();
-            lock.status = ConnectionStatus::Connected(ClientState { client, devices_new: Default::default() });
+            lock.status = ConnectionStatus::Connected(ClientState {
+                client,
+                devices: Default::default(),
+            });
         };
 
         loop {
@@ -166,34 +171,33 @@ impl eframe::App for App {
                                 ctx.clone(),
                             ))
                         }
-                        ui.horizontal(|ui| {
-                            for device in
-                                block_on(state.client.get_devices().lock()).keys().sorted()
-                            {
-                                ui.selectable_value(
-                                    &mut self.selected_device,
-                                    device.clone(),
-                                    device,
+                        Window::new("Indi")
+                            .open(&mut true)
+                            .resizable(true)
+                            .scroll([true, false])
+                            .show(ctx, |ui| {
+                                let selected = self.devices.show(
+                                    ui,
+                                    block_on(state.client.get_devices().lock()).keys().sorted(),
                                 );
-                            }
-                        });
-                        if let Some(device) = block_on(async {
-                            state
-                                .client
-                                .device::<()>(self.selected_device.as_str())
-                                .await
-                        }) {
-                            let new_value = state.devices_new
-                                .entry(self.selected_device.clone())
-                                .or_insert_with(|| Default::default());
-                            ui.separator();
-                            ScrollArea::vertical()
-                                .max_height(ui.available_height())
-                                .auto_shrink([false; 2])
-                                .show(ui, |ui| {
-                                    ui.add(crate::indi::widgets::Device::new(&device, new_value));
-                                });
-                        }
+                                if let Some(selected) = selected {
+                                    if let Some(device) = block_on(async {
+                                        state.client.device::<()>(selected.as_str()).await
+                                    }) {
+                                        let device_view = state
+                                            .devices
+                                            .entry(selected.clone())
+                                            .or_insert_with(Default::default);
+                                        ui.separator();
+                                        ScrollArea::vertical()
+                                            .max_height(ui.available_height())
+                                            .auto_shrink([false; 2])
+                                            .show(ui, |ui| {
+                                                device_view.show(ui, &device);
+                                            });
+                                    }
+                                }
+                            });
                     }
                     ConnectionStatus::Disconnecting => {
                         ui.label("Disconnecting... ");
@@ -201,26 +205,6 @@ impl eframe::App for App {
                     }
                 }
             }
-            ui.separator();
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
-                egui::warn_if_debug_build(ui);
-            });
         });
     }
-}
-
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
 }

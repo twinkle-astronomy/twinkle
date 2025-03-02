@@ -109,7 +109,7 @@ impl<'a> Widget for ParameterWidget<'a, indi::NumberVector> {
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     egui::Grid::new(&self.parameter.name)
-                        .num_columns(2)
+                        .num_columns(4)
                         .show(ui, |ui| {
                             self.render_parameters(ui);
                         })
@@ -125,13 +125,14 @@ impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.horizontal(|ui| {
             for (value_name, value) in &self.parameter.values {
+                
                 let label = if let Some(label) = &value.label {
                     label.clone()
                 } else {
                     value_name.clone()
                 };
-                if ui
-                    .selectable_label(value.value == indi::SwitchState::On, label)
+                let selectable_label = ui.selectable_label(value.value == indi::SwitchState::On, label);
+                if selectable_label
                     .clicked()
                 {
                     crate::task::spawn({
