@@ -6,6 +6,7 @@ use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use strum::Display;
 use tokio_stream::StreamExt;
+use url::form_urlencoded;
 
 use crate::indi::views::tab::TabView;
 
@@ -14,6 +15,7 @@ use crate::indi::views::tab::TabView;
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     devices: TabView,
+    server_addr: String,
 
     #[serde(skip)]
     connection: Arc<Mutex<ClientConnection>>,
@@ -48,6 +50,7 @@ impl Default for App {
         Self {
             connection: Default::default(),
             devices: Default::default(),
+            server_addr: "indi:7624".to_string(),
         }
     }
 }
@@ -70,17 +73,20 @@ impl App {
 
         wasm_bindgen_futures::spawn_local(Self::connect(
             this.connection.clone(),
+            this.server_addr.clone(),
             cc.egui_ctx.clone(),
         ));
         this
     }
 
-    async fn connect(connection: Arc<Mutex<ClientConnection>>, ctx: Context) {
+    async fn connect(connection: Arc<Mutex<ClientConnection>>, server_addr: String, ctx: Context) {
         info!("Connecting");
         {
             connection.lock().status = ConnectionStatus::Connecting
         };
-        let websocket = tokio_tungstenite_wasm::connect("ws://localhost:4000/indi")
+        let encoded_value = form_urlencoded::byte_serialize(server_addr.as_bytes()).collect::<String>();
+
+        let websocket = tokio_tungstenite_wasm::connect(format!("/indi?server_addr={}", encoded_value))
             .await
             .unwrap();
         info!("Got connection");
@@ -153,18 +159,23 @@ impl eframe::App for App {
 
                 match &mut connection.status {
                     ConnectionStatus::Disconnected => {
+                        ui.text_edit_singleline(&mut self.server_addr);
+
                         if ui.button("Connect").clicked() {
                             wasm_bindgen_futures::spawn_local(Self::connect(
                                 self.connection.clone(),
+                                self.server_addr.clone(),
                                 ctx.clone(),
                             ));
                         }
                     }
                     ConnectionStatus::Connecting => {
+                        ui.label(&self.server_addr);
                         ui.label("Connecting... ");
                         ui.spinner();
                     }
                     ConnectionStatus::Connected(state) => {
+                        ui.label(&self.server_addr);
                         if ui.button("Disconnect").clicked() {
                             wasm_bindgen_futures::spawn_local(Self::disconnect(
                                 self.connection.clone(),

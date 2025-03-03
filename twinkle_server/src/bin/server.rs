@@ -1,5 +1,5 @@
 use axum::{
-    extract::ws::{WebSocket, WebSocketUpgrade},
+    extract::{ws::{WebSocket, WebSocketUpgrade}, Query},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -9,6 +9,7 @@ use axum::{
 use indi::client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
+use tower_http::services::ServeDir;
 use tracing::error;
 
 // Requests
@@ -31,7 +32,8 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
-        .route("/indi", get(create_connection));
+        .route("/indi", get(create_connection))
+        .fallback_service(ServeDir::new("assets"));
 
     // run our app with hyper
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4000").await.unwrap();
@@ -39,13 +41,18 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn create_connection(ws: WebSocketUpgrade) -> Result<impl IntoResponse, StatusCode> {
-    Ok(ws.on_upgrade(move |socket| handle_indi_connection(socket)))
+#[derive(Deserialize)]
+struct IndiConnectionParams {
+    server_addr: String,
+}
+
+async fn create_connection(ws: WebSocketUpgrade, Query(params): Query<IndiConnectionParams>) -> Result<impl IntoResponse, StatusCode> {
+    Ok(ws.on_upgrade(move |socket| handle_indi_connection(socket, params.server_addr)))
 }
 
 #[tracing::instrument(level = "info", skip(socket))]
-async fn handle_indi_connection(socket: WebSocket) {
-    let connection = match TcpStream::connect("indi:7624").await {
+async fn handle_indi_connection(socket: WebSocket, server_addr: String) {
+    let connection = match TcpStream::connect(server_addr).await {
         Ok(c) => c,
         Err(e) => {
             error!("Error: {:?}", e);

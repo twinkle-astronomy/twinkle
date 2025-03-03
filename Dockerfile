@@ -1,4 +1,4 @@
-FROM rust:1.84-bullseye as dev
+FROM rust:1.84-bullseye AS dev
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcfitsio-dev \
@@ -27,17 +27,22 @@ USER ${USER}
 
 RUN cargo install trunk
 
-from dev as phd2_exporter_builder
+FROM dev AS twinkle-build
 COPY . /app
-RUN rustup target add x86_64-unknown-linux-musl
-RUN cargo install --target x86_64-unknown-linux-musl --path ./phd2_exporter
+USER root
 
-from dev as indi_exporter_builder
-COPY . /app
-RUN cargo install --path ./indi_exporter
+# Build server
+RUN cargo build --release --bin server
+# Build frontend
+RUN ls -lah /app/egui-frontend
+RUN cd egui-frontend && trunk build --release
 
-FROM debian:bullseye-slim as indi_exporter-release
-COPY --from=indi_exporter_builder /usr/local/cargo/bin/indi_exporter /usr/local/bin/
-
-FROM scratch as phd2_exporter-release
-COPY --from=phd2_exporter_builder /usr/local/cargo/bin/phd2_exporter /usr/local/bin/phd2_exporter
+FROM debian:bullseye-slim AS twinkle
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcfitsio-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir /app
+COPY --from=twinkle-build /app/target/release/server /app/server
+COPY --from=twinkle-build /app/egui-frontend/dist /app/assets
+USER ${USER}
+WORKDIR /app
