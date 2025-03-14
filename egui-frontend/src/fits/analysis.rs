@@ -19,7 +19,7 @@ pub struct Statistics {
 }
 
 impl Statistics {
-    pub fn new(data: &ArrayViewD<u16>) -> Statistics {
+    pub fn new(data: &ArrayViewD<'_, u16>) -> Statistics {
         let histogram = Statistics::create_histogram(data);
         let median = Statistics::calculate_median(data, &histogram);
 
@@ -92,7 +92,7 @@ impl Statistics {
         }
     }
 
-    fn calculate_median(data: &ArrayViewD<u16>, histogram: &Vec<usize>) -> u16 {
+    fn calculate_median(data: &ArrayViewD<'_, u16>, histogram: &Vec<usize>) -> u16 {
         let median_count: usize = data.shape().iter().product();
         let median = {
             let mut seen = 0;
@@ -109,7 +109,7 @@ impl Statistics {
         median
     }
 
-    fn create_histogram(data: &ArrayViewD<u16>) -> Vec<usize> {
+    fn create_histogram(data: &ArrayViewD<'_, u16>) -> Vec<usize> {
         let mut histogram: Vec<usize> = vec![0; std::u16::MAX as usize + 1];
 
         for d in data.iter() {

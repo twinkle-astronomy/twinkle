@@ -6,7 +6,6 @@ use indi::{
     serialization::{OneNumber, OneText},
 };
 use itertools::Itertools;
-use log::error;
 
 pub struct ParameterWidget<'a, T> {
     parameter: &'a T,
@@ -105,7 +104,7 @@ impl<'a> Widget for ParameterWidget<'a, indi::NumberVector> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         egui::Frame::default()
             .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
-            .rounding(ui.visuals().widgets.noninteractive.rounding)
+            // .rounding(ui.visuals().widgets.noninteractive.rounding)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     egui::Grid::new(&self.parameter.name)
@@ -139,9 +138,10 @@ impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
                         let active_device = self.device.clone();
                         let parameter_name = self.parameter.name.clone();
                         let value_name = value_name.clone();
+                        let value = value.value == indi::SwitchState::Off;
                         async move {
                             active_device
-                                .change(&parameter_name, vec![(value_name.as_str(), true)])
+                                .change(&parameter_name, vec![(value_name.as_str(), value)])
                                 .await
                                 .ok();
                         }
@@ -230,7 +230,7 @@ impl<'a> Widget for ParameterWidget<'a, indi::TextVector> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         egui::Frame::default()
             .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
-            .rounding(ui.visuals().widgets.noninteractive.rounding)
+            // .rounding(ui.visuals().widgets.noninteractive.rounding)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     egui::Grid::new(&self.parameter.name)

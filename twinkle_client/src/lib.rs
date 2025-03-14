@@ -1,6 +1,8 @@
-use std::future::Future;
+use std::future::{pending, Future};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use futures_timer::Delay;
+use std::time::Duration;
 
 mod stream_ext;
 pub use stream_ext::StreamExt;
@@ -83,4 +85,17 @@ impl<F: Future, D: FnMut()> Drop for OnDropFuture<F, D> {
             this.get_mut_on_drop()();
         }
     }
+}
+
+pub struct TimeoutError {}
+
+pub async fn timeout<F: Future>(duration: Duration, future: F) -> Result<F::Output, TimeoutError> {
+    tokio::select! {
+        _ = Delay::new(duration) => Err(TimeoutError{}),
+        result = future => Ok(result),
+    }
+}
+
+pub async fn sleep(duration: Duration) {
+    let _ = timeout(duration, pending::<()>()).await;
 }

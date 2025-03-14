@@ -6,8 +6,10 @@ pub mod stream;
 pub mod tcpstream;
 pub mod websocket;
 
-use crate::device;
-use std::fmt::Debug;
+use crate::{device, serialization::device::DeviceUpdate};
+use std::{fmt::Debug, future::Future};
+use tokio::{select, sync::oneshot};
+use tokio_stream::StreamExt;
 use tracing::{error, Instrument};
 use twinkle_client;
 
@@ -133,16 +135,30 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 ///         .expect("enabling image retrieval");
 /// };
 /// ```
+/// 
 pub fn new<T: AsyncClientConnection>(
     connection: T,
     device: Option<&str>,
     parameter: Option<&str>,
 ) -> Result<Client, serialization::DeError> {
+    let (writer, reader) = connection.to_indi();
+    new_with_streams(writer, reader, device, parameter)
+}
+
+pub fn new_with_streams(
+    mut writer: impl AsyncWriteConnection + MaybeSend + 'static,
+    mut reader: impl AsyncReadConnection + MaybeSend + 'static,
+    device: Option<&str>,
+    parameter: Option<&str>,
+) -> Result<Client, serialization::DeError> {
+    let connected = Arc::new(Notify::new(true));
     let (feedback, mut incoming_commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
 
-    let (mut writer, mut reader) = connection.to_indi();
     let writer_device = device.map(|x| String::from(x));
     let writer_parameter = parameter.map(|x| String::from(x));
+    let writer_connected = connected.clone();
+
+    let (reader_finished_tx, reader_finished_rx) = oneshot::channel::<()>();
     feedback
         .send(serialization::Command::GetProperties(GetProperties {
             version: INDI_PROTOCOL_VERSION.to_string(),
@@ -151,7 +167,7 @@ pub fn new<T: AsyncClientConnection>(
         }))
         .unwrap();
     let writer_future = async move {
-        if let Err(e) = async {
+        let sender = async {
             loop {
                 let command = match incoming_commands.recv().await {
                     Some(c) => c,
@@ -159,12 +175,23 @@ pub fn new<T: AsyncClientConnection>(
                 };
                 writer.write(command).await?;
             }
-            writer.shutdown().await?;
             Ok::<(), DeError>(())
+        };
+
+        select! {
+            s = sender => {
+                if let Err(e) = s {
+                    error!("Error in sending task: {:?}", e);
+                }
+            }
+            _ = reader_finished_rx => { }
         }
-        .await
+
+        if let Err(e) = writer.shutdown().await {
+            error!("Error shutting down writer: {:?}", e);
+        }
         {
-            error!("Writer error: {:?}", e);
+            *writer_connected.lock().await = false;
         }
     }
     .instrument(tracing::info_span!("indi_writer"));
@@ -190,6 +217,8 @@ pub fn new<T: AsyncClientConnection>(
                 }
             }
         }
+        *thread_devices.lock().await = Default::default();
+        let _ = reader_finished_tx.send(());
     }
     .instrument(tracing::info_span!("indi_reader"));
 
@@ -199,6 +228,7 @@ pub fn new<T: AsyncClientConnection>(
             { (tokio::spawn(writer_future), tokio::spawn(reader_future)) };
         Client {
             devices,
+            connected,
             feedback: Some(feedback),
             _workers: Some((writer_thread, reader_thread)),
         }
@@ -209,6 +239,7 @@ pub fn new<T: AsyncClientConnection>(
         wasm_bindgen_futures::spawn_local(reader_future);
         Client {
             devices,
+            connected,
             feedback: Some(feedback),
         }
     };
@@ -218,6 +249,7 @@ pub fn new<T: AsyncClientConnection>(
 /// Struct used to keep track of a the devices and their properties.
 pub struct Client {
     devices: Arc<Notify<MemoryDeviceStore>>,
+    connected: Arc<Notify<bool>>,
     feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
     // connection: T,
     // Used for testing
@@ -286,8 +318,36 @@ impl Client {
         self.devices.clone()
     }
 
+    pub fn get_connected(&self) -> Arc<Notify<bool>> {
+        self.connected.clone()
+    }
+
+    pub fn join(&self) -> impl Future<Output=()> {
+        let connected = self.get_connected();
+        async move {
+            let mut connected = connected.subscribe().await;
+            loop {
+                match connected.next().await {
+                    Some(Ok(connected)) => {
+                        if !*connected {
+                            break;
+                        }
+                    }
+                    None | Some(Err(_)) => {
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn command_sender(&self) -> Option<tokio::sync::mpsc::UnboundedSender<Command>>{
+        self.feedback.clone()
+    }
+
     pub fn shutdown(&mut self) {
         self.feedback.take();
+        self.devices = Arc::new(Notify::new(Default::default()));
     }
 }
 
@@ -296,11 +356,11 @@ pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device<Notify<Pa
 pub trait DeviceStore {
     /// Update the state of the appropriate device property for a command that came from an INDI server.
     #[allow(async_fn_in_trait)]
-    async fn update(&mut self, command: serialization::Command) -> Result<(), UpdateError>;
+    async fn update(&mut self, command: serialization::Command) -> Result<Option<DeviceUpdate>, UpdateError>;
 }
 
 impl DeviceStore for MemoryDeviceStore {
-    async fn update(&mut self, command: serialization::Command) -> Result<(), UpdateError> {
+    async fn update(&mut self, command: serialization::Command) -> Result<Option<DeviceUpdate>, UpdateError> {
         let name = command.device_name();
         match name {
             Some(name) => {
@@ -308,10 +368,9 @@ impl DeviceStore for MemoryDeviceStore {
                     .entry(name.clone())
                     .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))));
                 let mut device_guard = device.lock().await;
-                device_guard.update(command).await?;
-                Ok(())
+                Ok(device_guard.update(command).await?)
             }
-            None => Ok(()),
+            None => Ok(None),
         }
     }
 }

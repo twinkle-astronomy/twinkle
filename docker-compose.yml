@@ -15,6 +15,8 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - indi
+    ports:
+      - "8080:8080"
 
   indi:
     image: ghcr.io/twinkle-astronomy/indi_server:v2.1.1-202412060709

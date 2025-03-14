@@ -39,11 +39,11 @@ impl FitsViewerApp {
         //         }
         //     }
         // }
-        let mut image: Image = PathBuf::from("~/AstroDMx_DATA/ekos/NGC_6992_mosaic/data/NGC_6992/NGC_6992-Part_1/Light/H_Alpha/NGC_6992-Part_1_Light_H_Alpha_720_secs_2023-06-21T00-54-28_010.fits").try_into().unwrap();
-        dbg!(image.describe_dark());
-        let dark: fits_inspect::calibration::Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/twinkle/calibration/masterDark_BIN-2_4144x2822_EXPOSURE-720.00s_GAIN-240.fit").try_into().unwrap();
-        let flat: fits_inspect::calibration::Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/twinkle/calibration/masterFlat_BIN-2_4144x2822_FILTER-H-Alpha_mono.fit").try_into().unwrap();
-        image.calibrate(&dark, &flat).ok();
+        let mut image: Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/ekos/NGC_2244/data/Light/H_Alpha/NGC_2244_Light_H_Alpha_360_secs_2025-02-25T21-56-53_003.fits").try_into().unwrap();
+        // dbg!(image.describe_dark());
+        // let dark: fits_inspect::calibration::Image = PathBuf::from("~/AstroDMx_DATA/ekos/NGC_2244/data/calibration/masterDark_BIN-2_4144x2822_EXPOSURE-360.00s_GAIN-120.xisf").try_into().unwrap();
+        // let flat: fits_inspect::calibration::Image = PathBuf::from("~/AstroDMx_DATA/ekos/NGC_2244/data/calibration/masterFlat_BIN-2_4144x2822_FILTER-H-Alpha_mono.xisf").try_into().unwrap();
+        // image.calibrate(&dark, &flat).ok();
         let data = image.get_data();
         {
             let mut lock = newed.fits_widget.lock();

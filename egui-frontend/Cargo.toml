@@ -4,15 +4,14 @@ version = "0.1.0"
 authors = ["Chris Constantine <cconstan@gmail.com>"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.81"
 
 [package.metadata.docs.rs]
 all-features = true
-targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+targets = ["wasm32-unknown-unknown"]
 
 [dependencies]
-egui = "0.30"
-eframe = { version = "0.30", default-features = false, features = [
+egui = "0.31"
+eframe = { version = "0.31", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
@@ -24,7 +23,7 @@ log = "0.4"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
-indi = { version = "5.0.0", features = ["wasm"] }
+indi = { path = "../indi", version = "5.0.0", features = ["wasm"] }
 tokio-tungstenite-wasm = "0.4.0"
 strum = { version = "0.26.3", features = ["derive"] }
 tokio = "1.43.0"
@@ -34,6 +33,10 @@ parking_lot = "0.12.3"
 itertools = "0.14.0"
 futures = "0.3.31"
 url = "2.5.4"
+ndarray = "0.16.1"
+fitsrs = "0.3.2"
+uuid = { version = "1.15.1", features = ["serde", "v4", "js"] }
+twinkle_client = { path = "../twinkle_client" }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -43,21 +46,3 @@ env_logger = "0.11"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3.70"           # to access the DOM (to hide the loading text)
-
-[profile.release]
-opt-level = 2 # fast and small wasm
-
-# Optimize all dependencies even in debug builds:
-[profile.dev.package."*"]
-opt-level = 2
-
-
-[patch.crates-io]
-
-# If you want to use the bleeding edge version of egui and eframe:
-# egui = { git = "https://github.com/emilk/egui", branch = "master" }
-# eframe = { git = "https://github.com/emilk/egui", branch = "master" }
-
-# If you fork https://github.com/emilk/egui you can test with:
-# egui = { path = "../egui/crates/egui" }
-# eframe = { path = "../egui/crates/eframe" }

@@ -3,8 +3,4 @@ filehash = true
 
 [serve]
 no_spa = true
-
-[[proxy]]
-path = "/indi"
-backend = "ws://localhost:4000/indi"
-ws=true
+address = "0.0.0.0"

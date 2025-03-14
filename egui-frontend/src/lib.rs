@@ -3,5 +3,6 @@
 mod app;
 pub use app::App;
 
-mod indi;
-mod task;
+pub mod fits;
+pub mod indi;
+pub mod task;

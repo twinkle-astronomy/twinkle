@@ -12,6 +12,7 @@ csv = "1.1.6"
 eframe = "0.20.1"
 egui = "0.20.1"
 fitsio = {version="0.21.2", features = ["array"] }
+fitsrs = "0.3.2"
 image = "0.24.5"
 indi = { path = "../indi", features=["full"] }
 median = "0.3.2"

@@ -37,7 +37,8 @@ pub struct Device<T: AsyncLockable<Parameter> + Debug> {
     name: String,
     parameters: HashMap<String, Arc<T>>,
     names: Vec<String>,
-    groups: Vec<Option<String>>,
+    groups: Vec<String>,
+    group_counts: HashMap<String, usize>,
 }
 
 impl<T: AsyncLockable<Parameter> + Debug> Clone for Device<T> {
@@ -47,6 +48,7 @@ impl<T: AsyncLockable<Parameter> + Debug> Clone for Device<T> {
             parameters: self.parameters.clone(),
             names: self.names.clone(),
             groups: self.groups.clone(),
+            group_counts: self.group_counts.clone(),
         }
     }
 }
@@ -64,8 +66,9 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
         Device {
             name,
             parameters: HashMap::new(),
-            names: vec![],
-            groups: vec![],
+            names: Default::default(),
+            groups: Default::default(),
+            group_counts: Default::default(),
         }
     }
 
@@ -79,7 +82,7 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
     }
 
     /// Returns a `&Vec<Option<String>>` of all currently know parameter groups.
-    pub fn parameter_groups(&self) -> &Vec<Option<String>> {
+    pub fn parameter_groups(&self) -> &Vec<String> {
         return &self.groups;
     }
 
@@ -109,7 +112,7 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
             Command::SetBlobVector(command) => self.update_param(command).await,
             Command::DefLightVector(command) => self.new_param(command),
             Command::SetLightVector(command) => self.update_param(command).await,
-            Command::DelProperty(command) => self.delete_param(command.name),
+            Command::DelProperty(command) => self.delete_param(command.name).await,
             Command::EnableBlob(_) => Ok(None),
         }
     }
@@ -119,17 +122,24 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
         let name = def.get_name().clone();
 
-        self.names.push(name.clone());
-        if let None = self.groups.iter().find(|&x| x == def.get_group()) {
-            self.groups.push(def.get_group().clone());
+        if let Some(group) = def.get_group() {
+            let group_counts = self.group_counts.entry(group.clone()).or_insert(0);
+            *group_counts +=1;
+            if *group_counts == 1 {
+                    self.groups.push(group.clone());
+            }
         }
-
+            
         if !self.parameters.contains_key(&name) {
-            let param = def.to_param();
-            // let value: Notify<Parameter> = param.into();
-            self.parameters
-                .insert(name.clone(), Arc::new(T::new(param)));
+            self.names.push(name.clone());
         }
+        self.parameters.remove(&name);
+        
+        let param = def.to_param();
+        // let value: Notify<Parameter> = param.into();
+        self.parameters
+            .insert(name.clone(), Arc::new(T::new(param)));
+    
         Ok(Some(DeviceUpdate::AddParameter(name.clone())))
     }
 
@@ -151,17 +161,29 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
         }
     }
 
-    fn delete_param(&mut self, name: Option<String>) -> Result<Option<DeviceUpdate>, UpdateError> {
+    pub async fn delete_param(&mut self, name: Option<String>) -> Result<Option<DeviceUpdate>, UpdateError> {
         match &name {
             Some(name) => {
                 self.names.retain(|n| *n != *name);
-                if let None = self.parameters.remove(name) {
-                    return Err(UpdateError::ParameterMissing(name.clone()));
+                
+                match self.parameters.remove(name) {
+                    Some(param) => {
+                        if let Some(group) = param.lock().await.get_group() {
+                            let group_count = self.group_counts.entry(name.clone()).or_insert(0);
+                            *group_count -= 1;
+                            if group_count == &0 {
+                                self.groups.retain(|g| *g != *group);
+                            }
+                        }
+                    }
+                    None=> {return Err(UpdateError::ParameterMissing(name.clone()));}
                 }
             }
             None => {
                 self.names.clear();
-                self.parameters.drain();
+                self.groups.clear();
+                self.group_counts.clear();
+                self.parameters.clear();
             }
         };
 

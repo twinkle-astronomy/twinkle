@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{
@@ -9,6 +8,8 @@ use std::{
 use tokio::sync::{Mutex, MutexGuard};
 
 use tokio_stream::StreamExt as _;
+
+use crate::timeout;
 
 #[derive(Debug, PartialEq)]
 pub enum Error<E> {
@@ -22,15 +23,7 @@ pub enum Status<S> {
     Pending,
     Complete(S),
 }
-use futures_timer::Delay;
-pub struct TimeoutError {}
 
-async fn timeout<F: Future>(duration: Duration, future: F) -> Result<F::Output, TimeoutError> {
-    tokio::select! {
-        _ = Delay::new(duration) => Err(TimeoutError{}),
-        result = future => Ok(result),
-    }
-}
 pub async fn wait_fn<S, E, T: Clone + Send + 'static, F: FnMut(T) -> Result<Status<S>, E>>(
     mut stream: tokio_stream::wrappers::BroadcastStream<T>,
     dur: Duration,
@@ -105,11 +98,18 @@ impl<T> Notify<T> {
             to_notify: tx,
         }
     }
+
 }
 
 impl<T> From<T> for Notify<T> {
     fn from(value: T) -> Self {
         Notify::new(value)
+    }
+}
+
+impl<T: Default> Default for Notify<T> {
+    fn default() -> Self {
+        Self::new(T::default())
     }
 }
 

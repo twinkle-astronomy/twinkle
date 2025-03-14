@@ -1,16 +1,14 @@
-use std::sync::Arc;
-
 use eframe::{
     egui_glow,
-    glow::{Context, HasContext, NativeProgram},
+    glow::{Context, HasContext},
 };
 use egui_glow::glow;
+use log::error;
 use ndarray::{ArrayD, IxDyn};
 
-use crate::analysis::Statistics;
-use crate::egui::fits_widget::Drawable;
+use fits_widget::Drawable;
 
-use super::{image_mesh::ImageMesh, line_mesh::LineMesh};
+use super::{analysis::Statistics, fits_widget, image_mesh::ImageMesh, line_mesh::LineMesh};
 
 #[derive(Debug)]
 pub struct Elipse {
@@ -45,20 +43,6 @@ impl From<Circle> for Elipse {
     }
 }
 
-impl From<crate::analysis::sep::CatalogEntry> for Elipse {
-    fn from(value: crate::analysis::sep::CatalogEntry) -> Self {
-        Elipse {
-            x: value.x as f32,
-            y: value.y as f32,
-
-            a: value.a,
-            b: value.b,
-
-            theta: value.theta,
-        }
-    }
-}
-
 pub struct FitsRender {
     pub image_mesh: ImageMesh,
     pub circles_mesh: LineMesh,
@@ -73,7 +57,7 @@ impl FitsRender {
         gl: &Context,
         vertex_shader_source: &str,
         fragment_shader_source: &str,
-    ) -> NativeProgram {
+    ) -> <eframe::glow::Context as HasContext>::Program {
         let shader_version = egui_glow::ShaderVersion::get(gl);
         let program = gl.create_program().expect("Cannot create program");
 
@@ -128,8 +112,6 @@ impl FitsRender {
     }
 
     pub fn new(gl: &glow::Context) -> Self {
-        use glow::HasContext as _;
-
         let shader_version = egui_glow::ShaderVersion::get(gl);
         let texture;
 
@@ -138,7 +120,7 @@ impl FitsRender {
 
         unsafe {
             if !shader_version.is_new_shader_interface() {
-                tracing::warn!(
+                error!(
                     "Custom 3D painting hasn't been ported to {:?}",
                     shader_version
                 );
@@ -160,10 +142,12 @@ impl FitsRender {
             let histogram_mtf = 0.5;
 
             texture = gl.create_texture().expect("Cannot create texture");
-            let image = ArrayD::<u16>::zeros(IxDyn(&[10, 10]));
+            let shape = [10,10];
+            let image = ArrayD::<u16>::zeros(IxDyn(&shape));
             image_mesh = ImageMesh {
                 texture,
                 image,
+                shape,
                 program,
                 vbo,
                 vao,
@@ -201,9 +185,11 @@ impl FitsRender {
         }
     }
 
-    pub fn set_fits(&mut self, data: &ArrayD<u16>) {
+    pub fn set_fits(&mut self, data: ArrayD<u16>) {
         if data != self.image_mesh.image {
-            self.image_mesh.image = data.clone();
+            self.image_mesh.shape[0] = data.shape()[0];
+            self.image_mesh.shape[1] = data.shape()[1];
+            self.image_mesh.image = data;
             self.image_mesh.dirty = true;
         }
     }
@@ -242,8 +228,8 @@ impl FitsRender {
 
     #[rustfmt::skip]
     pub fn model_transform(&self) -> [f32; 16] {
-        let w = self.image_mesh.image.shape()[1] as f32;
-        let h = self.image_mesh.image.shape()[0] as f32;
+        let w = self.image_mesh.shape[1] as f32;
+        let h = self.image_mesh.shape[0] as f32;
         [
              2.0 / w,  0.0,      0.0,  0.0,
              0.0,     -2.0 / h , 0.0,  0.0,

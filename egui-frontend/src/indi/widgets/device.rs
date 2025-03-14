@@ -20,6 +20,7 @@ impl<'a> Device<'a> {
     pub fn new(
         device: &'a indi::client::active_device::ActiveDevice,
         device_new: &'a mut HashMap<String, indi::Parameter>,
+
         group: &'a String,
     ) -> Self {
         Device { device, device_new, group }
@@ -39,8 +40,8 @@ impl<'a> Widget for Device<'a> {
                 .map(|(k, p)| (k.clone(), p.clone()))
                 .collect()
         });
-
-        egui::Grid::new("device")
+        ui.vertical(|ui| {
+            egui::Grid::new("device")
             .num_columns(2)
             .striped(true)
             .show(ui, |ui| {
@@ -49,6 +50,11 @@ impl<'a> Widget for Device<'a> {
                         let parameter = param.lock().await;
                         let param = parameter.as_ref();
                         if param.get_group().clone().is_some_and(|group| &group != self.group) {
+                            if let None = param.get_group() {
+                                ui.label(format!("{}: No group", param.get_name()));
+                                ui.end_row();
+                            }
+                            
                             return
                         }
 
@@ -115,7 +121,8 @@ impl<'a> Widget for Device<'a> {
                         }
                     });
                 }
-            })
-            .response
+            });
+        }).response
+        
     }
 }

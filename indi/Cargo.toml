@@ -25,14 +25,16 @@ once_cell = {version = "1.17.1" }
 tokio = {version = "1.40", features = ["macros"]}
 tokio-stream = { version = "0", features = ["sync"] }
 serde = { version = "1.0.164", features = ["derive"] }
-twinkle_client = { version="0.2.3" }
+twinkle_client = { path = "../twinkle_client", version="0.2.3" }
 tracing = "0.1.41"
 futures = { version = "0.3" }
 wasm-bindgen-futures = {version="0.4", optional=true}
 tokio-tungstenite-wasm = {version="0.4", optional=true}
+fitsrs = "0.3.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+tracing-test = "0.2.5"
 
 [features]
 default = []

@@ -51,8 +51,8 @@ impl<T: HasCalibration + HasImage> CanCalibrate for T {
 
         let mut clipped = 0;
         Zip::from(data)
-            .and(flat.get_data().as_ref())
-            .and(dark.get_data().as_ref())
+            .and(flat.get_data())
+            .and(dark.get_data())
             .for_each(|data, &flat, &dark| {
                 *data = if *data > dark {
                     *data - dark
@@ -73,18 +73,18 @@ impl<T: HasCalibration + HasImage> CanCalibrate for T {
 }
 
 pub struct Image {
-    data: Arc<ArrayD<u16>>,
+    data: ArrayD<u16>,
     stats: Statistics,
     pub desc: CalibrationDescription,
 }
 
 impl HasImage for Image {
-    fn get_data(&self) -> Arc<ArrayD<u16>> {
-        self.data.clone()
+    fn get_data(&self) -> &ArrayD<u16> {
+        &self.data
     }
 
     fn get_data_mut(&mut self) -> &mut ArrayD<u16> {
-        Arc::make_mut(&mut self.data)
+        &mut self.data
     }
 
     fn get_statistics(&self) -> &Statistics {
@@ -115,7 +115,7 @@ impl TryFrom<PathBuf> for Image {
         let mut fptr = FitsFile::open(filename)?;
 
         let hdu = fptr.primary_hdu()?;
-        let data: Arc<ArrayD<u16>> = Arc::new(hdu.read_image(&mut fptr)?);
+        let data: ArrayD<u16> = hdu.read_image(&mut fptr)?;
         let stats = Statistics::new(&data.view());
 
         let frame: String = hdu.read_key(&mut fptr, "FRAME")?;
