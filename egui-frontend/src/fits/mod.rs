@@ -6,4 +6,5 @@ pub use fits_render::FitsRender;
 
 pub mod image_mesh;
 pub mod line_mesh;
-pub mod analysis;
+
+pub mod image_view;

@@ -74,7 +74,7 @@ impl<'a> ParameterWidget<'a, indi::NumberVector> {
         if self.parameter.perm == indi::PropertyPerm::RW {
             let response = ui.button("set");
             if response.clicked() {
-                crate::task::spawn({
+                crate::task::spawn((), |_| {
                     let active_device = self.device.clone();
                     let parameter_name = self.parameter.name.clone();
                     let values: std::vec::Vec<OneNumber> = self
@@ -134,7 +134,7 @@ impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
                 if selectable_label
                     .clicked()
                 {
-                    crate::task::spawn({
+                    crate::task::spawn((), |_| {
                         let active_device = self.device.clone();
                         let parameter_name = self.parameter.name.clone();
                         let value_name = value_name.clone();
@@ -200,10 +200,10 @@ impl<'a> ParameterWidget<'a, indi::TextVector> {
         if self.parameter.perm == indi::PropertyPerm::RW {
             let response = ui.button("set");
             if response.clicked() {
-                crate::task::spawn({
+                crate::task::spawn((), |_| {
                     let active_device = self.device.clone();
                     let parameter_name = self.parameter.name.clone();
-                    let values: std::vec::Vec<OneText> = self
+                    let values: std::vec::Vec<OneText> = self 
                         .param_new
                         .values
                         .iter()

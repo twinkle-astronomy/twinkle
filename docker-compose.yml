@@ -17,6 +17,7 @@ services:
       - indi
     ports:
       - "8080:8080"
+      - "4000:4000"
 
   indi:
     image: ghcr.io/twinkle-astronomy/indi_server:v2.1.1-202412060709

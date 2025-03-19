@@ -1,93 +1,150 @@
-use std::{future::{self, Future}, rc::Rc, sync::atomic::{AtomicBool, Ordering}};
+use std::{
+    future::{self, Future},
+    sync::Arc,
+};
 
 use tokio::{
     select,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{mpsc::{self, Receiver, Sender}, Mutex},
 };
 
 pub trait Joinable<T> {
     fn join(&mut self) -> impl std::future::Future<Output = Result<T, Error>>;
+}
 
-}
-pub trait Task {
+pub trait Task<S> {
     fn abort(&self);
-    fn status(&self) -> Status;
+    fn status(&self) -> &Arc<Mutex<Status<S>>>;
+
+    fn running(&self) -> impl Future<Output = bool>   {
+        async {
+            let status = self.status().lock().await;
+            match *status {
+                Status::Running(_) => true,
+                _ => false,
+            }    
+        }
+    }
 }
+
 pub enum Error {
     Aborted,
 }
 
-#[derive(PartialEq)]
-pub enum Status {
-    Running,
+pub enum Status<S> {
+    Running(S),
     Completed,
     Aborted,
 }
 
-pub struct AsyncTask<T> {
+pub struct AsyncTask<T, S> {
     abort_tx: Sender<()>,
     output_rx: Receiver<Result<T, Error>>,
-    was_aborted: Rc<AtomicBool>,
+    status: Arc<Mutex<Status<S>>>,
+    abort_on_drop: bool,
 }
-impl<T> Joinable<T> for AsyncTask<T> {
 
+impl<T, S> AsyncTask<T, S> {
+    pub fn abort_on_drop(mut self, abort: bool) -> Self {
+        self.abort_on_drop = abort;
+        self
+    }
+}
+
+impl<T, S> Drop for AsyncTask<T, S> {
+    fn drop(&mut self) {
+        if self.abort_on_drop {
+            self.abort();
+        }
+    }
+}
+impl<T, S> Task<S> for AsyncTask<T, S> {
+    fn abort(&self) {
+        let _ = self.abort_tx.try_send(());
+    }
+
+    fn status(&self) -> &Arc<Mutex<Status<S>>> {
+        &self.status
+    }
+}
+
+impl<T, S> Joinable<T> for AsyncTask<T, S> {
     async fn join(&mut self) -> Result<T, Error> {
         match self.output_rx.recv().await {
             Some(r) => r,
             None => Err(Error::Aborted),
         }
     }
-
 }
 
-impl<T> Task for AsyncTask<T> {
-    fn abort(&self) {
-        let _ = self.abort_tx.try_send(());
-    }
-
-    fn status(&self) -> Status {
-        match self.output_rx.is_closed() {
-            false => Status::Running,
-            true => {
-                match self.was_aborted.load(Ordering::SeqCst) {
-                    true => Status::Aborted,
-                    false => Status::Completed,
-                }
-            },
-        }
-    } 
+pub fn spawn_with_state<
+    S: 'static,
+    F: FnOnce(&S) -> U,
+    U: Future<Output = ()> + 'static,
+>(
+    state: S,
+    func: F,
+) -> AsyncTask<(), S> {
+    spawn(state, func)
 }
 
-pub fn spawn<T: 'static, U: Future<Output = T> + 'static>(future: U) -> AsyncTask<T> {
+pub fn spawn_with_value<
+    T: 'static,
+    U: Future<Output = T> + 'static,
+>(
+    future: U,
+) -> AsyncTask<T, ()> {
+    spawn((), |_| future)
+}
+
+pub fn spawn<
+    T: 'static,
+    S: 'static,
+    F: FnOnce(&S) -> U,
+    U: Future<Output = T> + 'static,
+>(
+    state: S,
+    func: F,
+) -> AsyncTask<T, S> {
     let (abort_tx, mut abort_rx) = mpsc::channel::<()>(1);
     let (output_tx, output_rx) = mpsc::channel::<Result<T, Error>>(1);
-    let was_aborted = Rc::new(AtomicBool::new(false));
+    let future = func(&state);
+    let status = Arc::new(Mutex::new(Status::Running(state)));
+    
 
-    wasm_bindgen_futures::spawn_local({        
-        let was_aborted = was_aborted.clone();
-            async move {
+    wasm_bindgen_futures::spawn_local({
+        let status = status.clone();
+        async move {
             let abort = async move {
                 if let None = abort_rx.recv().await {
                     future::pending::<()>().await;
                 }
             };
 
-            select! {
+            let result = select! {
                 r = future => {
-                    let _ = output_tx.try_send(Ok(r));
+                    if let Ok(_) = output_tx.try_send(Ok(r)) {
+                        Status::Completed
+                    } else {
+                        Status::Aborted
+                    }
                 },
                 _ = abort => {
                     if let Ok(_) =  output_tx.try_send(Err(Error::Aborted))  {
-                        was_aborted.store(true, Ordering::SeqCst);
+                        Status::Aborted
+                    } else {
+                        Status::Completed
                     }
                  },
             };
+            *status.lock().await = result;
         }
     });
 
     AsyncTask {
         abort_tx,
         output_rx,
-        was_aborted,
+        status,
+        abort_on_drop: false,
     }
 }

@@ -1,36 +1,15 @@
 use std::{
     collections::HashMap,
-    ops::{Deref, DerefMut},
+    
     sync::Arc,
 };
 
 use std::fmt::Debug;
-use twinkle_client::notify::{self, Notify};
+use twinkle_client::notify::AsyncLockable;
 
 use crate::*;
 
-// Define the main trait for types that provide notify-like behavior
-pub trait AsyncLockable<T> {
-    type Lock<'a>: Deref<Target = T> + DerefMut + 'a
-    where
-        Self: 'a;
 
-    fn new(value: T) -> Self;
-
-    fn lock(&self) -> impl std::future::Future<Output = Self::Lock<'_>> + Send;
-}
-
-impl<T: Clone + Debug + Send + Sync + 'static> AsyncLockable<T> for Notify<T> {
-    type Lock<'a> = notify::NotifyMutexGuard<'a, T>;
-
-    fn new(value: T) -> Self {
-        Notify::new(value)
-    }
-
-    async fn lock(&self) -> Self::Lock<'_> {
-        Notify::lock(self).await
-    }
-}
 /// Internal representation of a device.
 #[derive(Debug)]
 pub struct Device<T: AsyncLockable<Parameter> + Debug> {
@@ -194,6 +173,7 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ops::Deref;
     use chrono::DateTime;
     use std::sync::{Mutex, MutexGuard};
 

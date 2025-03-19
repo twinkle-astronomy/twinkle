@@ -1,28 +1,23 @@
 use eframe::glow;
-use egui::{ahash::HashMap, mutex::Mutex, Context, ScrollArea};
+use egui::{ahash::HashMap, Context, ScrollArea};
 use futures::executor::block_on;
 use indi::{
     client::AsyncClientConnection,
-    serialization::EnableBlob,
+    serialization::{EnableBlob, SetBlobVector},
 };
 use itertools::Itertools;
-use log::{error, info};
-use std::{ops::Deref, sync::Arc};
+use tokio::sync::Mutex;
+use twinkle_client::OnDropFutureExt;
+
+use std::{ops::{Deref, DerefMut}, sync::Arc};
 use strum::Display;
 use tokio_stream::StreamExt;
+use tracing::{debug, error};
 use url::form_urlencoded;
 
-use crate::{
-    app::Agent,
-    task::{spawn, AsyncTask, Task},
-};
+use crate::task::{spawn, AsyncTask};
 
-use super::views::tab::TabView;
-
-pub struct IndiAgent {
-    task: AsyncTask<()>,
-    state: Arc<Mutex<State>>,
-}
+use super::views::{device::Device, tab::TabView};
 
 #[derive(Display)]
 enum ConnectionStatus {
@@ -44,8 +39,14 @@ struct Connection {
 }
 
 #[derive(Default)]
-struct State {
+pub struct State {
     connection_status: ConnectionStatus,
+}
+
+impl Drop for State {
+    fn drop(&mut self) {
+        debug!("Dropping indi agent state");
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -55,22 +56,56 @@ fn get_websocket_url(encoded_value: &str) -> String {
 
 #[cfg(not(debug_assertions))]
 fn get_websocket_url(encoded_value: &str) -> String {
-    format!("/indi?server_addr={}", encoded_value)
+    // format!("/indi?server_addr={}", encoded_value)
+    format!("ws://localhost:4000/indi?server_addr={}", encoded_value)
 }
 
-async fn reader(
+#[tracing::instrument(skip_all)]
+async fn process_set_blob_vector(
+    mut sbv: SetBlobVector,
+    state: Arc<Mutex<State>>,
+    glow: Option<std::sync::Arc<glow::Context>>,
+) {
+    debug!("enter process_set_blob_vector");
+    for blob in sbv.blobs.iter_mut() {
+        let image_name = format!("{}.{}", sbv.name, blob.name);
+
+        if blob.format == "download" {
+            {
+                let mut state = state.lock().await;
+                if let ConnectionStatus::Connected(connection) = &mut state.connection_status {
+                    if let Some(device) = connection.device_entries.get_mut(&sbv.device) {
+                        device.download_image(
+                            image_name.clone(),
+                            <std::option::Option<Arc<eframe::glow::Context>> as Clone>::clone(
+                                &glow,
+                            )
+                            .unwrap()
+                            .deref(),
+                            String::from_utf8_lossy(&blob.value.0).to_string(),
+                        ).await;
+                    }
+                }
+            }
+        }
+    }
+
+    debug!("exit process_set_blob_vector");
+}
+
+#[tracing::instrument(skip_all)]
+async fn task(
     state: Arc<Mutex<State>>,
     server_addr: String,
     ctx: Context,
     glow: Option<std::sync::Arc<glow::Context>>,
 ) {
-    let state = state.clone();
     let encoded_value = form_urlencoded::byte_serialize(server_addr.as_bytes()).collect::<String>();
     let url = get_websocket_url(&encoded_value);
-    info!("Connecting to {}", url);
+    debug!("Connecting to {}", url);
 
     {
-        state.lock().connection_status = ConnectionStatus::Connecting;
+        state.lock().await.connection_status = ConnectionStatus::Connecting;
     }
 
     let websocket = match tokio_tungstenite_wasm::connect(url).await {
@@ -85,35 +120,37 @@ async fn reader(
         }
     };
     let (w, r) = websocket.to_indi();
-    let (snd, mut recv) = tokio::sync::mpsc::unbounded_channel();
+    let (def_blob_sender, mut def_blob_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (blob_send, mut blob_recv) = tokio::sync::mpsc::channel(1);
+
+    let blob_receiver =  {
+        let glow = glow.clone();
+        let state = state.clone();
+        async move {
+            debug!("start blob_receiver");
+            loop {
+                let sbv: SetBlobVector = match blob_recv.recv().await {
+                    Some(m) => m,
+                    None => break,
+                };
+                process_set_blob_vector(sbv, state.clone(), glow.clone()).await;
+            }
+            debug!("end blob_receiver");
+        }
+        .on_drop(|| debug!("drop blob_receiver"))
+    };
+
     let r = r.filter({
         let ctx = ctx.clone();
-        let state = state.clone();
         move |x| {
             ctx.request_repaint();
             match x {
                 Ok(indi::serialization::Command::DefBlobVector(dbv)) => {
-                    let _ = snd.send(dbv.device.clone());
+                    let _ = def_blob_sender.send(dbv.device.clone());
                     true
                 }
                 Ok(indi::serialization::Command::SetBlobVector(sbv)) => {
-                    info!("GOT BLOB!");
-                    let mut state = state.lock();
-                    if let ConnectionStatus::Connected(connection) = &mut state.connection_status {
-                        info!("getting device entry: {}", &sbv.device);
-                        if let Some(device) = connection.device_entries.get_mut(&sbv.device) {
-                            info!("got entry");
-
-                            device.set_blob(
-                                sbv,
-                                <std::option::Option<Arc<eframe::glow::Context>> as Clone>::clone(
-                                    &glow,
-                                )
-                                .unwrap()
-                                .deref(),
-                            );
-                        }
-                    }
+                    let _ = blob_send.try_send(sbv.clone());
                     false
                 }
                 _ => true,
@@ -124,14 +161,14 @@ async fn reader(
         Ok(client) => client,
         Err(e) => {
             error!("Failed to build indi client: {:?}", e);
-            state.lock().connection_status = ConnectionStatus::Disconnected;
+            state.lock().await.connection_status = ConnectionStatus::Disconnected;
             return;
         }
     };
     let command_sender = client.command_sender();
     let join = client.join();
     {
-        state.lock().connection_status = ConnectionStatus::Connected(Connection {
+        state.lock().await.connection_status = ConnectionStatus::Connected(Connection {
             client,
             devices_tab_view: Default::default(),
             device_entries: Default::default(),
@@ -140,7 +177,7 @@ async fn reader(
     let enable_blobs = {
         async move {
             loop {
-                let msg = match recv.recv().await {
+                let msg = match def_blob_receiver.recv().await {
                     Some(msg) => msg,
                     None => return,
                 };
@@ -157,8 +194,9 @@ async fn reader(
         }
     };
     tokio::select! {
-        _ = join => {info!("join finished")},
-        _ = enable_blobs => {info!("enable_blobs finished")}
+        _ = join => {debug!("join finished")},
+        _ = enable_blobs => {debug!("enable_blobs finished")}
+        _ = blob_receiver => {debug!("blob_receiver finished")}
     };
     ctx.request_repaint();
 }
@@ -167,34 +205,25 @@ pub fn new(
     server_addr: String,
     ctx: Context,
     glow: Option<std::sync::Arc<glow::Context>>,
-) -> IndiAgent {
-    let state: Arc<Mutex<State>> = Default::default();
-    IndiAgent {
-        task: spawn(reader(state.clone(), server_addr, ctx, glow)),
-        state,
-    }
+) -> AsyncTask<(), Arc<Mutex<State>>> {
+    let state = Arc::new(Mutex::new(Default::default()));
+     spawn(state, |state| {
+            task(state.clone(), server_addr, ctx, glow)
+        }).abort_on_drop(true)
+    
 }
 
-impl Agent for IndiAgent {
-    fn on_exit(&mut self, gl: Option<&glow::Context>) {
-        let mut state = self.state.lock();
-        if let Some(gl) = gl {
-            if let ConnectionStatus::Connected(connection) = &mut state.connection_status {
-                for device in connection.device_entries.values_mut() {
-                    device.on_exit(gl);
-                }
-                connection.device_entries.clear();
-            }    
-        }
-    }
-    fn show(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let mut state = self.state.lock();
+
+impl crate::Widget for &Arc<Mutex<State>> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let mut status = block_on(self.lock());
+        let state = status.deref_mut();
         match &mut state.connection_status {
             ConnectionStatus::Disconnected => {
-                ui.label("Disconnected");
+                ui.label("Disconnected")
             }
             ConnectionStatus::Connecting => {
-                ui.spinner();
+                ui.spinner()
             }
             ConnectionStatus::Connected(connection) => {
                 let selected = connection.devices_tab_view.show(
@@ -207,30 +236,27 @@ impl Agent for IndiAgent {
                     if let Some(device) =
                         block_on(async { connection.client.device::<()>(selected.as_str()).await })
                     {
-                        let device_view = connection
+                        ui.vertical(|ui| {
+                            let device_view = connection
                             .device_entries
                             .entry(selected.clone())
-                            .or_insert_with(Default::default);
+                            .or_insert_with(|| Device::new(device.clone()));
                         ui.separator();
                         ScrollArea::vertical()
                             .max_height(ui.available_height())
                             .auto_shrink([false; 2])
                             .show(ui, |ui| {
-                                device_view.show(ui, &device);
+                                ui.add(device_view);
                             });
+                        }).response
+                    } else {
+                        ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
                     }
+                } else {
+                    ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
                 }
             }
-        }
+        }   
     }
 }
 
-impl Task for IndiAgent {
-    fn abort(&self) {
-        self.task.abort()
-    }
-
-    fn status(&self) -> crate::task::Status {
-        self.task.status()
-    }
-}

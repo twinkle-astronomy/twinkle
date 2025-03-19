@@ -10,7 +10,7 @@ use crate::{device, serialization::device::DeviceUpdate};
 use std::{fmt::Debug, future::Future};
 use tokio::{select, sync::oneshot};
 use tokio_stream::StreamExt;
-use tracing::{error, Instrument};
+use tracing::{error, info, Instrument};
 use twinkle_client;
 
 use std::{

@@ -1,4 +1,7 @@
 use eframe::glow::{self, HasContext};
+use tracing::debug;
+
+use crate::App;
 
 use super::{fits_render::Elipse, fits_widget::Drawable, FitsRender};
 
@@ -13,7 +16,22 @@ pub struct LineMesh {
 
     pub dirty: bool,
 }
-
+impl Drop for LineMesh {
+    fn drop(&mut self) {
+        debug!("Dropping LineMesh");
+        let vao = self.get_vao().clone();
+        let vbo = self.get_vbo().clone();
+        App::run_next_update(Box::new(move |_ctx, frame| {
+            if let Some(gl) = frame.gl() {
+                debug!("deleteing LineMesh opengl resources");
+                unsafe {
+                    gl.delete_vertex_array(vao);
+                    gl.delete_buffer(vbo);
+                }
+            }
+        }));
+    }
+}
 impl Drawable for LineMesh {
     fn draw(&self, gl: &glow::Context, render: &FitsRender) {
         unsafe {
@@ -33,12 +51,6 @@ impl Drawable for LineMesh {
 
     fn get_vao(&self) -> glow::VertexArray {
         self.vao
-    }
-
-    unsafe fn destroy(&self, gl: &glow::Context) {
-        gl.delete_program(self.get_program());
-        gl.delete_vertex_array(self.get_vao());
-        gl.delete_buffer(self.get_vbo());
     }
 
     fn load_data(&mut self, gl: &glow::Context) {

@@ -1,0 +1,11 @@
+[package]
+name = "twinkle_api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.203", features = ["derive"] }
+ndarray = {version = "0.16.1", features=["serde"]}
+fitsrs = "0.3.2"
+tracing = "0.1"
+rmp-serde = "1.3.0"

@@ -15,12 +15,17 @@ uniform float histogram_mtf;
 uniform usampler2D mono_fits;
 
 void main() {
-    // Explicitly convert to float after reading the texture
-    float intensity = float(texture(mono_fits, vec2(UV.x, UV.y)).r);
+    // Read the raw unsigned value from texture
+    uint raw_value = texture(mono_fits, vec2(UV.x, UV.y)).r;
     
-    float x = intensity;
-    x = x / 65535.0;
-
+    // Apply the transformation (x as i32 - 32768) directly in the shader
+    // First convert to int, subtract 32768, and then normalize
+    float intensity = float(int(raw_value) - 32768) / 32768.0;
+    
+    // Now intensity is in range [-1.0, 1.0] approximately
+    // Adjust your scaling as needed for your visualization
+    float x = (intensity + 1.0) / 2.0; // Map to [0, 1] range
+    
     float h_low = histogram_low;
     float h_high = histogram_high;
     float h_mtf = histogram_mtf;

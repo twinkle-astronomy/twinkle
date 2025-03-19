@@ -263,6 +263,29 @@ impl<'a, T> Drop for NotifyMutexGuard<'a, T> {
         }
     }
 }
+
+pub trait AsyncLockable<T> {
+    type Lock<'a>: Deref<Target = T> + DerefMut + 'a
+    where
+        Self: 'a;
+
+    fn new(value: T) -> Self;
+
+    fn lock(&self) -> impl std::future::Future<Output = Self::Lock<'_>> + Send;
+}
+
+impl<T: Clone + Debug + Send + Sync + 'static> AsyncLockable<T> for Notify<T> {
+    type Lock<'a> = NotifyMutexGuard<'a, T>;
+
+    fn new(value: T) -> Self {
+        Notify::new(value)
+    }
+
+    async fn lock(&self) -> Self::Lock<'_> {
+        Notify::lock(self).await
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

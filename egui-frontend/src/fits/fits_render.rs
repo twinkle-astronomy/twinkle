@@ -1,14 +1,22 @@
+use std::sync::OnceLock;
+
 use eframe::{
     egui_glow,
     glow::{Context, HasContext},
 };
 use egui_glow::glow;
-use log::error;
 use ndarray::{ArrayD, IxDyn};
 
 use fits_widget::Drawable;
+use tracing::{debug, error};
+use twinkle_api::analysis::Statistics;
 
-use super::{analysis::Statistics, fits_widget, image_mesh::ImageMesh, line_mesh::LineMesh};
+use super::{fits_widget, image_mesh::ImageMesh, line_mesh::LineMesh};
+
+
+static IMAGE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> = OnceLock::new();
+static CIRCLE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> = OnceLock::new();
+
 
 #[derive(Debug)]
 pub struct Elipse {
@@ -53,6 +61,30 @@ pub struct FitsRender {
 
 #[allow(unsafe_code)] // we need unsafe code to use glow
 impl FitsRender {
+    fn get_image_program(gl: &Context) -> <eframe::glow::Context as HasContext>::Program  {
+        IMAGE_SHADER_PROGRAM.get_or_init(|| {
+            unsafe {
+                Self::create_program(
+                    gl,
+                    include_str!("shaders/fits_vertex.glsl"),
+                    include_str!("shaders/fits_fragment.glsl"),
+                )
+            }
+            
+        }).clone()
+    }
+    fn get_circle_program(gl: &Context) -> <eframe::glow::Context as HasContext>::Program  {
+        CIRCLE_SHADER_PROGRAM.get_or_init(|| {
+            unsafe {
+                Self::create_program(
+                    gl,
+                    include_str!("shaders/fits_vertex.glsl"),
+                    include_str!("shaders/circle_fragment.glsl"),
+                )
+            }
+            
+        }).clone()
+    }
     unsafe fn create_program(
         gl: &Context,
         vertex_shader_source: &str,
@@ -112,6 +144,7 @@ impl FitsRender {
     }
 
     pub fn new(gl: &glow::Context) -> Self {
+        debug!("new FitsRender");
         let shader_version = egui_glow::ShaderVersion::get(gl);
         let texture;
 
@@ -125,12 +158,9 @@ impl FitsRender {
                     shader_version
                 );
             }
-            let vertex_shader_source = include_str!("shaders/fits_vertex.glsl");
 
-            let program = Self::create_program(
-                gl,
-                vertex_shader_source,
-                include_str!("shaders/fits_fragment.glsl"),
+            let program = Self::get_image_program(
+                gl
             );
             let vbo = gl.create_buffer().unwrap();
             let vao = gl.create_vertex_array().unwrap();
@@ -143,7 +173,8 @@ impl FitsRender {
 
             texture = gl.create_texture().expect("Cannot create texture");
             let shape = [10,10];
-            let image = ArrayD::<u16>::zeros(IxDyn(&shape));
+            
+            let image = ArrayD::<u16>::ones(IxDyn(&shape));//ArrayD::<u16>::zeros(IxDyn(&shape));
             image_mesh = ImageMesh {
                 texture,
                 image,
@@ -159,10 +190,8 @@ impl FitsRender {
                 dirty: true,
             };
 
-            let program = Self::create_program(
-                gl,
-                vertex_shader_source,
-                include_str!("shaders/circle_fragment.glsl"),
+            let program = Self::get_circle_program(
+                gl
             );
             let vbo = gl.create_buffer().unwrap();
             let vao = gl.create_vertex_array().unwrap();
@@ -219,13 +248,6 @@ impl FitsRender {
     // https://en.wikipedia.org/wiki/Median_absolute_deviation
     // midpoint = median + -2.8*mad (if median < 0.5)
 
-    pub fn destroy(&self, gl: &glow::Context) {
-        unsafe {
-            self.circles_mesh.destroy(gl);
-            self.image_mesh.destroy(gl);
-        }
-    }
-
     #[rustfmt::skip]
     pub fn model_transform(&self) -> [f32; 16] {
         let w = self.image_mesh.shape[1] as f32;
@@ -264,5 +286,11 @@ impl FitsRender {
                 }
             }
         }
+    }
+}
+
+impl Drop for FitsRender {
+    fn drop(&mut self) {
+        debug!("drop FitsRender");
     }
 }

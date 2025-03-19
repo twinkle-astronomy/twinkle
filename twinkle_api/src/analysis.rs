@@ -1,12 +1,13 @@
 use ndarray::ArrayViewD;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Sample {
     pub value: u16,
     pub count: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Statistics {
     pub unique: usize,
     pub median: u16,

@@ -637,7 +637,7 @@ pub struct DefBlob {
     label: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename = "setBLOBVector")]
 pub struct SetBlobVector {
     #[serde(rename = "@device")]
@@ -660,7 +660,7 @@ pub struct SetBlobVector {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Blob(pub Vec<u8>);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename = "oneBLOB")]
 pub struct OneBlob {
     #[serde(rename = "@name")]

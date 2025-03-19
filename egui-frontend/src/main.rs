@@ -28,9 +28,8 @@ fn main() -> eframe::Result {
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use eframe::wasm_bindgen::JsCast as _;
-
-    // Redirect `log` message to `console.log` and friends:
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    console_error_panic_hook::set_once();
+    wasm_tracing::set_as_global_default();
 
     let web_options = eframe::WebOptions::default();
 

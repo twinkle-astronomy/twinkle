@@ -12,8 +12,6 @@ pub trait Drawable {
 
     fn draw(&self, gl: &glow::Context, render: &FitsRender);
 
-    unsafe fn destroy(&self, gl: &glow::Context);
-
     unsafe fn prepare_mesh(&self, gl: &glow::Context, render: &FitsRender) {
         let program = self.get_program();
         let vbo = self.get_vbo();
@@ -81,7 +79,8 @@ impl FitsWidget {
         let (image_width, image_height) = (shape[1], shape[0]);
         let image_ratio = image_width as f32 / image_height as f32;
 
-        let space = ui.available_size();
+        let space = ui.available_size().max(egui::vec2(10.0, 10.0));
+        
         let space_ratio = space.x / space.y;
 
         let image_scale = if space_ratio < image_ratio {

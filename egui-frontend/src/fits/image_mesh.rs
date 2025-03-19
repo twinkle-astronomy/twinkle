@@ -1,16 +1,10 @@
-use eframe::glow::{self, HasContext};
-use log::error;
-use ndarray::{Array, ArrayD, Ix2};
+
+use crate::App;
 
 use super::{fits_widget::Drawable, FitsRender};
-use wasm_bindgen_futures::wasm_bindgen;
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = performance)]
-    fn now() -> f64;
-}
+use eframe::glow::{self, HasContext};
+use ndarray::{Array, ArrayD, Ix2};
+use tracing::debug;
 
 pub struct ImageMesh {
     pub texture: glow::Texture,
@@ -37,29 +31,46 @@ fn downsample_image(image: &ArrayD<u16>) -> ArrayD<u16> {
     // Convert to 2D view for easier processing
     let image_view = image.view().into_dimensionality::<Ix2>().unwrap();
     let shape = image_view.shape();
-    
+
     // Calculate new dimensions
     let new_height = shape[0] / 2;
     let new_width = shape[1] / 2;
-    
+
     // Create a 2x2 kernel
     let kernel = Ix2(2, 2);
-    
+
     // Use windows_with_stride to iterate over 2x2 non-overlapping blocks
     let window_values: Vec<u16> = image_view
         .windows_with_stride(kernel.clone(), kernel)
         .into_iter()
-        .map(|x| {
-            (x.iter().map(|&p| p as f32).sum::<f32>() / x.len() as f32).round() as u16
-        })
+        .map(|x| (x.iter().map(|&p| p as f32).sum::<f32>() / x.len() as f32).round() as u16)
         .collect();
-    
+
     // Reshape the flat vector into a 2D array
     let downsampled = Array::from_shape_vec((new_height, new_width), window_values)
         .expect("Shape mismatch when creating downsampled image");
-    
+
     // Convert back to dynamic array
     downsampled.into_dyn()
+}
+
+impl Drop for ImageMesh {
+    fn drop(&mut self) {
+        debug!("Dropping ImageMesh");
+        let vao = self.get_vao().clone();
+        let vbo = self.get_vbo().clone();
+        let texture = self.texture.clone();
+        App::run_next_update(Box::new(move |_ctx, frame| {
+            if let Some(gl) = frame.gl() {
+                debug!("deleteing ImageMesh opengl resources");
+                unsafe {
+                    gl.delete_vertex_array(vao);
+                    gl.delete_buffer(vbo);
+                    gl.delete_texture(texture);
+                }
+            }
+        }))
+    }
 }
 
 impl Drawable for ImageMesh {
@@ -107,32 +118,21 @@ impl Drawable for ImageMesh {
         self.vao
     }
 
-    unsafe fn destroy(&self, gl: &glow::Context) {
-        gl.delete_program(self.get_program());
-        gl.delete_vertex_array(self.get_vao());
-        gl.delete_buffer(self.get_vbo());
-        gl.delete_texture(self.texture);
-    }
-
+    #[tracing::instrument(skip_all)]
     fn load_data(&mut self, gl: &glow::Context) {
-        // println!("load_image_data");
-        let start = now();
-
-        /******* Image stuff *******/
         unsafe {
             let max_texture_size = gl.get_parameter_f32(glow::MAX_TEXTURE_SIZE);
-            while self.shape[0] as f32 > max_texture_size || self.shape[1] as f32 > max_texture_size {
+            while self.shape[0] as f32 > max_texture_size || self.shape[1] as f32 > max_texture_size
+            {
                 self.image = downsample_image(&self.image);
                 self.shape[0] = self.image.shape()[0];
                 self.shape[1] = self.image.shape()[1];
             }
-            let triangle_vertices =
-                FitsRender::image_canvas(self.shape[1], self.shape[0]);
+            let triangle_vertices = FitsRender::image_canvas(self.shape[1], self.shape[0]);
             let triangle_vertices_u8: &[u8] = core::slice::from_raw_parts(
                 triangle_vertices.as_ptr() as *const u8,
                 triangle_vertices.len() * core::mem::size_of::<f32>(),
             );
-
 
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
             gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, triangle_vertices_u8, glow::STATIC_DRAW);
@@ -153,7 +153,7 @@ impl Drawable for ImageMesh {
                 glow::UNSIGNED_SHORT,
                 eframe::glow::PixelUnpackData::Slice(Some(std::slice::from_raw_parts(
                     self.image.as_ptr() as *const u8,
-                    self.image.len()* core::mem::size_of::<u16>(),
+                    self.image.len() * core::mem::size_of::<u16>(),
                 ))),
             );
 
@@ -178,8 +178,5 @@ impl Drawable for ImageMesh {
                 glow::CLAMP_TO_BORDER as i32,
             );
         }
-
-        error!("load_data: {:?}ms", now() - start);
-        /**************************/
     }
 }

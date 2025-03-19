@@ -34,7 +34,6 @@ USER root
 # Build server
 RUN cargo build --release --bin server
 # Build frontend
-RUN ls -lah /app/egui-frontend
 RUN cd egui-frontend && trunk build --release
 
 FROM debian:bullseye-slim AS twinkle

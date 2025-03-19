@@ -1,16 +1,14 @@
-use eframe::glow;
+use crate::{indi::agent::State, task::{AsyncTask, Task}};
 use egui::Window;
-use twinkle_client::OnDropFutureExt;
-use std::collections::BTreeMap;
-use crate::{
-    indi::agent::IndiAgent,
-    task::{Status, Task},
+use futures::executor::block_on;
+use tokio::sync::Mutex;
+use std::{
+    collections::BTreeMap, sync::{mpsc, Arc, OnceLock}
 };
 
-pub trait Agent {
-    fn show(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame);
-    fn on_exit(&mut self, gl: Option<&glow::Context>);
-}
+static GLOBAL_CALLBACKS: OnceLock<
+    std::sync::mpsc::Sender<Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>>,
+> = OnceLock::new();
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -18,19 +16,36 @@ pub struct App {
     server_addr: String,
 
     #[serde(skip)]
-    agents: BTreeMap<String, IndiAgent>,
+    agents: BTreeMap<String, AsyncTask<(), Arc<Mutex<State>>>>,
+
+    #[serde(skip)]
+    callbacks: std::sync::mpsc::Receiver<
+        Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>,
+    >,
 }
 
 impl Default for App {
     fn default() -> Self {
+        let (tx, callbacks) = mpsc::channel();
+        GLOBAL_CALLBACKS
+            .set(tx)
+            .expect("GLOBAL_CALLBACKS already set.");
         Self {
             server_addr: "indi:7624".to_string(),
             agents: Default::default(),
+            callbacks,
         }
     }
 }
 
 impl App {
+    pub fn run_next_update(
+        func: Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>,
+    ) {
+        if let Some(tx) = GLOBAL_CALLBACKS.get() {
+            let _ = tx.send(func);
+        }
+    }
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let this: Self = if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
@@ -48,11 +63,14 @@ impl eframe::App for App {
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 
+    #[tracing::instrument(skip_all)]
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        while let Ok(cb) = self.callbacks.try_recv() {
+            cb(ctx, frame);
+        }
         self.agents.retain(|id, agent| {
-            if agent.status() != Status::Running {
-                agent.on_exit(frame.gl().map(|v| &**v));
+            if !block_on(agent.running()) {
                 return false;
             }
             let mut open = true;
@@ -61,12 +79,9 @@ impl eframe::App for App {
                 .resizable(true)
                 .scroll([true, false])
                 .show(ctx, |ui| {
-                    agent.show(ui, frame);
+                    ui.add(agent);
                 });
-            if !open {
-                agent.abort();
-            }
-            true
+            open
         });
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -78,14 +93,15 @@ impl eframe::App for App {
             ui.text_edit_singleline(&mut self.server_addr);
 
             if ui.button("Connect").clicked() {
-                self.agents.insert(
-                    format!("indi -> {}", self.server_addr.clone()),
-                    crate::indi::agent::new(
-                        self.server_addr.clone(),
-                        ctx.clone(),
-                        frame.gl().cloned(),
-                    ),
-                );
+                self.agents
+                    .entry(format!("indi -> {}", self.server_addr.clone()))
+                    .or_insert_with(|| {
+                        crate::indi::agent::new(
+                            self.server_addr.clone(),
+                            ctx.clone(),
+                            frame.gl().cloned(),
+                        )
+                    });
             }
         });
     }
