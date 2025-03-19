@@ -57,7 +57,7 @@ fn get_websocket_url(encoded_value: &str) -> String {
 #[cfg(not(debug_assertions))]
 fn get_websocket_url(encoded_value: &str) -> String {
     // format!("/indi?server_addr={}", encoded_value)
-    format!("ws://localhost:4000/indi?server_addr={}", encoded_value)
+    format!("/indi?server_addr={}", encoded_value)
 }
 
 #[tracing::instrument(skip_all)]
