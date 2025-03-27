@@ -1,5 +1,4 @@
 use eframe::glow::{self, HasContext};
-use tracing::debug;
 
 use crate::App;
 
@@ -18,12 +17,10 @@ pub struct LineMesh {
 }
 impl Drop for LineMesh {
     fn drop(&mut self) {
-        debug!("Dropping LineMesh");
         let vao = self.get_vao().clone();
         let vbo = self.get_vbo().clone();
         App::run_next_update(Box::new(move |_ctx, frame| {
             if let Some(gl) = frame.gl() {
-                debug!("deleteing LineMesh opengl resources");
                 unsafe {
                     gl.delete_vertex_array(vao);
                     gl.delete_buffer(vbo);

@@ -8,15 +8,14 @@ use egui_glow::glow;
 use ndarray::{ArrayD, IxDyn};
 
 use fits_widget::Drawable;
-use tracing::{debug, error};
 use twinkle_api::analysis::Statistics;
 
 use super::{fits_widget, image_mesh::ImageMesh, line_mesh::LineMesh};
 
-
-static IMAGE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> = OnceLock::new();
-static CIRCLE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> = OnceLock::new();
-
+static IMAGE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> =
+    OnceLock::new();
+static CIRCLE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> =
+    OnceLock::new();
 
 #[derive(Debug)]
 pub struct Elipse {
@@ -61,29 +60,27 @@ pub struct FitsRender {
 
 #[allow(unsafe_code)] // we need unsafe code to use glow
 impl FitsRender {
-    fn get_image_program(gl: &Context) -> <eframe::glow::Context as HasContext>::Program  {
-        IMAGE_SHADER_PROGRAM.get_or_init(|| {
-            unsafe {
+    fn get_image_program(gl: &Context) -> <eframe::glow::Context as HasContext>::Program {
+        IMAGE_SHADER_PROGRAM
+            .get_or_init(|| unsafe {
                 Self::create_program(
                     gl,
                     include_str!("shaders/fits_vertex.glsl"),
                     include_str!("shaders/fits_fragment.glsl"),
                 )
-            }
-            
-        }).clone()
+            })
+            .clone()
     }
-    fn get_circle_program(gl: &Context) -> <eframe::glow::Context as HasContext>::Program  {
-        CIRCLE_SHADER_PROGRAM.get_or_init(|| {
-            unsafe {
+    fn get_circle_program(gl: &Context) -> <eframe::glow::Context as HasContext>::Program {
+        CIRCLE_SHADER_PROGRAM
+            .get_or_init(|| unsafe {
                 Self::create_program(
                     gl,
                     include_str!("shaders/fits_vertex.glsl"),
                     include_str!("shaders/circle_fragment.glsl"),
                 )
-            }
-            
-        }).clone()
+            })
+            .clone()
     }
     unsafe fn create_program(
         gl: &Context,
@@ -144,7 +141,6 @@ impl FitsRender {
     }
 
     pub fn new(gl: &glow::Context) -> Self {
-        debug!("new FitsRender");
         let shader_version = egui_glow::ShaderVersion::get(gl);
         let texture;
 
@@ -153,15 +149,13 @@ impl FitsRender {
 
         unsafe {
             if !shader_version.is_new_shader_interface() {
-                error!(
+                tracing::error!(
                     "Custom 3D painting hasn't been ported to {:?}",
                     shader_version
                 );
             }
 
-            let program = Self::get_image_program(
-                gl
-            );
+            let program = Self::get_image_program(gl);
             let vbo = gl.create_buffer().unwrap();
             let vao = gl.create_vertex_array().unwrap();
 
@@ -172,9 +166,9 @@ impl FitsRender {
             let histogram_mtf = 0.5;
 
             texture = gl.create_texture().expect("Cannot create texture");
-            let shape = [10,10];
-            
-            let image = ArrayD::<u16>::ones(IxDyn(&shape));//ArrayD::<u16>::zeros(IxDyn(&shape));
+            let shape = [10, 10];
+
+            let image = ArrayD::<u16>::ones(IxDyn(&shape)); //ArrayD::<u16>::zeros(IxDyn(&shape));
             image_mesh = ImageMesh {
                 texture,
                 image,
@@ -190,9 +184,7 @@ impl FitsRender {
                 dirty: true,
             };
 
-            let program = Self::get_circle_program(
-                gl
-            );
+            let program = Self::get_circle_program(gl);
             let vbo = gl.create_buffer().unwrap();
             let vao = gl.create_vertex_array().unwrap();
             circles_mesh = LineMesh {
@@ -286,11 +278,5 @@ impl FitsRender {
                 }
             }
         }
-    }
-}
-
-impl Drop for FitsRender {
-    fn drop(&mut self) {
-        debug!("drop FitsRender");
     }
 }

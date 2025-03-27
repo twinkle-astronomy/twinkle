@@ -1,13 +1,15 @@
+use futures_timer::Delay;
 use std::future::{pending, Future};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use futures_timer::Delay;
 use std::time::Duration;
 
 mod stream_ext;
 pub use stream_ext::StreamExt;
 
+// pub mod feed;
 pub mod notify;
+pub mod task;
 
 // https://stackoverflow.com/questions/74985153/implementing-drop-for-a-future-in-rust
 
@@ -86,6 +88,27 @@ impl<F: Future, D: FnMut()> Drop for OnDropFuture<F, D> {
         }
     }
 }
+
+#[cfg(target_family = "wasm")]
+pub trait MaybeSend {}
+#[cfg(target_family = "wasm")]
+impl<T> MaybeSend for T {}
+
+#[cfg(target_family = "wasm")]
+pub trait MaybeSync {}
+#[cfg(target_family = "wasm")]
+impl<T> MaybeSync for T {}
+
+// Helper trait that requires Send for non-wasm
+#[cfg(not(target_family = "wasm"))]
+pub trait MaybeSend: Send {}
+#[cfg(not(target_family = "wasm"))]
+impl<T: Send> MaybeSend for T {}
+
+#[cfg(not(target_family = "wasm"))]
+pub trait MaybeSync: Sync {}
+#[cfg(not(target_family = "wasm"))]
+impl<T: Sync> MaybeSync for T {}
 
 pub struct TimeoutError {}
 

@@ -6,6 +6,7 @@ use indi::{
     serialization::{OneNumber, OneText},
 };
 use itertools::Itertools;
+use twinkle_client::task::spawn;
 
 pub struct ParameterWidget<'a, T> {
     parameter: &'a T,
@@ -74,7 +75,7 @@ impl<'a> ParameterWidget<'a, indi::NumberVector> {
         if self.parameter.perm == indi::PropertyPerm::RW {
             let response = ui.button("set");
             if response.clicked() {
-                crate::task::spawn((), |_| {
+                spawn((), |_| {
                     let active_device = self.device.clone();
                     let parameter_name = self.parameter.name.clone();
                     let values: std::vec::Vec<OneNumber> = self
@@ -86,7 +87,6 @@ impl<'a> ParameterWidget<'a, indi::NumberVector> {
                             value: value.value,
                         })
                         .collect();
-
                     async move {
                         active_device.change(&parameter_name, values).await.ok();
                     }
@@ -124,17 +124,15 @@ impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.horizontal(|ui| {
             for (value_name, value) in &self.parameter.values {
-                
                 let label = if let Some(label) = &value.label {
                     label.clone()
                 } else {
                     value_name.clone()
                 };
-                let selectable_label = ui.selectable_label(value.value == indi::SwitchState::On, label);
-                if selectable_label
-                    .clicked()
-                {
-                    crate::task::spawn((), |_| {
+                let selectable_label =
+                    ui.selectable_label(value.value == indi::SwitchState::On, label);
+                if selectable_label.clicked() {
+                    spawn((), |_| {
                         let active_device = self.device.clone();
                         let parameter_name = self.parameter.name.clone();
                         let value_name = value_name.clone();
@@ -200,10 +198,10 @@ impl<'a> ParameterWidget<'a, indi::TextVector> {
         if self.parameter.perm == indi::PropertyPerm::RW {
             let response = ui.button("set");
             if response.clicked() {
-                crate::task::spawn((), |_| {
+                spawn((), |_| {
                     let active_device = self.device.clone();
                     let parameter_name = self.parameter.name.clone();
-                    let values: std::vec::Vec<OneText> = self 
+                    let values: std::vec::Vec<OneText> = self
                         .param_new
                         .values
                         .iter()

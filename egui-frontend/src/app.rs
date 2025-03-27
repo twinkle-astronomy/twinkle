@@ -1,10 +1,12 @@
-use crate::{indi::agent::State, task::{AsyncTask, Task}};
+use crate::{indi::agent::State, Agent};
 use egui::Window;
 use futures::executor::block_on;
-use tokio::sync::Mutex;
 use std::{
-    collections::BTreeMap, sync::{mpsc, Arc, OnceLock}
+    collections::BTreeMap,
+    sync::{mpsc, Arc, OnceLock},
 };
+use tokio::sync::Mutex;
+use twinkle_client::task::Task;
 
 static GLOBAL_CALLBACKS: OnceLock<
     std::sync::mpsc::Sender<Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>>,
@@ -16,7 +18,7 @@ pub struct App {
     server_addr: String,
 
     #[serde(skip)]
-    agents: BTreeMap<String, AsyncTask<(), Arc<Mutex<State>>>>,
+    agents: BTreeMap<String, Agent<(), Arc<Mutex<State>>>>,
 
     #[serde(skip)]
     callbacks: std::sync::mpsc::Receiver<

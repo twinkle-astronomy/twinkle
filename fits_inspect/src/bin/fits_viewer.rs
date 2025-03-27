@@ -4,9 +4,10 @@ use std::{path::PathBuf, sync::Arc};
 
 use egui::mutex::Mutex;
 use fits_inspect::{
-    calibration::{CanCalibrate, HasCalibration},
+    // calibration::{CanCalibrate, HasCalibration},
     egui::{FitsRender, FitsWidget},
-    HasImage, Image,
+    HasImage,
+    Image,
 };
 
 pub struct FitsViewerApp {
@@ -39,7 +40,7 @@ impl FitsViewerApp {
         //         }
         //     }
         // }
-        let mut image: Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/ekos/NGC_2244/data/Light/H_Alpha/NGC_2244_Light_H_Alpha_360_secs_2025-02-25T21-56-53_003.fits").try_into().unwrap();
+        let image: Image = PathBuf::from("/home/cconstantine/AstroDMx_DATA/ekos/NGC_2244/data/Light/H_Alpha/NGC_2244_Light_H_Alpha_360_secs_2025-02-25T21-56-53_003.fits").try_into().unwrap();
         // dbg!(image.describe_dark());
         // let dark: fits_inspect::calibration::Image = PathBuf::from("~/AstroDMx_DATA/ekos/NGC_2244/data/calibration/masterDark_BIN-2_4144x2822_EXPOSURE-360.00s_GAIN-120.xisf").try_into().unwrap();
         // let flat: fits_inspect::calibration::Image = PathBuf::from("~/AstroDMx_DATA/ekos/NGC_2244/data/calibration/masterFlat_BIN-2_4144x2822_FILTER-H-Alpha_mono.xisf").try_into().unwrap();

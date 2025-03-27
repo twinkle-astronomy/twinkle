@@ -151,10 +151,10 @@ mod test {
     use std::ops::Deref;
 
     use futures::StreamExt;
-    use tokio::{net::TcpListener, sync::oneshot};
-    use tracing::info;
-    use tracing_test::traced_test;
     use tokio::time::{timeout, Duration};
+    use tokio::{net::TcpListener, sync::oneshot};
+    use tracing_test::traced_test;
+    use twinkle_client::task::{Joinable, Status, Task};
 
     use super::*;
     use crate::{client::new, serialization::DefNumberVector};
@@ -164,11 +164,19 @@ mod test {
         let connection = TcpStream::connect("indi:7624")
             .await
             .expect("connecting to indi");
-        let mut client = new(connection, None, None).expect("Making client");
-        client.shutdown();
-        if let Some((reader, writer)) = client._workers.take() {
-            let _ = tokio::join!(reader, writer);
+        let mut client = new(connection, None, None);
+        {
+            client
+                .with_state(|state| {
+                    let state = state.clone();
+                    async move {
+                        state.lock().await.shutdown();
+                    }
+                })
+                .await
+                .unwrap();
         }
+        client.join().await.unwrap();
     }
 
     #[tokio::test]
@@ -178,57 +186,63 @@ mod test {
         let server_addr = listener.local_addr().unwrap();
 
         let (server_stop_tx, server_stop_rx) = oneshot::channel::<()>();
-        
+
         // Server behavior
         tokio::spawn(async move {
             let (mut _socket, _) = listener.accept().await.unwrap();
-           let (mut writer, mut reader) = _socket.to_indi();
-           
-            let msg = reader.read().await;
-            info!("Got: {:?}", msg);
-            writer.write(
-                crate::Command::DefNumberVector(
-                    DefNumberVector { device: "test".to_string(), name: "param".to_string(), label: None, group: None, state: crate::PropertyState::Idle,
-                     perm: crate::PropertyPerm::RO, timeout: None, timestamp: None, message: None, numbers: vec![] }
-            )).await.unwrap();
-            let _ =server_stop_rx.await;
-            info!("Shutting down server");
+            let (mut writer, mut reader) = _socket.to_indi();
+
+            let _msg = reader.read().await;
+
+            writer
+                .write(crate::Command::DefNumberVector(DefNumberVector {
+                    device: "test".to_string(),
+                    name: "param".to_string(),
+                    label: None,
+                    group: None,
+                    state: crate::PropertyState::Idle,
+                    perm: crate::PropertyPerm::RO,
+                    timeout: None,
+                    timestamp: None,
+                    message: None,
+                    numbers: vec![],
+                }))
+                .await
+                .unwrap();
+            let _ = server_stop_rx.await;
             // Server disconnects here
         });
-        
+
         let connection = TcpStream::connect(server_addr)
             .await
             .expect("connecting to indi");
-        let mut client = new(connection, None, None).expect("Making client");
-        let mut sub = client.get_connected().subscribe().await;
+        let mut client = new(connection, None, None);
+        let mut sub = if let Status::Running(connected) = client.status().lock().await.deref() {
+            connected.lock().await.get_connected().subscribe().await
+        } else {
+            panic!("Not connected");
+        };
         tokio::time::sleep(Duration::from_millis(100)).await;
         server_stop_tx.send(()).unwrap();
-        error!("testing stuff");
-        if let Some((reader, writer)) = client._workers.take() {
-            let timeout_duration = Duration::from_secs(1);
-            let timeout_result = tokio::join!(
-                timeout(timeout_duration, async move { let e = reader.await;error!("done reader");e}),
-                timeout(timeout_duration, async move { let e = writer.await;error!("done writer");e}),
-                timeout(timeout_duration, async move { 
-                    loop {
-                        match sub.next().await {
-                            Some(Ok(connected)) => {
-                                dbg!(&connected);
-                                if !connected.deref() {
-                                    break
-                                }
-                            },
-                            None | Some(Err(_)) => break,
+
+        let timeout_duration = Duration::from_secs(1);
+        let timeout_result = tokio::join!(
+            timeout(timeout_duration, client.join()),
+            timeout(timeout_duration, async move {
+                loop {
+                    match sub.next().await {
+                        Some(Ok(connected)) => {
+                            dbg!(&connected);
+                            if !connected.deref() {
+                                break;
+                            }
                         }
+                        None | Some(Err(_)) => break,
                     }
-                    error!("done sub.next()");
-                }),
-            );
-            timeout_result.0.expect("reader timeout").expect("reader");
-            timeout_result.1.expect("writer timeout").expect("writer");
-            timeout_result.2.expect("sub timeout");
-        }
-        error!("done testing stuff");
-        client.get_devices();
+                }
+            }),
+        );
+        timeout_result.0.expect("task timeout").expect("task");
+        timeout_result.1.expect("sub timeout");
     }
 }

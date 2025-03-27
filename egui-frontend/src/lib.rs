@@ -5,24 +5,27 @@ mod app;
 use std::ops::Deref;
 
 pub use app::App;
+use derive_more::{Deref, DerefMut, From};
 use futures::executor::block_on;
-use task::{AsyncTask, Status, Task};
+use twinkle_client::task::{AsyncTask, Status, Task};
 
 pub mod fits;
 pub mod indi;
-pub mod task;
 
+#[derive(From, Deref, DerefMut)]
+pub struct Agent<T, S>(AsyncTask<T, S>);
 
 trait Widget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response;
 }
 
-impl<T> egui::Widget for &Status<T> 
+impl<S: Send + Sync + 'static> egui::Widget for &Agent<(), S>
 where
-    for<'a> &'a T: Widget
+    for<'a> &'a S: crate::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        if let Status::Running(state) = self {
+        let status = block_on(self.status().lock());
+        if let Status::Running(state) = status.deref() {
             state.ui(ui)
         } else {
             ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
@@ -30,24 +33,16 @@ where
     }
 }
 
-impl<S: 'static> egui::Widget for &AsyncTask<(), S> 
+impl<S: Send + Sync + 'static> egui::Widget for &mut Agent<(), S>
 where
-    for<'a> &'a S: crate::Widget
+    for<'a> &'a S: crate::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-
         let status = block_on(self.status().lock());
-        ui.add(status.deref())
-    }
-}
-
-impl<S: 'static> egui::Widget for &mut AsyncTask<(), S> 
-where
-    for<'a> &'a S: crate::Widget
-{
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-
-        let status = block_on(self.status().lock());
-        ui.add(status.deref())
+        if let Status::Running(state) = status.deref() {
+            state.ui(ui)
+        } else {
+            ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
+        }
     }
 }

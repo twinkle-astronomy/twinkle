@@ -7,11 +7,12 @@ use futures::executor::block_on;
 use reqwest::IntoUrl;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, Instrument};
+use tracing::Instrument;
 use twinkle_api::indi::api::ImageResponse;
+use twinkle_client::task::{self, Abortable};
 use url::Url;
 
-use crate::task::{self, AsyncTask};
+use crate::Agent;
 
 use super::{FitsRender, FitsWidget};
 
@@ -27,26 +28,27 @@ struct State {
 
 impl crate::Widget for &ImageView {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        
         let state = block_on(self.state.lock());
         ui.vertical(|ui| {
-            
             ui.add(FitsWidget::new(state.render.clone()));
             ui.add(ProgressBar::new(state.progress));
-        }).response
+        })
+        .response
     }
 }
+
 impl ImageView {
-    pub fn new(gl: &glow::Context) -> AsyncTask<(), ImageView> {
-        debug!("new ImageView");
+    pub fn new(gl: &glow::Context) -> Agent<(), ImageView> {
         let (sender, rx) = broadcast::channel(1);
         let state = Arc::new(tokio::sync::Mutex::new(State {
             render: Arc::new(Mutex::new(FitsRender::new(gl))),
             progress: 0.0,
         }));
-        task::spawn_with_state(ImageView {sender, state}, |state| Self::process_downloads(state.state.clone(), rx))
-            .abort_on_drop(true)
-        
+        task::spawn_with_state(ImageView { sender, state }, |state| {
+            Self::process_downloads(state.state.clone(), rx)
+        })
+        .abort_on_drop(true)
+        .into()
     }
     pub async fn download_image(&self, url: impl IntoUrl + 'static) -> Result<(), reqwest::Error> {
         let _ = self.sender.send(url.into_url()?);
@@ -55,11 +57,10 @@ impl ImageView {
 
     async fn process_downloads(state: Arc<tokio::sync::Mutex<State>>, mut rx: Receiver<Url>) {
         loop {
-
             let url = match rx.recv().await {
                 Ok(url) => url,
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    continue;   
+                    continue;
                 }
                 Err(_) => {
                     return;
@@ -77,7 +78,7 @@ impl ImageView {
 
                 if !response.status().is_success() {
                     // You might want to handle this differently
-                    error!("HTTP error: {}", response.status());
+                    tracing::error!("HTTP error: {}", response.status());
                 }
                 let total_size = response.content_length().unwrap_or(0);
 
@@ -105,8 +106,6 @@ impl ImageView {
             }
             .instrument(tracing::info_span!("download_indi_image"))
             .await;
-
-            info!("Got {} bytes downloaded", bytes.len());
 
             let resp: ImageResponse<'_> = {
                 let _span = tracing::info_span!("rmp_serde::from_slice").entered();

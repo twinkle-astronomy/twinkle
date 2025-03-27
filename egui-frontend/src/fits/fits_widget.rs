@@ -80,7 +80,7 @@ impl FitsWidget {
         let image_ratio = image_width as f32 / image_height as f32;
 
         let space = ui.available_size().max(egui::vec2(10.0, 10.0));
-        
+
         let space_ratio = space.x / space.y;
 
         let image_scale = if space_ratio < image_ratio {

@@ -41,7 +41,6 @@ impl<'de> Deserialize<'de> for Timestamp {
         D: serde::Deserializer<'de>,
     {
         let s: String = Deserialize::deserialize(deserializer)?;
-
         let datetime = DateTime::from_str(&format!("{}Z", s)).unwrap();
         Ok(Timestamp(datetime))
     }
@@ -109,7 +108,36 @@ pub enum Command {
     GetProperties(GetProperties),
 }
 
+pub enum ParamUpdateType {
+    Add,
+    Update,
+    Remove,
+    Noop,
+}
+
 impl Command {
+    pub fn param_update_type(&self) -> ParamUpdateType {
+        match self {
+            Command::DefTextVector(_)
+            | Command::DefNumberVector(_)
+            | Command::DefSwitchVector(_)
+            | Command::DefBlobVector(_)
+            | Command::DefLightVector(_) => ParamUpdateType::Add,
+
+            Command::SetTextVector(_)
+            | Command::SetNumberVector(_)
+            | Command::SetSwitchVector(_)
+            | Command::SetBlobVector(_)
+            | Command::SetLightVector(_)
+            | Command::NewTextVector(_)
+            | Command::NewNumberVector(_)
+            | Command::NewSwitchVector(_) => ParamUpdateType::Update,
+            Command::DelProperty(_) => ParamUpdateType::Remove,
+            Command::Message(_) | Command::EnableBlob(_) | Command::GetProperties(_) => {
+                ParamUpdateType::Noop
+            }
+        }
+    }
     pub fn device_name(&self) -> Option<&String> {
         match self {
             Command::DefTextVector(c) => Some(&c.device),
@@ -135,6 +163,28 @@ impl Command {
                 None => None,
             },
             Command::EnableBlob(c) => Some(&c.device),
+        }
+    }
+
+    pub fn message(&self) -> Option<&String> {
+        match self {
+            Command::DefTextVector(cmd) => cmd.message.as_ref(),
+            Command::SetTextVector(cmd) => cmd.message.as_ref(),
+            Command::NewTextVector(_) => None,
+            Command::DefNumberVector(cmd) => cmd.message.as_ref(),
+            Command::SetNumberVector(cmd) => cmd.message.as_ref(),
+            Command::NewNumberVector(_) => None,
+            Command::DefSwitchVector(cmd) => cmd.message.as_ref(),
+            Command::SetSwitchVector(cmd) => cmd.message.as_ref(),
+            Command::NewSwitchVector(_) => None,
+            Command::DefLightVector(cmd) => cmd.message.as_ref(),
+            Command::SetLightVector(cmd) => cmd.message.as_ref(),
+            Command::DefBlobVector(cmd) => cmd.message.as_ref(),
+            Command::SetBlobVector(cmd) => cmd.message.as_ref(),
+            Command::Message(_) => None,
+            Command::DelProperty(cmd) => cmd.message.as_ref(),
+            Command::EnableBlob(_) => None,
+            Command::GetProperties(_) => None,
         }
     }
 }
@@ -288,7 +338,7 @@ pub struct DefTextVector {
     pub perm: PropertyPerm,
     #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
     #[serde(rename = "@message")]
     pub message: Option<String>,

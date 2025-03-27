@@ -10,7 +10,7 @@ impl TabView {
         &'a mut self,
         ui: &mut Ui,
         tabs: T,
-    ) ->  Option<&'a String> {
+    ) -> Option<&'a String> {
         ui.horizontal(|ui| {
             for tab in tabs {
                 let selected = self.selected.get_or_insert_with(|| tab.to_string());

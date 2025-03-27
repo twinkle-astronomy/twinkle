@@ -1,10 +1,8 @@
-
 use crate::App;
 
 use super::{fits_widget::Drawable, FitsRender};
 use eframe::glow::{self, HasContext};
 use ndarray::{Array, ArrayD, Ix2};
-use tracing::debug;
 
 pub struct ImageMesh {
     pub texture: glow::Texture,
@@ -56,13 +54,11 @@ fn downsample_image(image: &ArrayD<u16>) -> ArrayD<u16> {
 
 impl Drop for ImageMesh {
     fn drop(&mut self) {
-        debug!("Dropping ImageMesh");
         let vao = self.get_vao().clone();
         let vbo = self.get_vbo().clone();
         let texture = self.texture.clone();
         App::run_next_update(Box::new(move |_ctx, frame| {
             if let Some(gl) = frame.gl() {
-                debug!("deleteing ImageMesh opengl resources");
                 unsafe {
                     gl.delete_vertex_array(vao);
                     gl.delete_buffer(vbo);
@@ -167,16 +163,16 @@ impl Drawable for ImageMesh {
                 glow::TEXTURE_MIN_FILTER,
                 glow::NEAREST as i32,
             );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_WRAP_S,
-                glow::CLAMP_TO_BORDER as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_WRAP_T,
-                glow::CLAMP_TO_BORDER as i32,
-            );
+            // gl.tex_parameter_i32(
+            //     glow::TEXTURE_2D,
+            //     glow::TEXTURE_WRAP_S,
+            //     glow::CLAMP_TO_BORDER as i32,
+            // );
+            // gl.tex_parameter_i32(
+            //     glow::TEXTURE_2D,
+            //     glow::TEXTURE_WRAP_T,
+            //     glow::CLAMP_TO_BORDER as i32,
+            // );
         }
     }
 }

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use eframe::glow::{self, HasContext};
 use ndarray::ArrayD;
 

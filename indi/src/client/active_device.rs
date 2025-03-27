@@ -187,7 +187,7 @@ impl ActiveDevice {
         Some(ActiveParameter::new(
             self.clone(),
             self.device
-                .lock()
+                .read()
                 .await
                 .get_parameters()
                 .get(param_name)?
@@ -223,25 +223,27 @@ impl ActiveDevice {
         &'a self,
         param_name: &'a str,
         values: P,
-    ) -> Result<Arc<Parameter>, ChangeError<Command>> {
+    ) -> Result<notify::NotifyArc<Parameter>, ChangeError<Command>> {
         let device_name = self.name.clone();
 
-        let param = self.get_parameter(param_name).await?;
+        let (subscription, timeout) = {
+            let param = self.get_parameter(param_name).await?;
+            let subscription = param.subscribe().await;
+            let timeout = {
+                let param = param.read().await;
 
-        let subscription = param.subscribe().await;
-        let timeout = {
-            let param = param.lock().await;
+                if !values.try_eq(&param)? {
+                    let c = values
+                        .clone()
+                        .to_command(device_name, String::from(param_name));
+                    self.send(c)?;
+                }
 
-            if !values.try_eq(&param)? {
-                let c = values
-                    .clone()
-                    .to_command(device_name, String::from(param_name));
-                self.send(c)?;
+                param.get_timeout().unwrap_or(60)
             }
-
-            param.get_timeout().unwrap_or(60)
-        }
-        .max(1);
+            .max(1);
+            (subscription, timeout)
+        };
 
         let res = wait_fn::<_, ChangeError<Command>, _, _>(
             subscription,
@@ -290,7 +292,7 @@ impl ActiveDevice {
         if let Some(name) = name {
             let _ = self.get_parameter(name).await?;
         }
-        let device_name = self.device.lock().await.get_name().clone();
+        let device_name = self.device.read().await.get_name().clone();
         if let Err(_) = self.send(Command::EnableBlob(EnableBlob {
             device: device_name,
             name: name.map(|x| String::from(x)),
@@ -483,7 +485,7 @@ impl ActiveDevice {
         let ccd_binning = self.get_parameter("CCD_BINNING").await.unwrap();
 
         let binning: f64 = {
-            let ccd_binning_lock = ccd_binning.lock().await;
+            let ccd_binning_lock = ccd_binning.read().await;
             ccd_binning_lock
                 .get_values::<HashMap<String, Number>>()
                 .unwrap()
@@ -493,7 +495,7 @@ impl ActiveDevice {
                 .into()
         };
         let pixel_scale = {
-            let ccd_info_lock = ccd_info.lock().await;
+            let ccd_info_lock = ccd_info.read().await;
             let ccd_pixel_size: f64 = ccd_info_lock
                 .get_values::<HashMap<String, Number>>()
                 .unwrap()
@@ -510,7 +512,7 @@ impl ActiveDevice {
     pub async fn filter_names(&self) -> Result<HashMap<String, usize>, ChangeError<Command>> {
         let filter_names: HashMap<String, usize> = {
             let filter_names_param = self.get_parameter("FILTER_NAME").await?;
-            let l = filter_names_param.lock().await;
+            let l = filter_names_param.read().await;
             l.get_values::<HashMap<String, Text>>()?
                 .iter()
                 .map(|(slot, name)| {

@@ -6,6 +6,7 @@ edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 
 
+
 [dependencies]
 egui = "0.31"
 eframe = { version = "0.31", default-features = false, features = [
@@ -22,7 +23,7 @@ serde = { version = "1", features = ["derive"] }
 indi = { path = "../indi", version = "5.0.0", features = ["wasm"] }
 tokio-tungstenite-wasm = "0.4.0"
 strum = { version = "0.26.3", features = ["derive"] }
-tokio = "1.43.0"
+tokio = {version = "1.43.0", features=["rt"]}
 wasm-bindgen-futures = "0.4"
 tokio-stream = "0.1.17"
 parking_lot = "0.12.3"
@@ -41,6 +42,7 @@ twinkle_api = { path = "../twinkle_api" }
 wasm-tracing = "2.0.0"
 console_error_panic_hook = "0.1.7"
 bytes = "1.10.1"
+derive_more = { version = "2.0.1", features = ["full"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

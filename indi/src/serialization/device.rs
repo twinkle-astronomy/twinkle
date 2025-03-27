@@ -1,14 +1,10 @@
-use std::{
-    collections::HashMap,
-    
-    sync::Arc,
-};
+use std::ops::{Deref, DerefMut};
+use std::{collections::HashMap, sync::Arc};
 
 use std::fmt::Debug;
 use twinkle_client::notify::AsyncLockable;
 
 use crate::*;
-
 
 /// Internal representation of a device.
 #[derive(Debug)]
@@ -32,7 +28,7 @@ impl<T: AsyncLockable<Parameter> + Debug> Clone for Device<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum DeviceUpdate {
     AddParameter(String),
     UpdateParameter(String),
@@ -72,26 +68,26 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
 
     /// Updates the current device based on `command`.
     pub async fn update(
-        &mut self,
+        mut this: impl Deref<Target = Device<T>> + DerefMut,
         command: serialization::Command,
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
         match command {
             Command::Message(_) => Ok(None),
             Command::GetProperties(_) => Ok(None),
-            Command::DefSwitchVector(command) => self.new_param(command),
-            Command::SetSwitchVector(command) => self.update_param(command).await,
+            Command::DefSwitchVector(command) => this.new_param(command),
+            Command::SetSwitchVector(command) => this.update_param(command).await,
             Command::NewSwitchVector(_) => Ok(None),
-            Command::DefNumberVector(command) => self.new_param(command),
-            Command::SetNumberVector(command) => self.update_param(command).await,
+            Command::DefNumberVector(command) => this.new_param(command),
+            Command::SetNumberVector(command) => this.update_param(command).await,
             Command::NewNumberVector(_) => Ok(None),
-            Command::DefTextVector(command) => self.new_param(command),
-            Command::SetTextVector(command) => self.update_param(command).await,
+            Command::DefTextVector(command) => this.new_param(command),
+            Command::SetTextVector(command) => this.update_param(command).await,
             Command::NewTextVector(_) => Ok(None),
-            Command::DefBlobVector(command) => self.new_param(command),
-            Command::SetBlobVector(command) => self.update_param(command).await,
-            Command::DefLightVector(command) => self.new_param(command),
-            Command::SetLightVector(command) => self.update_param(command).await,
-            Command::DelProperty(command) => self.delete_param(command.name).await,
+            Command::DefBlobVector(command) => this.new_param(command),
+            Command::SetBlobVector(command) => this.update_param(command).await,
+            Command::DefLightVector(command) => this.new_param(command),
+            Command::SetLightVector(command) => this.update_param(command).await,
+            Command::DelProperty(command) => this.delete_param(command.name).await,
             Command::EnableBlob(_) => Ok(None),
         }
     }
@@ -103,30 +99,30 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
 
         if let Some(group) = def.get_group() {
             let group_counts = self.group_counts.entry(group.clone()).or_insert(0);
-            *group_counts +=1;
+            *group_counts += 1;
             if *group_counts == 1 {
-                    self.groups.push(group.clone());
+                self.groups.push(group.clone());
             }
         }
-            
+
         if !self.parameters.contains_key(&name) {
             self.names.push(name.clone());
         }
         self.parameters.remove(&name);
-        
+
         let param = def.to_param();
         // let value: Notify<Parameter> = param.into();
         self.parameters
             .insert(name.clone(), Arc::new(T::new(param)));
-    
+
         Ok(Some(DeviceUpdate::AddParameter(name.clone())))
     }
 
     pub async fn update_param<'a, C: CommandToUpdate>(
-        &'a mut self,
+        &'a self,
         new_command: C,
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
-        match self.parameters.get_mut(&new_command.get_name().clone()) {
+        match self.parameters.get(&new_command.get_name().clone()) {
             Some(param) => {
                 let mut param = param.lock().await;
                 new_command.update_param(&mut param)?;
@@ -140,22 +136,27 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
         }
     }
 
-    pub async fn delete_param(&mut self, name: Option<String>) -> Result<Option<DeviceUpdate>, UpdateError> {
+    pub async fn delete_param(
+        &mut self,
+        name: Option<String>,
+    ) -> Result<Option<DeviceUpdate>, UpdateError> {
         match &name {
             Some(name) => {
                 self.names.retain(|n| *n != *name);
-                
+
                 match self.parameters.remove(name) {
                     Some(param) => {
                         if let Some(group) = param.lock().await.get_group() {
-                            let group_count = self.group_counts.entry(name.clone()).or_insert(0);
+                            let group_count = self.group_counts.entry(group.clone()).or_insert(0);
                             *group_count -= 1;
                             if group_count == &0 {
                                 self.groups.retain(|g| *g != *group);
                             }
                         }
                     }
-                    None=> {return Err(UpdateError::ParameterMissing(name.clone()));}
+                    None => {
+                        return Err(UpdateError::ParameterMissing(name.clone()));
+                    }
                 }
             }
             None => {
@@ -173,8 +174,8 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ops::Deref;
     use chrono::DateTime;
+    use std::ops::Deref;
     use std::sync::{Mutex, MutexGuard};
 
     #[derive(Debug)]
@@ -216,10 +217,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefSwitchVector(def_switch))
-            .await
-            .unwrap();
+        device.new_param(def_switch).unwrap();
         assert_eq!(device.get_parameters().len(), 1);
         {
             let param = device
@@ -267,10 +265,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::SetSwitchVector(set_switch))
-            .await
-            .unwrap();
+        device.update_param(set_switch).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -333,10 +328,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefNumberVector(def_number))
-            .await
-            .unwrap();
+        device.new_param(def_number).unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -392,10 +384,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::SetNumberVector(set_number))
-            .await
-            .unwrap();
+        device.update_param(set_number).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -457,10 +446,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefTextVector(def_text))
-            .await
-            .unwrap();
+        device.new_param(def_text).unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -510,10 +496,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::SetTextVector(set_number))
-            .await
-            .unwrap();
+        device.update_param(set_number).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -571,10 +554,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device
-            .update(serialization::Command::DefTextVector(def_text))
-            .await
-            .unwrap();
+        device.new_param(def_text).unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -618,10 +598,7 @@ mod tests {
             message: None,
         };
         assert_eq!(device.get_parameters().len(), 1);
-        device
-            .update(serialization::Command::DelProperty(del_number))
-            .await
-            .unwrap();
+        device.delete_param(del_number.name).await.unwrap();
         assert_eq!(device.get_parameters().len(), 0);
     }
 }

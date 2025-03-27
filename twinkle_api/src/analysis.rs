@@ -1,5 +1,5 @@
 use ndarray::ArrayViewD;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Sample {
