@@ -1,12 +1,23 @@
 [package]
 name = "twinkle_client"
 description = "Helper for making stateful clients that can notify on change"
-version = "0.2.1"
+version = "0.2.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-pin-project = "1.1.0"
+derive_more = { version = "2.0.1", features = ["full"] }
 pin-project-lite = "0.2.9"
-tokio = { version = "1", features = ["full"] }
-tokio-stream = { version = "0.1.14", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+tokio-stream = { version = "0.1.14", features = ["sync"] }
+tracing = "0.1.41"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "test-util"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures-timer = {version="3.0.3", features=["wasm-bindgen"]}
+wasm-bindgen-futures = "0.4"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+futures-timer = {version="3.0.3"}

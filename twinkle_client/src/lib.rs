@@ -1,11 +1,15 @@
-use std::future::Future;
+use futures_timer::Delay;
+use std::future::{pending, Future};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 mod stream_ext;
 pub use stream_ext::StreamExt;
 
+// pub mod feed;
 pub mod notify;
+pub mod task;
 
 // https://stackoverflow.com/questions/74985153/implementing-drop-for-a-future-in-rust
 
@@ -24,8 +28,7 @@ where
     /// ```
     /// use twinkle_client::OnDropFutureExt;
     /// use std::sync::{Mutex, Arc};
-    /// #[tokio::main]
-    /// async fn main() {
+    /// async move {
     ///     let val1 = Arc::new(Mutex::new(0));
     ///     let val2 = val1.clone();
     ///     let val3 = val1.clone();
@@ -42,7 +45,7 @@ where
     ///     });
     ///     future.await;
     ///     assert_eq!(*val3.lock().unwrap(), 2);
-    /// }
+    /// };
     fn on_drop<D: FnMut()>(self, on_drop: D) -> OnDropFuture<Self, D>;
 }
 impl<F: Future> OnDropFutureExt for F {
@@ -84,4 +87,38 @@ impl<F: Future, D: FnMut()> Drop for OnDropFuture<F, D> {
             this.get_mut_on_drop()();
         }
     }
+}
+
+#[cfg(target_family = "wasm")]
+pub trait MaybeSend {}
+#[cfg(target_family = "wasm")]
+impl<T> MaybeSend for T {}
+
+#[cfg(target_family = "wasm")]
+pub trait MaybeSync {}
+#[cfg(target_family = "wasm")]
+impl<T> MaybeSync for T {}
+
+// Helper trait that requires Send for non-wasm
+#[cfg(not(target_family = "wasm"))]
+pub trait MaybeSend: Send {}
+#[cfg(not(target_family = "wasm"))]
+impl<T: Send> MaybeSend for T {}
+
+#[cfg(not(target_family = "wasm"))]
+pub trait MaybeSync: Sync {}
+#[cfg(not(target_family = "wasm"))]
+impl<T: Sync> MaybeSync for T {}
+
+pub struct TimeoutError {}
+
+pub async fn timeout<F: Future>(duration: Duration, future: F) -> Result<F::Output, TimeoutError> {
+    tokio::select! {
+        _ = Delay::new(duration) => Err(TimeoutError{}),
+        result = future => Ok(result),
+    }
+}
+
+pub async fn sleep(duration: Duration) {
+    let _ = timeout(duration, pending::<()>()).await;
 }

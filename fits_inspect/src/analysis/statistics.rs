@@ -1,10 +1,12 @@
 use ndarray::ArrayViewD;
 
+#[derive(Debug)]
 pub struct Sample {
     pub value: u16,
     pub count: usize,
 }
 
+#[derive(Debug)]
 pub struct Statistics {
     pub unique: usize,
     pub median: u16,

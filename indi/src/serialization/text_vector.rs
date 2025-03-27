@@ -8,9 +8,8 @@ impl CommandtoParam for DefTextVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
+    fn to_param(self) -> Parameter {
         Parameter::TextVector(TextVector {
-            gen,
             name: self.name,
             group: self.group,
             label: self.label,

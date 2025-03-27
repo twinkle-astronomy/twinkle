@@ -6,6 +6,7 @@ use tokio::{
         TcpStream,
     },
 };
+use tracing::error;
 
 use crate::Command;
 use tokio::io::BufReader;
@@ -77,9 +78,34 @@ impl<T: AsyncRead + Unpin> AsyncIndiReader<T> {
                     document.extend_from_slice(&e.into_inner());
                 }
                 Event::Eof => return None,
-                _ => {
-                    // Handle other event types if needed
+                Event::Empty(e) => {
+                    document.extend_from_slice(b"<");
+                    document.extend_from_slice(e.name().as_ref());
+                    for attr in e.attributes() {
+                        let attr = match attr {
+                            Ok(d) => d,
+                            Err(e) => return Some(Err(e.into())),
+                        };
+                        document.extend_from_slice(b" ");
+                        document.extend_from_slice(attr.key.as_ref());
+                        document.extend_from_slice(b"=\"");
+                        document.extend_from_slice(&attr.value);
+                        document.extend_from_slice(b"\"");
+                    }
+
+                    document.extend_from_slice(b">");
+                    document.extend_from_slice(b"</");
+                    document.extend_from_slice(e.name().as_ref());
+                    document.extend_from_slice(b">");
+                    if depth == 0 {
+                        let doc = match String::from_utf8(document) {
+                            Ok(d) => d,
+                            Err(e) => return Some(Err(e.into())),
+                        };
+                        return Some(Ok(doc));
+                    }
                 }
+                _ => {}
             }
             buffer.clear();
         }
@@ -94,6 +120,9 @@ impl<T: AsyncRead + Unpin + Send> AsyncReadConnection for AsyncIndiReader<T> {
         };
         let cmd = quick_xml::de::from_str::<crate::Command>(&doc).map_err(|x| x.into());
 
+        if let Err(e) = &cmd {
+            error!("Failed to parse ( {:?} ):\n{}", e, &doc);
+        }
         return Some(cmd);
     }
 }
@@ -119,18 +148,101 @@ impl AsyncWriteConnection for AsyncIndiWriter {
 
 #[cfg(test)]
 mod test {
+    use std::ops::Deref;
+
+    use futures::StreamExt;
+    use tokio::time::{timeout, Duration};
+    use tokio::{net::TcpListener, sync::oneshot};
+    use tracing_test::traced_test;
+    use twinkle_client::task::{Joinable, Status, Task};
+
     use super::*;
-    use crate::client::new;
+    use crate::{client::new, serialization::DefNumberVector};
 
     #[tokio::test]
     async fn test_threads_stop_on_shutdown() {
         let connection = TcpStream::connect("indi:7624")
             .await
             .expect("connecting to indi");
-        let mut client = new(connection, None, None).expect("Making client");
-        client.shutdown();
-        if let Some((reader, writer)) = client._workers.take() {
-            let _ = tokio::join!(reader, writer);
+        let mut client = new(connection, None, None);
+        {
+            client
+                .with_state(|state| {
+                    let state = state.clone();
+                    async move {
+                        state.lock().await.shutdown();
+                    }
+                })
+                .await
+                .unwrap();
         }
+        client.join().await.unwrap();
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_threads_stop_on_disconnect() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+
+        let (server_stop_tx, server_stop_rx) = oneshot::channel::<()>();
+
+        // Server behavior
+        tokio::spawn(async move {
+            let (mut _socket, _) = listener.accept().await.unwrap();
+            let (mut writer, mut reader) = _socket.to_indi();
+
+            let _msg = reader.read().await;
+
+            writer
+                .write(crate::Command::DefNumberVector(DefNumberVector {
+                    device: "test".to_string(),
+                    name: "param".to_string(),
+                    label: None,
+                    group: None,
+                    state: crate::PropertyState::Idle,
+                    perm: crate::PropertyPerm::RO,
+                    timeout: None,
+                    timestamp: None,
+                    message: None,
+                    numbers: vec![],
+                }))
+                .await
+                .unwrap();
+            let _ = server_stop_rx.await;
+            // Server disconnects here
+        });
+
+        let connection = TcpStream::connect(server_addr)
+            .await
+            .expect("connecting to indi");
+        let mut client = new(connection, None, None);
+        let mut sub = if let Status::Running(connected) = client.status().lock().await.deref() {
+            connected.lock().await.get_connected().subscribe().await
+        } else {
+            panic!("Not connected");
+        };
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        server_stop_tx.send(()).unwrap();
+
+        let timeout_duration = Duration::from_secs(1);
+        let timeout_result = tokio::join!(
+            timeout(timeout_duration, client.join()),
+            timeout(timeout_duration, async move {
+                loop {
+                    match sub.next().await {
+                        Some(Ok(connected)) => {
+                            dbg!(&connected);
+                            if !connected.deref() {
+                                break;
+                            }
+                        }
+                        None | Some(Err(_)) => break,
+                    }
+                }
+            }),
+        );
+        timeout_result.0.expect("task timeout").expect("task");
+        timeout_result.1.expect("sub timeout");
     }
 }

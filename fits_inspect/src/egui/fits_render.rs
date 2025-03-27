@@ -160,7 +160,7 @@ impl FitsRender {
             let histogram_mtf = 0.5;
 
             texture = gl.create_texture().expect("Cannot create texture");
-            let image = Arc::new(ArrayD::<u16>::zeros(IxDyn(&[10, 10])));
+            let image = ArrayD::<u16>::zeros(IxDyn(&[10, 10]));
             image_mesh = ImageMesh {
                 texture,
                 image,
@@ -201,9 +201,9 @@ impl FitsRender {
         }
     }
 
-    pub fn set_fits(&mut self, data: Arc<ArrayD<u16>>) {
+    pub fn set_fits(&mut self, data: &ArrayD<u16>) {
         if data != self.image_mesh.image {
-            self.image_mesh.image = data;
+            self.image_mesh.image = data.clone();
             self.image_mesh.dirty = true;
         }
     }

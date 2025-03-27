@@ -58,50 +58,58 @@
 //! ```no_run
 //! use std::time::Duration;
 //! use tokio::net::TcpStream;
+//! use twinkle_client::task::Task;
+//! use twinkle_client::task::Status;
+//! use std::ops::Deref;
 //!
 //! #[tokio::main]
 //! async fn main() {
 //!     // Create a client with a connection to localhost listening for all device properties.
-//!     let client = indi::client::new(
+//!     let client_task = indi::client::new(
 //!         TcpStream::connect("127.0.0.1:7624").await.expect("Connecting to INDI server"),
 //!         None,
-//!         None).expect("Initializing connection");
-//!
-//!     // Get an specific camera device
-//!     let camera = client
-//!         .get_device::<()>("ZWO CCD ASI294MM Pro")
-//!         .await
-//!         .expect("Getting camera device");
-//!
-//!     // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
-//!     camera
-//!         .change("CONNECTION", vec![("CONNECT", true)])
-//!         .await
-//!         .expect("Connecting to camera");
-//!
-//!     // Enabling blob transport for the camera.  
-//!     camera
-//!         .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
-//!         .await
-//!         .expect("Enabling image retrieval");
-//!
-//!     // Configuring a varienty of the camera's properties at the same time.
-//!     tokio::try_join!(
-//!         camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
-//!         camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
-//!         camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
-//!         camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
-//!         camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
-//!         camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
-//!         )
-//!         .expect("Configuring camera");
-//!
-//!     // Capture a 5 second exposure from the camera
-//!     let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
-//!
-//!     // Save the fits file to disk.
-//!     fits.save("flat.fits").expect("Saving image");
+//!         None);
+//!     let status = client_task.status();
+//!     if let Status::Running(client) = status.lock().await.deref() {
+//!         // Get an specific camera device
+//!         let camera = client.lock().await
+//!             .get_device("ZWO CCD ASI294MM Pro")
+//!             .await
+//!             .expect("Getting camera device");
+//!    
+//!         // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
+//!         camera
+//!             .change("CONNECTION", vec![("CONNECT", true)])
+//!             .await
+//!             .expect("Connecting to camera");
+//!    
+//!         // Enabling blob transport for the camera.  
+//!         camera
+//!             .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
+//!             .await
+//!             .expect("Enabling image retrieval");
+//!    
+//!         // Configuring a varienty of the camera's properties at the same time.
+//!         tokio::try_join!(
+//!             camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
+//!             camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
+//!             camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
+//!             camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
+//!             camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
+//!             camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
+//!             )
+//!             .expect("Configuring camera");
+//!         #[cfg(feature = "fitsio")]
+//!         {
+//!             // Capture a 5 second exposure from the camera
+//!             let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
+//!    
+//!             // Save the fits file to disk.
+//!             fits.save("flat.fits").expect("Saving image");
+//!         }
+//!     };
 //! }
+pub use tokio;
 
 use quick_xml::events::attributes::AttrError;
 use serde::Deserialize;
@@ -110,7 +118,6 @@ use serde::Serialize;
 use std::borrow::Cow;
 
 use std::num;
-use std::num::Wrapping;
 
 use std::str;
 use std::sync::Arc;
@@ -180,7 +187,6 @@ pub struct Switch {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SwitchVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -214,7 +220,6 @@ pub struct Number {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct NumberVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -237,13 +242,12 @@ impl FromParamValue for HashMap<String, Number> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Light {
-    label: Option<String>,
-    value: PropertyState,
+    pub label: Option<String>,
+    pub value: PropertyState,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LightVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -279,7 +283,6 @@ impl FromParamValue for HashMap<String, Text> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TextVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub group: Option<String>,
     pub label: Option<String>,
@@ -301,7 +304,6 @@ pub struct Blob {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BlobVector {
-    pub gen: core::num::Wrapping<usize>,
     pub name: String,
     pub label: Option<String>,
     pub group: Option<String>,
@@ -382,27 +384,8 @@ impl Parameter {
     pub fn get_values<T: FromParamValue>(&self) -> Result<&T, TypeError> {
         T::values_from(self)
     }
-
-    pub fn gen(&self) -> core::num::Wrapping<usize> {
-        match self {
-            Parameter::TextVector(p) => p.gen,
-            Parameter::NumberVector(p) => p.gen,
-            Parameter::SwitchVector(p) => p.gen,
-            Parameter::LightVector(p) => p.gen,
-            Parameter::BlobVector(p) => p.gen,
-        }
-    }
-
-    pub fn gen_mut(&mut self) -> &mut core::num::Wrapping<usize> {
-        match self {
-            Parameter::TextVector(p) => &mut p.gen,
-            Parameter::NumberVector(p) => &mut p.gen,
-            Parameter::SwitchVector(p) => &mut p.gen,
-            Parameter::LightVector(p) => &mut p.gen,
-            Parameter::BlobVector(p) => &mut p.gen,
-        }
-    }
 }
+
 #[derive(Debug)]
 pub enum TypeError {
     TypeMismatch,

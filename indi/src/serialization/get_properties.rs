@@ -6,8 +6,6 @@ mod tests {
 
     #[test]
     fn test_send_get_properties() {
-        // let mut writer = Writer::new(Cursor::new(Vec::new()));
-
         let command = GetProperties {
             version: String::from_str("1.7").unwrap(),
             device: Some(String::from_str("CCD Simulator").unwrap()),

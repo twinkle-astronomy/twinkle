@@ -1,0 +1,14 @@
+[build]
+filehash = true
+
+[serve]
+no_spa = true
+addresses = ["0.0.0.0"]
+
+[watch]
+watch= [
+    "./",
+    "../indi/",
+    "../twinkle_api/",
+    "../twinkle_client/",
+]

@@ -1,9 +1,9 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{fs::File, io::BufReader, path::PathBuf, time::Duration};
 
 use analysis::Statistics;
 use calibration::{CalibrationDescription, Dark, Flat, HasCalibration};
-use fitsio::FitsFile;
-use indi::client::device::FitsImage;
+use fitsrs::Fits;
+use indi::client::active_device::FitsImage;
 use ndarray::{
     array, Array, Array2, ArrayBase, ArrayD, ArrayView, Dim, Dimension, IntoDimension, Ix2, IxDyn,
     IxDynImpl, OwnedRepr, SliceInfo, SliceInfoElem, ViewRepr, Zip,
@@ -15,26 +15,26 @@ pub mod calibration;
 pub mod egui;
 
 pub trait HasImage {
-    fn get_data(&self) -> Arc<ArrayD<u16>>;
+    fn get_data(&self) -> &ArrayD<u16>;
     fn get_data_mut(&mut self) -> &mut ArrayD<u16>;
     fn get_statistics(&self) -> &Statistics;
     fn set_statistics(&mut self, stats: Statistics);
 }
 
 pub struct Image {
-    data: Arc<ArrayD<u16>>,
+    data: ArrayD<u16>,
     stats: Statistics,
     flat: calibration::CalibrationDescription,
     dark: calibration::CalibrationDescription,
 }
 
 impl HasImage for Image {
-    fn get_data(&self) -> Arc<ArrayD<u16>> {
-        self.data.clone()
+    fn get_data(&self) -> &ArrayD<u16> {
+        &self.data
     }
 
     fn get_data_mut(&mut self) -> &mut ArrayD<u16> {
-        Arc::make_mut(&mut self.data)
+        &mut self.data
     }
 
     fn get_statistics(&self) -> &Statistics {
@@ -58,7 +58,7 @@ impl TryFrom<FitsImage> for Image {
     type Error = fitsio::errors::Error;
 
     fn try_from(fits_image: FitsImage) -> Result<Self, Self::Error> {
-        let data = Arc::new(fits_image.read_image()?);
+        let data = fits_image.read_image()?;
         let stats = Statistics::new(&data.view());
         let flat = CalibrationDescription::Flat(Flat {
             filter: fits_image.read_header("FILTER")?,
@@ -78,34 +78,122 @@ impl TryFrom<FitsImage> for Image {
     }
 }
 
+fn convert_vec_to_arrayd(vec: Vec<i16>, shape: &[usize]) -> Result<ArrayD<u16>, &'static str> {
+    // Explicitly specify the type for expected_len
+    let expected_len: usize = shape.iter().fold(1, |acc, &dim| acc * dim);
+
+    if vec.len() != expected_len {
+        return Err("Vector length does not match the specified shape");
+    }
+
+    // Convert i16 to u16, handling potential negative values
+    let u16_vec: Vec<u16> = vec
+        .iter()
+        .map(|&x| {
+            // let bytes = x.to_ne_bytes(); // Get native-endian bytes
+            // let swapped_bytes = [bytes[1], bytes[0]]; // Swap the bytes
+            // u16::from_ne_bytes(swapped_bytes)
+
+            (x as i32 - 32768) as u16
+            // u16::from_be_bytes(x.to_ne_bytes())
+        })
+        .collect();
+
+    // Create an ArrayD from the vector and reshape it
+    let array = ArrayD::from_shape_vec(IxDyn(shape), u16_vec)
+        .map_err(|_| "Failed to create ArrayD with the given shape")?;
+
+    Ok(array)
+}
+
+fn read_fits(mut hdu_list: Fits<BufReader<File>>) -> Result<ArrayD<u16>, fitsrs::error::Error> {
+    while let Some(Ok(hdu)) = hdu_list.next() {
+        if let fitsrs::HDU::Primary(hdu) = hdu {
+            let xtension = hdu.get_header().get_xtension();
+
+            let naxis1 = *xtension.get_naxisn(1).unwrap();
+            let naxis2 = *xtension.get_naxisn(2).unwrap();
+            if let fitsrs::Pixels::I16(it) = hdu_list.get_data(&hdu).pixels() {
+                let data: Vec<_> = it.collect();
+                return Ok(convert_vec_to_arrayd(
+                    data,
+                    &[naxis2 as usize, naxis1 as usize],
+                )?);
+            }
+        }
+    }
+    Err(fitsrs::error::Error::DynamicError(
+        "No image data found".to_string(),
+    ))
+}
 impl TryFrom<PathBuf> for Image {
     type Error = fitsio::errors::Error;
 
     fn try_from(filename: PathBuf) -> Result<Self, Self::Error> {
-        let mut fptr = FitsFile::open(filename)?;
+        let data = read_fits(Fits::from_reader(BufReader::new(
+            File::open(&filename).unwrap(),
+        )))
+        .unwrap();
+        // let mut fptr = FitsFile::open(filename)?;
+        // let hdu = fptr.primary_hdu()?;
+        // let data: ArrayD<u16> = hdu.read_image(&mut fptr)?;
 
-        let hdu = fptr.primary_hdu()?;
-        let data: Arc<ArrayD<u16>> = Arc::new(hdu.read_image(&mut fptr)?);
         let stats = Statistics::new(&data.view());
+        dbg!(&stats);
 
-        // let frame: String = hdu.read_key(&mut fptr, "FRAME")?;
-        let flat = CalibrationDescription::Flat(Flat {
-            filter: hdu.read_key(&mut fptr, "FILTER")?,
-        });
+        // // let frame: String = hdu.read_key(&mut fptr, "FRAME")?;
+        // let flat = CalibrationDescription::Flat(Flat {
+        //     filter: hdu.read_key(&mut fptr, "FILTER")?,
+        // });
 
-        let dark = CalibrationDescription::Dark(Dark {
-            offset: hdu.read_key::<f64>(&mut fptr, "OFFSET")? as i32,
-            gain: hdu.read_key::<f64>(&mut fptr, "GAIN")? as i32,
-            exposure: Duration::from_secs(hdu.read_key::<f64>(&mut fptr, "EXPTIME")? as u64),
-        });
+        // let dark = CalibrationDescription::Dark(Dark {
+        //     offset: hdu.read_key::<f64>(&mut fptr, "OFFSET")? as i32,
+        //     gain: hdu.read_key::<f64>(&mut fptr, "GAIN")? as i32,
+        //     exposure: Duration::from_secs(hdu.read_key::<f64>(&mut fptr, "EXPTIME")? as u64),
+        // });
         Ok(Image {
             data,
             stats,
-            flat,
-            dark,
+            flat: CalibrationDescription::Flat(Flat {
+                filter: "Foo".to_string(),
+            }),
+            dark: CalibrationDescription::Dark(Dark {
+                offset: 0,
+                gain: 0,
+                exposure: Duration::from_secs(0u64),
+            }),
         })
     }
 }
+//fitsrs
+// unique: 3034,
+// median: 33640,
+// mean: 33655.406,
+// mad: 84,
+// std_dev: 0.06874606,
+// clip_high: Sample {
+//     value: 65487,
+//     count: 1,
+// },
+// clip_low: Sample {
+//     value: 348,
+//     count: 1,
+// },
+
+// fitsio
+// unique: 3034,
+// median: 872,
+// mean: 889.49994,
+// mad: 84,
+// std_dev: 0.11451386,
+// clip_high: Sample {
+//     value: 65531,
+//     count: 189,
+// },
+// clip_low: Sample {
+//     value: 548,
+//     count: 1,
+// },
 
 pub fn phd2_convolve(data: &ArrayD<u16>) -> Array2<f32> {
     let data_f32: ArrayBase<OwnedRepr<f32>, Ix2> = data

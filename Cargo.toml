@@ -1,17 +1,20 @@
+
 [workspace]
+members = [
+    "egui-frontend",
+    "fits_inspect",
+    "indi",
+    "phd2", "twinkle_api",
+    "twinkle_client",
+    "twinkle_server",
+]
 resolver = "2"
 
-members = [
-	"twinkle_client",
-	"twinkle_server",
-	"indi",
-	"phd2",
-	"twinkle",
-	"fits_inspect",
-]
+[profile.release]
+opt-level = 2
 
-[workspace.dependencies]
-twinkle_client = "0.1.0"
+[profile.dev]
+opt-level = 2
 
-[profile.dev.package.fits_inspect]
-opt-level=3
+[profile.dev.package.egui-frontend]
+opt-level=0

@@ -1,7 +1,111 @@
+use std::fmt;
 use std::str;
 
 use super::super::*;
 use super::*;
+
+impl Sexagesimal {
+    fn format_indi_style(&self, precision: usize) -> String {
+        let is_negative = self.hour < 0.0;
+        let hour = self.hour.abs();
+
+        // Get minute value, defaulting to fractional part of hour if None
+        let minute = self.minute.unwrap_or_else(|| (hour - hour.trunc()) * 60.0);
+
+        // Get second value, defaulting to fractional part of minute if None
+        let second = self
+            .second
+            .unwrap_or_else(|| (minute - minute.trunc()) * 60.0);
+
+        // Format based on precision
+        let result = match precision {
+            9 => format!(
+                "{:02}:{:02}.{:02}",
+                minute.trunc() as i64,
+                second.trunc() as i64,
+                ((second % 1.0) * 100.0).round() as i64
+            ),
+            8 => format!(
+                "{:02}:{:02}.{:01}",
+                minute.trunc() as i64,
+                second.trunc() as i64,
+                ((second % 1.0) * 10.0).round() as i64
+            ),
+            6 => format!("{:02}:{:02}", minute.trunc() as i64, second.round() as i64),
+            5 => format!(
+                "{:02}.{:01}",
+                minute.trunc() as i64,
+                ((minute % 1.0) * 10.0).round() as i64
+            ),
+            3 => format!("{:02}", minute.round() as i64),
+            _ => format!("{:02}:{:02}", minute.trunc() as i64, second.round() as i64),
+        };
+
+        // Add the hours and sign
+        let mut final_result = String::new();
+        if is_negative {
+            final_result.push('-');
+        }
+        if hour >= 1.0 || hour.trunc() != 0.0 {
+            final_result.push_str(&format!("{}:", hour.trunc() as i64));
+        }
+        final_result.push_str(&result);
+
+        final_result
+    }
+
+    fn format_double(&self) -> f64 {
+        let mut value = self.hour;
+        if let Some(min) = self.minute {
+            value += min / 60.0;
+            if let Some(sec) = self.second {
+                value += sec / 3600.0;
+            }
+        }
+        value
+    }
+}
+
+fn parse_m_format(format: &str) -> Option<usize> {
+    // Look for pattern %.{n}m where n is the precision
+    let parts: Vec<&str> = format.split('.').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    if !parts[1].ends_with('m') {
+        return None;
+    }
+
+    // Extract the precision number
+    let precision_str = &parts[1][..parts[1].len() - 1];
+    precision_str.parse().ok()
+}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Check if this is an m-format
+        if let Some(m_precision) = parse_m_format(&self.format) {
+            // INDI sexagesimal format
+            let formatted = self.value.format_indi_style(m_precision);
+            // Handle width alignment if specified
+            if let Some(width) = f.width() {
+                if f.sign_aware_zero_pad() {
+                    write!(f, "{:0>width$}", formatted, width = width)
+                } else if f.align() == Some(fmt::Alignment::Left) {
+                    write!(f, "{:<width$}", formatted, width = width)
+                } else {
+                    write!(f, "{:>width$}", formatted, width = width)
+                }
+            } else {
+                write!(f, "{}", formatted)
+            }
+        } else {
+            // Regular double format
+            write!(f, "{}", self.value.format_double())
+        }
+    }
+}
 
 impl<'de> Deserialize<'de> for Sexagesimal {
     fn deserialize<D>(deserializer: D) -> Result<Sexagesimal, D::Error>
@@ -88,9 +192,8 @@ impl CommandtoParam for DefNumberVector {
     fn get_group(&self) -> &Option<String> {
         &self.group
     }
-    fn to_param(self, gen: Wrapping<usize>) -> Parameter {
+    fn to_param(self) -> Parameter {
         Parameter::NumberVector(NumberVector {
-            gen,
             name: self.name,
             group: self.group,
             label: self.label,

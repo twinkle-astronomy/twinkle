@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+pub mod device;
 pub mod number_vector;
 use std::io::BufRead;
 use std::ops::Deref;
@@ -39,7 +41,6 @@ impl<'de> Deserialize<'de> for Timestamp {
         D: serde::Deserializer<'de>,
     {
         let s: String = Deserialize::deserialize(deserializer)?;
-
         let datetime = DateTime::from_str(&format!("{}Z", s)).unwrap();
         Ok(Timestamp(datetime))
     }
@@ -107,7 +108,36 @@ pub enum Command {
     GetProperties(GetProperties),
 }
 
+pub enum ParamUpdateType {
+    Add,
+    Update,
+    Remove,
+    Noop,
+}
+
 impl Command {
+    pub fn param_update_type(&self) -> ParamUpdateType {
+        match self {
+            Command::DefTextVector(_)
+            | Command::DefNumberVector(_)
+            | Command::DefSwitchVector(_)
+            | Command::DefBlobVector(_)
+            | Command::DefLightVector(_) => ParamUpdateType::Add,
+
+            Command::SetTextVector(_)
+            | Command::SetNumberVector(_)
+            | Command::SetSwitchVector(_)
+            | Command::SetBlobVector(_)
+            | Command::SetLightVector(_)
+            | Command::NewTextVector(_)
+            | Command::NewNumberVector(_)
+            | Command::NewSwitchVector(_) => ParamUpdateType::Update,
+            Command::DelProperty(_) => ParamUpdateType::Remove,
+            Command::Message(_) | Command::EnableBlob(_) | Command::GetProperties(_) => {
+                ParamUpdateType::Noop
+            }
+        }
+    }
     pub fn device_name(&self) -> Option<&String> {
         match self {
             Command::DefTextVector(c) => Some(&c.device),
@@ -133,6 +163,28 @@ impl Command {
                 None => None,
             },
             Command::EnableBlob(c) => Some(&c.device),
+        }
+    }
+
+    pub fn message(&self) -> Option<&String> {
+        match self {
+            Command::DefTextVector(cmd) => cmd.message.as_ref(),
+            Command::SetTextVector(cmd) => cmd.message.as_ref(),
+            Command::NewTextVector(_) => None,
+            Command::DefNumberVector(cmd) => cmd.message.as_ref(),
+            Command::SetNumberVector(cmd) => cmd.message.as_ref(),
+            Command::NewNumberVector(_) => None,
+            Command::DefSwitchVector(cmd) => cmd.message.as_ref(),
+            Command::SetSwitchVector(cmd) => cmd.message.as_ref(),
+            Command::NewSwitchVector(_) => None,
+            Command::DefLightVector(cmd) => cmd.message.as_ref(),
+            Command::SetLightVector(cmd) => cmd.message.as_ref(),
+            Command::DefBlobVector(cmd) => cmd.message.as_ref(),
+            Command::SetBlobVector(cmd) => cmd.message.as_ref(),
+            Command::Message(_) => None,
+            Command::DelProperty(cmd) => cmd.message.as_ref(),
+            Command::EnableBlob(_) => None,
+            Command::GetProperties(_) => None,
         }
     }
 }
@@ -245,7 +297,7 @@ pub enum Action {
 pub trait CommandtoParam {
     fn get_name(&self) -> &String;
     fn get_group(&self) -> &Option<String>;
-    fn to_param(self, gen: Wrapping<usize>) -> Parameter;
+    fn to_param(self) -> Parameter;
 }
 
 pub trait CommandToUpdate {
@@ -284,14 +336,14 @@ pub struct DefTextVector {
     pub state: PropertyState,
     #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
     #[serde(rename = "@message")]
     pub message: Option<String>,
 
-    #[serde(rename = "defText")]
+    #[serde(rename = "defText", default)]
     pub texts: Vec<DefText>,
 }
 
@@ -300,7 +352,7 @@ pub struct DefTextVector {
 pub struct DefText {
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(rename = "$text", default = "String::new")]
     pub value: String,
@@ -315,14 +367,14 @@ pub struct SetTextVector {
     pub name: String,
     #[serde(rename = "@state")]
     pub state: PropertyState,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneText")]
+    #[serde(rename = "oneText", default)]
     pub texts: Vec<OneText>,
 }
 
@@ -333,10 +385,10 @@ pub struct NewTextVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
 
-    #[serde(rename = "oneText")]
+    #[serde(rename = "oneText", default)]
     pub texts: Vec<OneText>,
 }
 
@@ -363,22 +415,22 @@ pub struct DefNumberVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(rename = "@group")]
+    #[serde(rename = "@group", skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     #[serde(rename = "@state")]
     pub state: PropertyState,
     #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defNumber")]
+    #[serde(rename = "defNumber", default)]
     pub numbers: Vec<DefNumber>,
 }
 
@@ -387,7 +439,7 @@ pub struct DefNumberVector {
 pub struct DefNumber {
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(rename = "@format")]
     pub format: String,
@@ -410,14 +462,14 @@ pub struct SetNumberVector {
     pub name: String,
     #[serde(rename = "@state")]
     pub state: PropertyState,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneNumber")]
+    #[serde(rename = "oneNumber", default)]
     pub numbers: Vec<SetOneNumber>,
 }
 
@@ -426,11 +478,11 @@ pub struct SetNumberVector {
 pub struct SetOneNumber {
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@min")]
+    #[serde(rename = "@min", skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
-    #[serde(rename = "@max")]
+    #[serde(rename = "@max", skip_serializing_if = "Option::is_none")]
     pub max: Option<f64>,
-    #[serde(rename = "@step")]
+    #[serde(rename = "@step", skip_serializing_if = "Option::is_none")]
     pub step: Option<f64>,
     #[serde(rename = "$value")]
     pub value: Sexagesimal,
@@ -443,10 +495,10 @@ pub struct NewNumberVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
 
-    #[serde(rename = "oneNumber")]
+    #[serde(rename = "oneNumber", default)]
     pub numbers: Vec<OneNumber>,
 }
 
@@ -466,9 +518,9 @@ pub struct DefSwitchVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(rename = "@group")]
+    #[serde(rename = "@group", skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     #[serde(rename = "@state")]
     pub state: PropertyState,
@@ -476,14 +528,14 @@ pub struct DefSwitchVector {
     pub perm: PropertyPerm,
     #[serde(rename = "@rule")]
     pub rule: SwitchRule,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defSwitch")]
+    #[serde(rename = "defSwitch", default)]
     pub switches: Vec<DefSwitch>,
 }
 
@@ -492,7 +544,7 @@ pub struct DefSwitchVector {
 pub struct DefSwitch {
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(rename = "$text")]
     pub value: SwitchState,
@@ -507,14 +559,14 @@ pub struct SetSwitchVector {
     pub name: String,
     #[serde(rename = "@state")]
     pub state: PropertyState,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneSwitch")]
+    #[serde(rename = "oneSwitch", default)]
     pub switches: Vec<OneSwitch>,
 }
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -524,10 +576,10 @@ pub struct NewSwitchVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
 
-    #[serde(rename = "oneSwitch")]
+    #[serde(rename = "oneSwitch", default)]
     pub switches: Vec<OneSwitch>,
 }
 
@@ -547,18 +599,18 @@ pub struct DefLightVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(rename = "@group")]
+    #[serde(rename = "@group", skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     #[serde(rename = "@state")]
     pub state: PropertyState,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defLight")]
+    #[serde(rename = "defLight", default)]
     pub lights: Vec<DefLight>,
 }
 
@@ -567,7 +619,7 @@ pub struct DefLightVector {
 pub struct DefLight {
     #[serde(rename = "@name")]
     name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     label: Option<String>,
     #[serde(rename = "$text")]
     value: PropertyState,
@@ -582,12 +634,12 @@ pub struct SetLightVector {
     pub name: String,
     #[serde(rename = "@state")]
     pub state: PropertyState,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneLight")]
+    #[serde(rename = "oneLight", default)]
     pub lights: Vec<OneLight>,
 }
 
@@ -607,22 +659,22 @@ pub struct DefBlobVector {
     pub device: String,
     #[serde(rename = "@name")]
     pub name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(rename = "@group")]
+    #[serde(rename = "@group", skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     #[serde(rename = "@state")]
     pub state: PropertyState,
     #[serde(rename = "@perm")]
     pub perm: PropertyPerm,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "defBLOB")]
+    #[serde(rename = "defBLOB", default)]
     pub blobs: Vec<DefBlob>,
 }
 
@@ -631,11 +683,11 @@ pub struct DefBlobVector {
 pub struct DefBlob {
     #[serde(rename = "@name")]
     name: String,
-    #[serde(rename = "@label")]
+    #[serde(rename = "@label", skip_serializing_if = "Option::is_none")]
     label: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename = "setBLOBVector")]
 pub struct SetBlobVector {
     #[serde(rename = "@device")]
@@ -644,28 +696,28 @@ pub struct SetBlobVector {
     pub name: String,
     #[serde(rename = "@state")]
     pub state: PropertyState,
-    #[serde(rename = "@timeout")]
+    #[serde(rename = "@timeout", skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(rename = "oneBLOB")]
+    #[serde(rename = "oneBLOB", default)]
     pub blobs: Vec<OneBlob>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Blob(pub Vec<u8>);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename = "oneBLOB")]
 pub struct OneBlob {
     #[serde(rename = "@name")]
     pub name: String,
     #[serde(rename = "@size")]
     pub size: u64,
-    #[serde(rename = "@enclen")]
+    #[serde(rename = "@enclen", skip_serializing_if = "Option::is_none")]
     pub enclen: Option<u64>,
     #[serde(rename = "@format")]
     pub format: String,
@@ -687,11 +739,11 @@ pub struct EnableBlob {
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename = "message")]
 pub struct Message {
-    #[serde(rename = "@device")]
+    #[serde(rename = "@device", skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
@@ -700,11 +752,11 @@ pub struct Message {
 pub struct DelProperty {
     #[serde(rename = "@device")]
     pub device: String,
-    #[serde(rename = "@name")]
+    #[serde(rename = "@name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(rename = "@timestamp")]
+    #[serde(rename = "@timestamp", skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<Timestamp>,
-    #[serde(rename = "@message")]
+    #[serde(rename = "@message", skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
@@ -713,11 +765,9 @@ pub struct DelProperty {
 pub struct GetProperties {
     #[serde(rename = "@version")]
     pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "@device")]
+    #[serde(rename = "@device", skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "@name")]
+    #[serde(rename = "@name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
@@ -746,8 +796,21 @@ pub enum DeError {
     UnexpectedAttr(String),
     UnexpectedEvent(String),
     UnexpectedTag(String),
+
+    #[cfg(not(target_arch = "wasm32"))]
     AxumError(axum::Error),
+    #[cfg(not(target_arch = "wasm32"))]
+    UnexpectedAxumMessage(axum::extract::ws::Message),
+
+    #[cfg(not(target_arch = "wasm32"))]
     Tungstenite(tokio_tungstenite::tungstenite::Error),
+    #[cfg(not(target_arch = "wasm32"))]
+    UnexpectedTungsteniteMessage(tokio_tungstenite::tungstenite::Message),
+
+    #[cfg(feature = "wasm")]
+    TungsteniteWasm(tokio_tungstenite_wasm::Error),
+    #[cfg(feature = "wasm")]
+    UnexpectedTungsteniteWasmMessage(tokio_tungstenite_wasm::Message),
 }
 
 impl From<quick_xml::Error> for DeError {
@@ -756,6 +819,7 @@ impl From<quick_xml::Error> for DeError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<axum::Error> for DeError {
     fn from(err: axum::Error) -> Self {
         DeError::AxumError(err)
@@ -768,9 +832,17 @@ impl From<std::string::FromUtf8Error> for DeError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<tokio_tungstenite::tungstenite::Error> for DeError {
     fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
         DeError::Tungstenite(err)
+    }
+}
+
+#[cfg(feature = "wasm")]
+impl From<tokio_tungstenite_wasm::Error> for DeError {
+    fn from(err: tokio_tungstenite_wasm::Error) -> Self {
+        DeError::TungsteniteWasm(err)
     }
 }
 
