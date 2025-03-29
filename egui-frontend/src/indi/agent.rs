@@ -22,7 +22,7 @@ use tokio_stream::StreamExt;
 use tracing::error;
 use url::form_urlencoded;
 
-use crate::Agent;
+use crate::{get_websocket_base, Agent};
 
 use super::views::{device::Device, tab::TabView};
 
@@ -49,16 +49,8 @@ struct Connection {
 pub struct State {
     connection_status: ConnectionStatus,
 }
-
-#[cfg(debug_assertions)]
 fn get_websocket_url(encoded_value: &str) -> String {
-    format!("ws://localhost:4000/indi?server_addr={}", encoded_value)
-}
-
-#[cfg(not(debug_assertions))]
-fn get_websocket_url(encoded_value: &str) -> String {
-    // format!("/indi?server_addr={}", encoded_value)
-    format!("/indi?server_addr={}", encoded_value)
+    format!("{}indi?server_addr={}", get_websocket_base(), encoded_value)
 }
 
 #[tracing::instrument(skip_all)]
@@ -192,7 +184,7 @@ async fn task(
                 if let ConnectionStatus::Connected(connection) = &mut lock.connection_status {
                     for device_name in devices.keys() {
                         if let Status::Running(client) =
-                            connection.client.status().lock().await.deref()
+                            connection.client.status().read().await.deref()
                         {
                             let device =
                                 client.lock().await.device::<()>(device_name.as_str()).await;

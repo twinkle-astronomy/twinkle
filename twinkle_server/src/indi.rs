@@ -38,12 +38,12 @@ pub struct IndiConnectionData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct IndiConnectionParams {
+struct IndiConnectionParams {
     server_addr: String,
 }
 
 #[tracing::instrument(skip(ws, state))]
-pub async fn create_connection(
+async fn create_connection(
     ws: WebSocketUpgrade,
     TypedHeader(host): TypedHeader<axum_extra::headers::Host>, // Use axum_extra::headers
     Query(params): Query<IndiConnectionParams>,

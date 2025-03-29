@@ -11,9 +11,24 @@ use twinkle_client::task::{AsyncTask, Status, Task};
 
 pub mod fits;
 pub mod indi;
+pub mod counts;
+
+
+
+#[cfg(debug_assertions)]
+fn get_websocket_base() -> String {
+    format!("ws://localhost:4000/")
+}
+
+#[cfg(not(debug_assertions))]
+fn get_websocket_base() -> String {
+    // format!("/indi?server_addr={}", encoded_value)
+    format!("/")
+}
+
 
 #[derive(From, Deref, DerefMut)]
-pub struct Agent<T, S>(AsyncTask<T, S>);
+pub struct Agent<T, S: std::marker::Sync>(AsyncTask<T, S>);
 
 trait Widget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response;
@@ -24,7 +39,7 @@ where
     for<'a> &'a S: crate::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let status = block_on(self.status().lock());
+        let status = block_on(self.status().read());
         if let Status::Running(state) = status.deref() {
             state.ui(ui)
         } else {
@@ -38,7 +53,7 @@ where
     for<'a> &'a S: crate::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let status = block_on(self.status().lock());
+        let status = block_on(self.status().read());
         if let Status::Running(state) = status.deref() {
             state.ui(ui)
         } else {

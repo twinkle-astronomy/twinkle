@@ -97,7 +97,7 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 }
 
 #[derive(From, Deref, DerefMut)]
-pub struct ClientTask<S>(AsyncTask<(), S>);
+pub struct ClientTask<S: std::marker::Sync>(AsyncTask<(), S>);
 
 /// Create a new Client object that will stay in sync with the INDI server
 /// on the other end of `connection`.
@@ -701,9 +701,9 @@ mod test {
                 .await
                 .expect("connecting to indi");
             let client_task = new(connection, None, None).abort_on_drop(true);
-
+            let status = client_task.status().read().await;
             let _ = tokio::join!(
-                client_task.with_state(|state| {
+                status.with_state(|state| {
                     info!("building device_changes 1");
                     let client = state.clone();
                     async move {

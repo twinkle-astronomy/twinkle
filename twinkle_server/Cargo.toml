@@ -29,6 +29,7 @@ fitsrs = "0.3.2"
 ndarray = {version = "0.16.1", features=["serde"]}
 rmp-serde = "1.3.0"
 twinkle_api = { path = "../twinkle_api" }
+twinkle_client = { path = "../twinkle_client" }
 
 [dev-dependencies]
 websocat = "1.13.0"

@@ -4,15 +4,13 @@ use std::{
     sync::Arc,
 };
 
+use serde::{Deserialize, Serialize};
 use tokio::{
     select,
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        Mutex,
-    },
+    sync::mpsc::{self, Receiver, Sender}
 };
 
-use crate::{notify::AsyncLockable, MaybeSend};
+use crate::{notify::{AsyncLockable, Notify}, MaybeSend};
 
 pub trait Joinable<T> {
     fn join(&mut self) -> impl std::future::Future<Output = Result<T, Error>>;
@@ -35,30 +33,6 @@ pub trait Task<S> {
     type AsyncLock: AsyncLockable<Status<S>>;
 
     fn status(&self) -> &Arc<Self::AsyncLock>;
-    fn with_state<'a, V, R, F>(&'a self, func: F) -> impl Future<Output = Result<V, Error>> + 'a
-    where
-        F: FnOnce(&S) -> R + 'a,
-        R: Future<Output = V> + 'a,
-    {
-        async {
-            let future = {
-                let status = self.status().lock().await;
-                match status.deref() {
-                    Status::Running(status) => Ok(func(status)),
-                    Status::Completed => Err(Error::Completed),
-                    Status::Aborted => Err(Error::Aborted),
-                }
-            };
-            match future {
-                Ok(future) => Ok(future.await),
-                Err(e) => Err(e),
-            }
-        }
-    }
-
-    fn running(&self) -> impl Future<Output = bool> {
-        async { self.with_state(|_| async {}).await.is_ok() }
-    }
 }
 
 #[derive(Debug)]
@@ -67,16 +41,45 @@ pub enum Error {
     Completed,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(bound(serialize = "S: Serialize", deserialize = "S: Deserialize<'de>"))]
 pub enum Status<S> {
     Running(S),
     Completed,
     Aborted,
 }
 
+impl<S> Status<S> {
+        
+    pub async fn with_state<'a, V, R, F>(&'a self, func: F) -> Result<V, Error>
+    where
+        F: FnOnce(&S) -> R + 'a,
+        R: Future<Output = V> + 'a,
+    {
+        let future = {
+            match self {
+                Status::Running(status) => Ok(func(status)),
+                Status::Completed => Err(Error::Completed),
+                Status::Aborted => Err(Error::Aborted),
+            }
+        };
+        match future {
+            Ok(future) => Ok(future.await),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn running(&self) -> bool {
+        match self {
+            Status::Running(_) => true,
+            _ => false,
+        }
+    }
+}
 pub struct AsyncTask<T, S> {
     abort_tx: Sender<()>,
     output_rx: Receiver<Result<T, Error>>,
-    status: Arc<Mutex<Status<S>>>,
+    status: Arc<Notify<Status<S>>>,
     abort_on_drop: bool,
 }
 
@@ -106,7 +109,7 @@ impl<T, S> Abortable for AsyncTask<T, S> {
     }
 }
 impl<T, S: Send + Sync + 'static> Task<S> for AsyncTask<T, S> {
-    type AsyncLock = tokio::sync::Mutex<Status<S>>;
+    type AsyncLock = crate::notify::Notify<Status<S>>;
 
     fn status(&self) -> &Arc<Self::AsyncLock> {
         &self.status
@@ -123,7 +126,7 @@ impl<T, S> Joinable<T> for AsyncTask<T, S> {
 }
 
 pub fn spawn_with_state<
-    S: MaybeSend + 'static,
+    S: MaybeSend + Sync + 'static,
     F: FnOnce(&S) -> U,
     U: Future<Output = ()> + MaybeSend + 'static,
 >(
@@ -141,7 +144,7 @@ pub fn spawn_with_value<T: MaybeSend + 'static, U: Future<Output = T> + MaybeSen
 
 pub fn spawn<
     T: MaybeSend + 'static,
-    S: MaybeSend + 'static,
+    S: MaybeSend + Sync + 'static,
     F: FnOnce(&S) -> U,
     U: Future<Output = T> + MaybeSend + 'static,
 >(
@@ -151,7 +154,7 @@ pub fn spawn<
     let (abort_tx, mut abort_rx) = mpsc::channel::<()>(1);
     let (output_tx, output_rx) = mpsc::channel::<Result<T, Error>>(1);
     let future = func(&state);
-    let status = Arc::new(Mutex::new(Status::Running(state)));
+    let status = Arc::new(Notify::new(Status::Running(state)));
 
     spawn_platform({
         let status = status.clone();
@@ -178,7 +181,7 @@ pub fn spawn<
                     }
                  },
             };
-            *status.lock().await = result;
+            *status.write().await = result;
         }
     });
 

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use eframe::{
     egui_glow,
     glow::{Context, HasContext, NativeProgram},

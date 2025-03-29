@@ -166,7 +166,7 @@ mod test {
             .expect("connecting to indi");
         let mut client = new(connection, None, None);
         {
-            client
+            client.status().read().await
                 .with_state(|state| {
                     let state = state.clone();
                     async move {
@@ -217,7 +217,7 @@ mod test {
             .await
             .expect("connecting to indi");
         let mut client = new(connection, None, None);
-        let mut sub = if let Status::Running(connected) = client.status().lock().await.deref() {
+        let mut sub = if let Status::Running(connected) = client.status().read().await.deref() {
             connected.lock().await.get_connected().subscribe().await
         } else {
             panic!("Not connected");

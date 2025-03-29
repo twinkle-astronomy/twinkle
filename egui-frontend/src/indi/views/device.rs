@@ -61,7 +61,7 @@ impl Device {
     ) {
         let image_view = self.get_or_create_render(name, gl);
         let status = image_view.status();
-        let lock = status.lock().await;
+        let lock = status.read().await;
         if let Running(image_view) = lock.deref() {
             if let Err(e) = image_view.download_image(url).await {
                 tracing::error!("Unable to download: {:?}", e);

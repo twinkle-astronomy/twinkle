@@ -27,7 +27,7 @@ pub enum Status<S> {
 #[derive(Deref, DerefMut, AsRef, AsMut, From, derive_more::Display, Debug)]
 struct NoClone<T>(T);
 
-impl<T: Clone> Clone for NoClone<T> {
+impl<T> Clone for NoClone<T> {
     fn clone(&self) -> Self {
         panic!("This should never be cloned.  If it is cloned, something has gone wrong with twinkle_client::notify")
     }
@@ -39,12 +39,14 @@ pub struct ArcCounter<T> {
     count_rx: tokio::sync::watch::Receiver<usize>,
 }
 
+// unsafe impl<T: Send> Send for ArcCounter<T> {}
+
 impl<T> ArcCounter<T> {
     fn new(value: T) -> Self {
         let (count_tx, count_rx) = tokio::sync::watch::channel(1);
         Self {
             value: std::sync::Arc::new(NoClone(value)),
-            count_tx,
+            count_tx, 
             count_rx,
         }
     }
@@ -69,9 +71,16 @@ impl<T> Deref for ArcCounter<T> {
     }
 }
 
-impl<T: Clone> DerefMut for ArcCounter<T> {
+impl<T> DerefMut for ArcCounter<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         std::sync::Arc::make_mut(&mut self.value).deref_mut()
+    }
+}
+
+impl<T> AsRef<T> for ArcCounter<T> {
+    
+    fn as_ref(&self) -> &T {
+        self.value.as_ref()
     }
 }
 
@@ -196,7 +205,7 @@ impl<T: Default> Default for Notify<T> {
     }
 }
 
-impl<T: Sync + Send + 'static> Notify<T> {
+impl<T: 'static> Notify<T> {
     /// Returns a [`NotifyMutexGuard<T>`](crate::twinkle_client::notify::NotifyMutexGuard) that allows you to read
     /// (via the [Deref] trait) and write (via the [DerefMut] trait)
     /// the value stored in the `Notify<T>`.  The lock is exclusive,
@@ -229,7 +238,7 @@ impl<T: Sync + Send + 'static> Notify<T> {
             should_notify: false,
         }
     }
-
+ 
     #[deprecated(note = "please use `write` instead")]
     pub async fn lock(&self) -> NotifyMutexGuard<T> {
         let mut guard = self.subject.write().await;
@@ -261,6 +270,8 @@ impl<T: Sync + Send + 'static> Notify<T> {
             guard: self.subject.read().await,
         }
     }
+}
+impl<T: Send + Sync + 'static> Notify<T> {
 
     /// Returns a [`BroadcastStream<Arc<T>>`](tokio_stream::wrappers::BroadcastStream) of the values
     /// wrapped in an `Arc` held by `self` over time.  The returned stream's first value will be the current value
@@ -365,7 +376,7 @@ impl<'a, T> Deref for NotifyMutexGuard<'a, T> {
     }
 }
 
-impl<'a, T: Clone> DerefMut for NotifyMutexGuard<'a, T> {
+impl<'a, T> DerefMut for NotifyMutexGuard<'a, T> {
     /// Mutably dereferences the value.  If the value is currently holding
     /// a previous value then the wrapped value T will be cloned.
     /// See [`Arc::make_mut`](std::sync::Arc::make_mut) for more details.
@@ -415,13 +426,24 @@ pub trait AsyncLockable<T> {
     where
         Self: 'a;
 
+    type WriteLock<'a>: Deref<Target = T> + DerefMut + 'a
+    where
+        Self: 'a;
+    type ReadLock<'a>: Deref<Target = T> + 'a
+    where
+        Self: 'a;
+
     fn new(value: T) -> Self;
 
-    fn lock(&self) -> impl std::future::Future<Output = Self::Lock<'_>> + Send;
+    fn lock(&self) -> impl std::future::Future<Output = Self::Lock<'_>>;
+    fn write(&self) -> impl std::future::Future<Output = Self::WriteLock<'_>>;
+    fn read(&self) -> impl std::future::Future<Output = Self::ReadLock<'_>>;
 }
 
-impl<T: Clone + Send + Sync + 'static> AsyncLockable<T> for Notify<T> {
+impl<T: Send + 'static> AsyncLockable<T> for Notify<T> {
     type Lock<'a> = NotifyMutexGuard<'a, T>;
+    type WriteLock<'a> = NotifyMutexGuard<'a, T>;
+    type ReadLock<'a> = NotifyMutexGuardRead<'a, T>;
 
     fn new(value: T) -> Self {
         Notify::new(value)
@@ -430,16 +452,34 @@ impl<T: Clone + Send + Sync + 'static> AsyncLockable<T> for Notify<T> {
     async fn lock(&self) -> Self::Lock<'_> {
         Notify::write(self).await
     }
+
+    async fn write(&self) -> Self::WriteLock<'_> {
+        Notify::write(self).await
+    }
+
+    async fn read(&self) -> Self::ReadLock<'_> {
+        Notify::read(self).await
+    }
 }
 
-impl<T: Send + Sync + 'static> AsyncLockable<T> for tokio::sync::Mutex<T> {
+impl<T: 'static> AsyncLockable<T> for tokio::sync::Mutex<T> {
     type Lock<'a> = tokio::sync::MutexGuard<'a, T>;
+    type WriteLock<'a> = tokio::sync::MutexGuard<'a, T>;
+    type ReadLock<'a> = tokio::sync::MutexGuard<'a, T>;
 
     fn new(value: T) -> Self {
         Self::new(value)
     }
 
     async fn lock(&self) -> Self::Lock<'_> {
+        self.lock().await
+    }
+
+    async fn write(&self) -> Self::WriteLock<'_> {
+        self.lock().await
+    }
+
+    async fn read(&self) -> Self::ReadLock<'_> {
         self.lock().await
     }
 }

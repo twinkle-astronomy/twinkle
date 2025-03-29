@@ -19,12 +19,13 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::DELETE])
         .allow_headers(Any)
         .expose_headers(Any);
 
+        
     // build our application with a route
-    let app = twinkle_server::indi::routes(Router::new())
+    let app = twinkle_server::counts::routes(twinkle_server::indi::routes(Router::new()))
         .with_state(state)
         .layer(cors)
         .fallback_service(ServeDir::new("assets"));

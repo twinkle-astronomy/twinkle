@@ -1,7 +1,7 @@
 use crate::{analysis::Statistics, HasImage};
 use fitsio::FitsFile;
 use ndarray::{ArrayD, Zip};
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub enum CalibrationDescription {

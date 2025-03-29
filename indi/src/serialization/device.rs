@@ -175,28 +175,12 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
 mod tests {
     use super::*;
     use chrono::DateTime;
+    use twinkle_client::notify::Notify;
     use std::ops::Deref;
-    use std::sync::{Mutex, MutexGuard};
 
-    #[derive(Debug)]
-    struct TestLock<T>(std::sync::Mutex<T>);
-    impl<T: Send> AsyncLockable<T> for TestLock<T> {
-        type Lock<'a>
-            = MutexGuard<'a, T>
-        where
-            Self: 'a;
-
-        fn new(value: T) -> Self {
-            Self(Mutex::new(value))
-        }
-
-        async fn lock(&self) -> Self::Lock<'_> {
-            self.0.lock().unwrap()
-        }
-    }
     #[tokio::test]
     async fn test_update_switch() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device<Notify<Parameter>> = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_switch = DefSwitchVector {
@@ -224,7 +208,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::SwitchVector(stored) = param.deref() {
                 assert_eq!(
@@ -273,7 +257,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::SwitchVector(stored) = param.deref() {
                 assert_eq!(
@@ -304,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_number() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device<Notify<Parameter>> = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_number = DefNumberVector {
@@ -336,7 +320,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::NumberVector(stored) = param.deref() {
                 assert_eq!(
@@ -392,7 +376,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::NumberVector(stored) = param.deref() {
                 assert_eq!(
@@ -426,7 +410,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_text() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device<Notify<Parameter>> = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_text = DefTextVector {
@@ -454,7 +438,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(
@@ -504,7 +488,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(
@@ -534,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device<Notify<Parameter>> = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_text = DefTextVector {
@@ -562,7 +546,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(

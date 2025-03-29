@@ -1899,6 +1899,7 @@ dependencies = [
  "reqwest",
  "rmp-serde",
  "serde",
+ "serde_json",
  "strum",
  "tokio 1.43.0",
  "tokio-stream",
@@ -4929,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "phd2"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.21.7",
  "itertools 0.10.5",
@@ -5819,9 +5820,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
+checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
 dependencies = [
  "serde_derive",
 ]
@@ -5838,9 +5839,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
+checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
 dependencies = [
  "proc-macro2 1.0.92",
  "quote 1.0.36",
@@ -7125,6 +7126,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -7134,6 +7136,7 @@ dependencies = [
  "derive_more",
  "futures-timer",
  "pin-project-lite",
+ "serde",
  "tokio 1.43.0",
  "tokio-stream",
  "tracing",
@@ -7165,6 +7168,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "twinkle_api",
+ "twinkle_client",
  "urlencoding",
  "uuid",
  "websocat",
@@ -7328,9 +7332,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.15.1"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0f540e3240398cce6128b64ba83fdbdd86129c16a3aa1a3a252efd66eb3d587"
+checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
  "getrandom 0.3.1",
  "js-sys",

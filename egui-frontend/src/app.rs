@@ -1,16 +1,21 @@
 use crate::{indi::agent::State, Agent};
 use egui::Window;
+use fitsrs::hdu::header::extension::bintable::A;
 use futures::executor::block_on;
+use twinkle_api::Count;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{mpsc, Arc, OnceLock},
 };
 use tokio::sync::Mutex;
 use twinkle_client::task::Task;
+use std::boxed::Box;
 
 static GLOBAL_CALLBACKS: OnceLock<
     std::sync::mpsc::Sender<Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>>,
 > = OnceLock::new();
+
+trait TaskWidget: Task<()> {}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -19,6 +24,9 @@ pub struct App {
 
     #[serde(skip)]
     agents: BTreeMap<String, Agent<(), Arc<Mutex<State>>>>,
+
+    #[serde(skip)]
+    tasks: BTreeSet<String, Box<dyn TaskWidget<AsyncLock = _>>>,
 
     #[serde(skip)]
     callbacks: std::sync::mpsc::Receiver<
@@ -35,6 +43,7 @@ impl Default for App {
         Self {
             server_addr: "indi:7624".to_string(),
             agents: Default::default(),
+            tasks: Default::default(),
             callbacks,
         }
     }
@@ -72,7 +81,7 @@ impl eframe::App for App {
             cb(ctx, frame);
         }
         self.agents.retain(|id, agent| {
-            if !block_on(agent.running()) {
+            if !block_on(async {agent.status().read().await.running()}) {
                 return false;
             }
             let mut open = true;
