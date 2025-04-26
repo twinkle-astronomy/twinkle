@@ -38,12 +38,12 @@ pub struct IndiConnectionData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct IndiConnectionParams {
+struct IndiConnectionParams {
     server_addr: String,
 }
 
 #[tracing::instrument(skip(ws, state))]
-pub async fn create_connection(
+async fn create_connection(
     ws: WebSocketUpgrade,
     TypedHeader(host): TypedHeader<axum_extra::headers::Host>, // Use axum_extra::headers
     Query(params): Query<IndiConnectionParams>,
@@ -85,7 +85,7 @@ async fn handle_indi_connection(
     let (mut indi_writer, mut indi_reader) = connection.to_indi();
     let (mut websocket_write, mut websocket_read) = socket.to_indi();
 
-    let writer = tokio::spawn(async move {
+    let writer = async move {
         loop {
             let cmd = match websocket_read.read().await {
                 Some(Ok(c)) => c,
@@ -95,8 +95,8 @@ async fn handle_indi_connection(
                 error!("Error sending command to indi server: {:?}", e);
             }
         }
-    });
-    let reader = tokio::spawn(async move {
+    };
+    let reader = async move {
         loop {
             match indi_reader.read().await {
                 Some(Ok(cmd)) => {
@@ -155,11 +155,12 @@ async fn handle_indi_connection(
                 None => break,
             }
         }
-    });
+    };
 
-    if let Err(e) = tokio::try_join!(reader, writer) {
-        tracing::error!("Error: {:?}", e);
-    }
+    tokio::select!{
+        _ = reader => {},
+        _ = writer => {},
+    };
 }
 
 #[tracing::instrument(skip(state))]

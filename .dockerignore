@@ -3,5 +3,6 @@
 ./target/
 ./.git/
 *.fits
+.storage/
 .bash_history
 Dockerfile

@@ -3,16 +3,24 @@ use std::{collections::HashMap, sync::Arc};
 use indi::IndiConnectionData;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use twinkle_client::{agent::Agent, notify::Notify, task::AsyncTask};
+
+pub mod telescope;
 
 pub mod indi;
+pub mod counts;
+pub mod flats;
+pub mod tracing_broadcast;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct AppState {
     // Store device data by device name
     store: Arc<RwLock<StateData>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct StateData {
     connections: HashMap<Uuid, Arc<RwLock<IndiConnectionData>>>,
+    runs: Arc<Notify<HashMap<Uuid, AsyncTask<(), Arc<Notify<twinkle_api::Count>>>>>>,
+    flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>
 }

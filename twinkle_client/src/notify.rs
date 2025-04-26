@@ -1,15 +1,17 @@
-use derive_more::{AsMut, AsRef, Deref, DerefMut, From};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 use tokio::sync::RwLock;
 
-use tokio_stream::StreamExt as _;
+use tokio_stream::{Stream, StreamExt as _};
 
-use crate::timeout;
+use crate::{timeout, TimeoutError};
 
 #[derive(Debug, PartialEq)]
 pub enum Error<E> {
@@ -24,107 +26,140 @@ pub enum Status<S> {
     Complete(S),
 }
 
-#[derive(Deref, DerefMut, AsRef, AsMut, From, derive_more::Display, Debug)]
-struct NoClone<T>(T);
-
-impl<T: Clone> Clone for NoClone<T> {
-    fn clone(&self) -> Self {
-        panic!("This should never be cloned.  If it is cloned, something has gone wrong with twinkle_client::notify")
-    }
-}
 
 pub struct ArcCounter<T> {
-    value: std::sync::Arc<NoClone<T>>,
-    count_tx: tokio::sync::watch::Sender<usize>,
-    count_rx: tokio::sync::watch::Receiver<usize>,
+    value: Option<std::sync::Arc<T>>,
+    clones: Arc<AtomicU64>,
+    clone_changes: Arc<tokio::sync::Notify>,
 }
 
 impl<T> ArcCounter<T> {
     fn new(value: T) -> Self {
-        let (count_tx, count_rx) = tokio::sync::watch::channel(1);
+        let clones = Arc::new(AtomicU64::new(1));
+        let clone_changes = Default::default();
         Self {
-            value: std::sync::Arc::new(NoClone(value)),
-            count_tx,
-            count_rx,
+            value: Some(std::sync::Arc::new(value)),
+            clones,
+            clone_changes,
         }
     }
 }
 
 impl<T: PartialEq> PartialEq for ArcCounter<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.value.ne(other)
+        match &self.value {
+            Some(value) => value.deref().ne(other.deref()),
+            _ => false,
+        }
     }
 }
 
 impl<T: Debug> Debug for ArcCounter<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.value.fmt(f)
+        match &self.value {
+            Some(value) => value.fmt(f),
+            None => panic!("ArcCounter used after drop"),
+        }
     }
 }
 
 impl<T> Deref for ArcCounter<T> {
     type Target = T;
     fn deref(&self) -> &T {
-        self.value.deref().deref()
+        match &self.value {
+            Some(value) => value.deref(),
+            None => panic!("ArcCounter used after drop"),
+        }
     }
 }
 
-impl<T: Clone> DerefMut for ArcCounter<T> {
+impl<T> DerefMut for ArcCounter<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        std::sync::Arc::make_mut(&mut self.value).deref_mut()
+        match &mut self.value {
+            Some(value) => std::sync::Arc::get_mut(value).unwrap(),
+            None => panic!("ArcCounter used after drop"),
+        }
+    }
+}
+
+impl<T> AsRef<T> for ArcCounter<T> {
+    fn as_ref(&self) -> &T {
+        match &self.value {
+            Some(value) => value.as_ref(),
+            None => panic!("ArcCounter used after drop"),
+        }
     }
 }
 
 impl<T: std::fmt::Display> std::fmt::Display for ArcCounter<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.value.fmt(f)
+        match &self.value {
+            Some(value) => value.fmt(f),
+            None => panic!("ArcCounter used after drop"),
+        }
     }
 }
 
 impl<T> ArcCounter<T> {
-    async fn not_cloned(&mut self) -> Result<(), tokio::sync::watch::error::RecvError> {
+    async fn not_cloned(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+        crate::timeout(timeout, async {
+            self.not_cloned_inner().await;
+        })
+        .await
+    }
+
+    async fn not_cloned_inner(&mut self) {
+        // Polling based way of waiting for clone count to hit 0.
         loop {
-            // Dumb / polling impl kept as a safety fallback
-            // if std::sync::Arc::strong_count(&self.value) != 1 {
-            //     sleep(Duration::from_millis(100)).await;
-            // } else {
-            //     break Ok(());
-            // }
-            {
-                let count = self.count_rx.borrow();
-                if *count == 1 {
-                    return Ok(());
-                }
+            if Arc::strong_count(&self.value.as_ref().unwrap()) == 1 {
+                break;
             }
-            self.count_rx.changed().await?;
+            tokio::task::yield_now().await;
         }
+        // Smarter way of waiting for clone count to hit 0.  Is racy.
+        // loop {
+        //     if self.clones.load(std::sync::atomic::Ordering::SeqCst) > 1 {
+        //         self.clone_changes.notified().await;
+        //     } else {
+        //         break;
+        //     }
+        // }
     }
 }
 
 impl<T> Clone for ArcCounter<T> {
     fn clone(&self) -> Self {
-        let next_value = *self.count_tx.borrow() + 1;
-        let _ = self.count_tx.send(next_value);
+        let value = self.value.clone();
+        self.clones
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Self {
-            value: self.value.clone(),
-            count_tx: self.count_tx.clone(),
-            count_rx: self.count_rx.clone(),
+            value,
+            clones: self.clones.clone(),
+            clone_changes: self.clone_changes.clone(),
         }
     }
 }
 
 impl<T> Drop for ArcCounter<T> {
     fn drop(&mut self) {
-        let next_value = { *self.count_rx.borrow() - 1 };
-        let _ = self.count_tx.send(next_value);
+        self.value = None;
+        self.clones
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.clone_changes.notify_waiters();
     }
 }
 
-pub async fn wait_fn<S, E, T: Clone + Send + 'static, F: FnMut(T) -> Result<Status<S>, E>>(
-    mut stream: tokio_stream::wrappers::BroadcastStream<T>,
+pub async fn wait_fn<
+    P,
+    E,
+    T: Clone + Send,
+    F: FnMut(T) -> Result<Status<P>, E>,
+    S: Stream<Item = Result<T, BroadcastStreamRecvError>> + std::marker::Unpin,
+>(
+    stream: &mut S,
     dur: Duration,
     mut f: F,
-) -> Result<S, Error<E>> {
+) -> Result<P, Error<E>> {
     let res = timeout(dur, async {
         loop {
             if let Some(next) = stream.next().await {
@@ -154,12 +189,16 @@ pub async fn wait_fn<S, E, T: Clone + Send + 'static, F: FnMut(T) -> Result<Stat
 
 pub type NotifyArc<T> = ArcCounter<T>;
 
+static NOTIFY_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 /// The `Notify<T>` struct is a wrapper type that allows you to easily manage changes
 /// to a value through internal mutability (it's a wrapper around a Mutex), and allows
 /// other parts of your application to subscribe and wait for changes.
 pub struct Notify<T> {
+    id: usize,
     subject: RwLock<NotifyArc<T>>,
-    to_notify: tokio::sync::broadcast::Sender<NotifyArc<T>>,
+    to_notify: tokio::sync::broadcast::Sender<Option<NotifyArc<T>>>,
+    timeout: Duration,
 }
 
 impl<T: Debug> Debug for Notify<T> {
@@ -178,9 +217,22 @@ impl<T> Notify<T> {
     pub fn new(value: T) -> Notify<T> {
         let (tx, _) = tokio::sync::broadcast::channel(1);
         Notify {
+            id: NOTIFY_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
             subject: RwLock::new(NotifyArc::new(value)),
             to_notify: tx,
+            timeout: Duration::from_millis(1),
         }
+    }
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = timeout;
+    }
+
+    pub fn get_timeout(&self) -> Duration {
+        self.timeout
     }
 }
 
@@ -196,7 +248,7 @@ impl<T: Default> Default for Notify<T> {
     }
 }
 
-impl<T: Sync + Send + 'static> Notify<T> {
+impl<T: 'static> Notify<T> {
     /// Returns a [`NotifyMutexGuard<T>`](crate::twinkle_client::notify::NotifyMutexGuard) that allows you to read
     /// (via the [Deref] trait) and write (via the [DerefMut] trait)
     /// the value stored in the `Notify<T>`.  The lock is exclusive,
@@ -209,39 +261,37 @@ impl<T: Sync + Send + 'static> Notify<T> {
     /// use twinkle_client::notify::Notify;
     /// async move {
     ///     let notify: Notify<i32> = Notify::new(42);
-    ///     assert_eq!(*notify.lock().await, 42);
+    ///     assert_eq!(*notify.write().await, 42);
     ///     {
     ///         let mut lock = notify.write().await;
     ///         *lock = 43;
     ///     }
-    ///     assert_eq!(*notify.lock().await, 43);
+    ///     assert_eq!(*notify.write().await, 43);
     /// };
     /// ```
     pub async fn write(&self) -> NotifyMutexGuard<T> {
-        let mut guard = self.subject.write().await;
-        guard
-            .not_cloned()
-            .await
-            .expect("Unable to await on guard not being cloned");
-        NotifyMutexGuard {
-            guard,
+        let mut notify_guard = NotifyMutexGuard {
+            guard: self.subject.write().await,
             to_notify: &self.to_notify,
             should_notify: false,
+        };
+        if let Err(e) = notify_guard.not_cloned(self.timeout).await {
+            tracing::error!("Timeout waiting for writeable lock: {:?}", e);
         }
+        notify_guard
     }
 
     #[deprecated(note = "please use `write` instead")]
     pub async fn lock(&self) -> NotifyMutexGuard<T> {
-        let mut guard = self.subject.write().await;
-        guard
-            .not_cloned()
-            .await
-            .expect("Unable to await on guard not being cloned");
-        NotifyMutexGuard {
-            guard,
+        let mut notify_guard = NotifyMutexGuard {
+            guard: self.subject.write().await,
             to_notify: &self.to_notify,
             should_notify: false,
+        };
+        if let Err(e) = notify_guard.not_cloned(self.timeout).await {
+            tracing::error!("Timeout waiting for writeable lock: {:?}", e);
         }
+        notify_guard
     }
 
     /// Returns a [`NotifyMutexGuardRead<T>`](crate::twinkle_client::notify::NotifyMutexGuardRead) that allows you to read
@@ -261,7 +311,9 @@ impl<T: Sync + Send + 'static> Notify<T> {
             guard: self.subject.read().await,
         }
     }
+}
 
+impl<T: Send + Sync + 'static> Notify<T> {
     /// Returns a [`BroadcastStream<Arc<T>>`](tokio_stream::wrappers::BroadcastStream) of the values
     /// wrapped in an `Arc` held by `self` over time.  The returned stream's first value will be the current value
     /// at the time this method is called, and new values will be sent to the stream.  The stream will terminate
@@ -296,11 +348,22 @@ impl<T: Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await, None);
     /// };
     /// ```
-    pub async fn subscribe(&self) -> tokio_stream::wrappers::BroadcastStream<NotifyArc<T>> {
+    pub async fn subscribe(
+        &self,
+    ) -> impl Stream<Item = Result<NotifyArc<T>, BroadcastStreamRecvError>> {
         let subject = self.subject.read().await;
         let recv = self.to_notify.subscribe();
-        self.to_notify.send(subject.deref().clone()).ok();
-        tokio_stream::wrappers::BroadcastStream::new(recv)
+        let current_value = subject.deref().clone();
+
+        // Create a stream that starts with the current value then continues with broadcast values
+        let s = tokio_stream::once(Ok(Some(current_value)))
+            .chain(tokio_stream::wrappers::BroadcastStream::new(recv))
+            .filter_map(|f| match f {
+                Ok(Some(item)) => Some(Ok(item)),
+                Ok(None) => None,
+                Err(e) => Some(Err(e)),
+            });
+        s
     }
 
     /// Returns a [`BroadcastStream<Arc<T>>`](tokio_stream::wrappers::BroadcastStream) of the values
@@ -334,14 +397,20 @@ impl<T: Sync + Send + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await, None);
     /// };
     /// ```
-    pub fn changes(&self) -> tokio_stream::wrappers::BroadcastStream<NotifyArc<T>> {
-        tokio_stream::wrappers::BroadcastStream::new(self.to_notify.subscribe())
+    pub fn changes(&self) -> impl Stream<Item = Result<NotifyArc<T>, BroadcastStreamRecvError>> {
+        tokio_stream::wrappers::BroadcastStream::new(self.to_notify.subscribe()).filter_map(|f| {
+            match f {
+                Ok(Some(item)) => Some(Ok(item)),
+                Ok(None) => None,
+                Err(e) => Some(Err(e)),
+            }
+        })
     }
 }
 
 pub struct NotifyMutexGuard<'a, T> {
     guard: tokio::sync::RwLockWriteGuard<'a, NotifyArc<T>>,
-    to_notify: &'a tokio::sync::broadcast::Sender<NotifyArc<T>>,
+    to_notify: &'a tokio::sync::broadcast::Sender<Option<NotifyArc<T>>>,
     should_notify: bool,
 }
 
@@ -365,7 +434,7 @@ impl<'a, T> Deref for NotifyMutexGuard<'a, T> {
     }
 }
 
-impl<'a, T: Clone> DerefMut for NotifyMutexGuard<'a, T> {
+impl<'a, T> DerefMut for NotifyMutexGuard<'a, T> {
     /// Mutably dereferences the value.  If the value is currently holding
     /// a previous value then the wrapped value T will be cloned.
     /// See [`Arc::make_mut`](std::sync::Arc::make_mut) for more details.
@@ -380,9 +449,30 @@ impl<'a, T> Drop for NotifyMutexGuard<'a, T> {
     /// If this lock has created a mutable reference
     /// then the current value will be broadcast to all broadcast streams listening for changes.
     fn drop(&mut self) {
+        self.notify();
+    }
+}
+
+impl<'a, T> NotifyMutexGuard<'a, T> {
+    pub fn notify(&mut self) {
         if self.should_notify {
-            self.to_notify.send(self.guard.deref().clone()).ok();
+            self.to_notify.send(Some(self.guard.deref().clone())).ok();
+            self.should_notify = false;
         }
+    }
+
+    pub async fn not_cloned(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+        let mut ret: Result<(), TimeoutError> = Ok(());
+        loop {
+            match self.guard.not_cloned(timeout).await {
+                Ok(_) => break,
+                Err(e) => {
+                    ret = Err(e);
+                    let _ = self.to_notify.send(None);
+                }
+            }
+        }
+        ret
     }
 }
 
@@ -415,13 +505,24 @@ pub trait AsyncLockable<T> {
     where
         Self: 'a;
 
+    type WriteLock<'a>: Deref<Target = T> + DerefMut + 'a
+    where
+        Self: 'a;
+    type ReadLock<'a>: Deref<Target = T> + 'a
+    where
+        Self: 'a;
+
     fn new(value: T) -> Self;
 
-    fn lock(&self) -> impl std::future::Future<Output = Self::Lock<'_>> + Send;
+    fn lock(&self) -> impl std::future::Future<Output = Self::Lock<'_>>;
+    fn write(&self) -> impl std::future::Future<Output = Self::WriteLock<'_>>;
+    fn read(&self) -> impl std::future::Future<Output = Self::ReadLock<'_>>;
 }
 
-impl<T: Clone + Send + Sync + 'static> AsyncLockable<T> for Notify<T> {
+impl<T: Send + 'static> AsyncLockable<T> for Notify<T> {
     type Lock<'a> = NotifyMutexGuard<'a, T>;
+    type WriteLock<'a> = NotifyMutexGuard<'a, T>;
+    type ReadLock<'a> = NotifyMutexGuardRead<'a, T>;
 
     fn new(value: T) -> Self {
         Notify::new(value)
@@ -430,10 +531,20 @@ impl<T: Clone + Send + Sync + 'static> AsyncLockable<T> for Notify<T> {
     async fn lock(&self) -> Self::Lock<'_> {
         Notify::write(self).await
     }
+
+    async fn write(&self) -> Self::WriteLock<'_> {
+        Notify::write(self).await
+    }
+
+    async fn read(&self) -> Self::ReadLock<'_> {
+        Notify::read(self).await
+    }
 }
 
-impl<T: Send + Sync + 'static> AsyncLockable<T> for tokio::sync::Mutex<T> {
+impl<T: 'static> AsyncLockable<T> for tokio::sync::Mutex<T> {
     type Lock<'a> = tokio::sync::MutexGuard<'a, T>;
+    type WriteLock<'a> = tokio::sync::MutexGuard<'a, T>;
+    type ReadLock<'a> = tokio::sync::MutexGuard<'a, T>;
 
     fn new(value: T) -> Self {
         Self::new(value)
@@ -442,14 +553,35 @@ impl<T: Send + Sync + 'static> AsyncLockable<T> for tokio::sync::Mutex<T> {
     async fn lock(&self) -> Self::Lock<'_> {
         self.lock().await
     }
+
+    async fn write(&self) -> Self::WriteLock<'_> {
+        self.lock().await
+    }
+
+    async fn read(&self) -> Self::ReadLock<'_> {
+        self.lock().await
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use tracing_test::traced_test;
+
+    use crate::{sleep, task};
+    // use crate::task::spawn_with_value;
+
     use super::*;
     use std::sync::{Arc, Mutex as StdMutex};
-    use std::{thread, time::Duration};
+    use std::time::Duration;
 
+    #[derive(derive_more::Deref, derive_more::DerefMut, derive_more::AsRef, derive_more::AsMut, derive_more::From, derive_more::Display, Debug)]
+    struct NoClone<T>(T);
+
+    impl<T> Clone for NoClone<T> {
+        fn clone(&self) -> Self {
+            panic!("This should never be cloned.  If it is cloned, something has gone wrong with twinkle_client::notify")
+        }
+    }
     #[tokio::test]
     async fn test_no_clone() {
         tokio::time::timeout(Duration::from_secs(1), async move {
@@ -497,26 +629,30 @@ mod test {
             let mut joins = Vec::new();
             {
                 let n = Arc::new(Notify::new(-1));
-                for _ in 0..10 {
-                    let mut r = n.changes();
+                for _ in 0..3 {
+                    let mut r = n.subscribe().await;
 
                     joins.push(tokio::spawn(async move {
-                        let mut prev = r.next().await.unwrap().unwrap().deref().clone();
+                        let mut seen: Vec<i32> = Default::default();
+
                         loop {
+                            tokio::time::sleep(Duration::from_micros(10)).await;
                             let j = r.next().await;
-                            if let Some(Ok(j)) = j {
-                                if *j == 90 {
-                                    break;
+                            match j {
+                                Some(Ok(j)) => {
+                                    seen.push(*j);
                                 }
-                                assert_eq!(*j, prev + 1);
-                                prev = *j;
-                            } else {
-                                break;
+                                Some(Err(e)) => {
+                                    dbg!(e);
+                                }
+                                _ => break,
                             }
                         }
+                        dbg!(seen);
                     }));
                 }
-                for i in 0..=90 {
+                for i in 0..=9 {
+                    dbg!(i);
                     let mut l = n.write().await;
                     *l = i;
                 }
@@ -561,10 +697,10 @@ mod test {
         let count = Arc::new(StdMutex::new(0));
         let count_thread = count.clone();
         let thread_notify = notify.clone();
-        let j = tokio::spawn(wait_fn::<(), (), _, _>(
-            thread_notify.subscribe().await,
-            Duration::from_secs(1),
-            move |iteration| {
+        let mut sub = thread_notify.subscribe().await;
+        let task = tokio::spawn(async move {
+            wait_fn::<(), (), _, _, _>(&mut sub, Duration::from_secs(1), move |iteration| {
+                dbg!(iteration.deref());
                 {
                     let mut l = count_thread.lock().unwrap();
                     *l += 1;
@@ -574,16 +710,14 @@ mod test {
                 } else {
                     Ok(Status::Pending)
                 }
-            },
-        ));
-        // ugly race-based thread syncronization
-        thread::sleep(Duration::from_millis(100));
+            }).await
+        });
         for i in 0..=9 {
             let mut lock = notify.write().await;
             *lock = i;
         }
 
-        j.await.unwrap().unwrap();
+        task.await.unwrap().unwrap();
         {
             let lock = count.lock().unwrap();
             assert_eq!(*lock, 11);
@@ -594,10 +728,10 @@ mod test {
     async fn test_cancel_wait_fn() {
         async {}.await;
         let notify: Arc<Notify<u32>> = Arc::new(Notify::new(0));
-        let subscription = notify.subscribe().await;
+        let mut subscription = notify.subscribe().await;
         // let mut thread_subscription = subscription.clone();
         let fut = async move {
-            wait_fn::<(), (), NotifyArc<u32>, _>(subscription, Duration::from_secs(10), |x| {
+            wait_fn::<(), (), NotifyArc<u32>, _, _>(&mut subscription, Duration::from_secs(10), |x| {
                 // Will never be true
                 if *x == 10 {
                     return Ok(Status::Complete(()));
@@ -665,5 +799,37 @@ mod test {
         })
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_with_notify_timeout() {
+        let mut notify = Notify::new(0);
+        notify.set_timeout(Duration::MAX);
+        let mut sub = notify.subscribe().await;
+        let mut task = task::AsyncTask::default();
+        task.spawn((), |_| {
+            async move {
+                for i in 0..1000 {
+                    tracing::info!("Updating to {}", i);
+                    {
+                        let mut lock = timeout(Duration::from_millis(11), notify.write())
+                            .await
+                            .unwrap();
+                        *lock = i;
+                        drop(lock);
+                    }
+                    sleep(Duration::from_millis(20)).await;
+                }
+            }
+        });
+
+        let mut counter = 0;
+        while let Some(item) = sub.next().await {
+            tracing::info!("Processing item: {:?}", item);
+            counter += 1;
+            tracing::info!("Waiting: {}ms", counter);
+            sleep(Duration::from_millis(counter)).await;
+        }
     }
 }

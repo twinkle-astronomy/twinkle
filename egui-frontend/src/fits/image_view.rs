@@ -9,7 +9,7 @@ use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio_stream::StreamExt;
 use tracing::Instrument;
 use twinkle_api::indi::api::ImageResponse;
-use twinkle_client::task::{self, Abortable};
+use twinkle_client::task;
 use url::Url;
 
 use crate::Agent;
@@ -38,7 +38,7 @@ impl crate::Widget for &ImageView {
 }
 
 impl ImageView {
-    pub fn new(gl: &glow::Context) -> Agent<(), ImageView> {
+    pub fn new(gl: &glow::Context) -> Agent<ImageView> {
         let (sender, rx) = broadcast::channel(1);
         let state = Arc::new(tokio::sync::Mutex::new(State {
             render: Arc::new(Mutex::new(FitsRender::new(gl))),
@@ -47,10 +47,9 @@ impl ImageView {
         task::spawn_with_state(ImageView { sender, state }, |state| {
             Self::process_downloads(state.state.clone(), rx)
         })
-        .abort_on_drop(true)
         .into()
     }
-    pub async fn download_image(&self, url: impl IntoUrl + 'static) -> Result<(), reqwest::Error> {
+    pub fn download_image(&self, url: impl IntoUrl + 'static) -> Result<(), reqwest::Error> {
         let _ = self.sender.send(url.into_url()?);
         Ok(())
     }
@@ -59,10 +58,12 @@ impl ImageView {
         loop {
             let url = match rx.recv().await {
                 Ok(url) => url,
-                Err(broadcast::error::RecvError::Lagged(_)) => {
+                Err(broadcast::error::RecvError::Lagged(lag)) => {
+                    tracing::error!("lagged: {}", lag);
                     continue;
                 }
-                Err(_) => {
+                Err(e) => {
+                    tracing::error!("Error recieving next download request: {:?}", e);
                     return;
                 }
             };

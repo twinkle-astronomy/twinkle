@@ -157,10 +157,68 @@ impl std::fmt::Display for Sexagesimal {
 
 impl From<f64> for Sexagesimal {
     fn from(value: f64) -> Self {
-        // TODO: try splitting minute and second out of value instead of putting
-        //  it all in hour.
         Self {
-            hour: value.into(),
+            hour: value as f64,
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<usize> for Sexagesimal {
+    fn from(value: usize) -> Self {
+        Self {
+            hour: value as f64,
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<u64> for Sexagesimal {
+    fn from(value: u64) -> Self {
+        Self {
+            hour: value as f64,
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<i32> for Sexagesimal {
+    fn from(value: i32) -> Self {
+        Self {
+            hour: value as f64,
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<u32> for Sexagesimal {
+    fn from(value: u32) -> Self {
+        Self {
+            hour: value as f64,
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<u16> for Sexagesimal {
+    fn from(value: u16) -> Self {
+        Self {
+            hour: value as f64,
+            minute: None,
+            second: None,
+        }
+    }
+}
+
+impl From<u8> for Sexagesimal {
+    fn from(value: u8) -> Self {
+        Self {
+            hour: value as f64,
             minute: None,
             second: None,
         }

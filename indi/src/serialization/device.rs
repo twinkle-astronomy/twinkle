@@ -2,21 +2,21 @@ use std::ops::{Deref, DerefMut};
 use std::{collections::HashMap, sync::Arc};
 
 use std::fmt::Debug;
-use twinkle_client::notify::AsyncLockable;
+use twinkle_client::notify::Notify;
 
 use crate::*;
 
 /// Internal representation of a device.
 #[derive(Debug)]
-pub struct Device<T: AsyncLockable<Parameter> + Debug> {
+pub struct Device {
     name: String,
-    parameters: HashMap<String, Arc<T>>,
+    parameters: HashMap<String, Arc<Notify<Parameter>>>,
     names: Vec<String>,
     groups: Vec<String>,
     group_counts: HashMap<String, usize>,
 }
 
-impl<T: AsyncLockable<Parameter> + Debug> Clone for Device<T> {
+impl Clone for Device {
     fn clone(&self) -> Self {
         Device {
             name: self.name.clone(),
@@ -35,7 +35,7 @@ pub enum DeviceUpdate {
     DeleteParameter(Option<String>),
 }
 
-impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
+impl Device {
     /// Creates a new device named `name` with no parameters.
     pub fn new(name: String) -> Self {
         Device {
@@ -62,36 +62,36 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
     }
 
     /// Returns a `&Vec<String>` of all current parameters.
-    pub fn get_parameters(&self) -> &HashMap<String, Arc<T>> {
+    pub fn get_parameters(&self) -> &HashMap<String, Arc<Notify<Parameter>>> {
         return &self.parameters;
     }
 
     /// Updates the current device based on `command`.
     pub async fn update(
-        mut this: impl Deref<Target = Device<T>> + DerefMut,
+        mut this: impl Deref<Target = Device> + DerefMut,
         command: serialization::Command,
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
         match command {
             Command::Message(_) => Ok(None),
             Command::GetProperties(_) => Ok(None),
-            Command::DefSwitchVector(command) => this.new_param(command),
+            Command::DefSwitchVector(command) => this.new_param(command).await,
             Command::SetSwitchVector(command) => this.update_param(command).await,
             Command::NewSwitchVector(_) => Ok(None),
-            Command::DefNumberVector(command) => this.new_param(command),
+            Command::DefNumberVector(command) => this.new_param(command).await,
             Command::SetNumberVector(command) => this.update_param(command).await,
             Command::NewNumberVector(_) => Ok(None),
-            Command::DefTextVector(command) => this.new_param(command),
+            Command::DefTextVector(command) => this.new_param(command).await,
             Command::SetTextVector(command) => this.update_param(command).await,
             Command::NewTextVector(_) => Ok(None),
-            Command::DefBlobVector(command) => this.new_param(command),
-            Command::SetBlobVector(command) => this.update_param(command).await,
-            Command::DefLightVector(command) => this.new_param(command),
+            Command::DefBlobVector(command) => this.new_param(command).await,
+            Command::SetBlobVector(command) => {this.update_param(command).await},
+            Command::DefLightVector(command) => this.new_param(command).await,
             Command::SetLightVector(command) => this.update_param(command).await,
             Command::DelProperty(command) => this.delete_param(command.name).await,
             Command::EnableBlob(_) => Ok(None),
         }
     }
-    pub fn new_param<'a, C: CommandtoParam + std::fmt::Debug>(
+    pub async fn new_param<'a, C: CommandtoParam + std::fmt::Debug>(
         &'a mut self,
         def: C,
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
@@ -108,12 +108,16 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
         if !self.parameters.contains_key(&name) {
             self.names.push(name.clone());
         }
-        self.parameters.remove(&name);
-
+        
         let param = def.to_param();
-        // let value: Notify<Parameter> = param.into();
-        self.parameters
-            .insert(name.clone(), Arc::new(T::new(param)));
+        match self.parameters.get_mut(&name) {
+            Some(entry) => {
+                *entry.write().await = param;
+            },
+            None => {
+                self.parameters.insert(name.clone(), Arc::new(Notify::new(param)));
+            }
+        };
 
         Ok(Some(DeviceUpdate::AddParameter(name.clone())))
     }
@@ -124,7 +128,8 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
         match self.parameters.get(&new_command.get_name().clone()) {
             Some(param) => {
-                let mut param = param.lock().await;
+                let mut param = param.write().await;
+
                 new_command.update_param(&mut param)?;
                 Ok(Some(DeviceUpdate::UpdateParameter(
                     param.get_name().clone(),
@@ -146,7 +151,7 @@ impl<T: AsyncLockable<Parameter> + Debug> Device<T> {
 
                 match self.parameters.remove(name) {
                     Some(param) => {
-                        if let Some(group) = param.lock().await.get_group() {
+                        if let Some(group) = param.write().await.get_group() {
                             let group_count = self.group_counts.entry(group.clone()).or_insert(0);
                             *group_count -= 1;
                             if group_count == &0 {
@@ -176,27 +181,10 @@ mod tests {
     use super::*;
     use chrono::DateTime;
     use std::ops::Deref;
-    use std::sync::{Mutex, MutexGuard};
 
-    #[derive(Debug)]
-    struct TestLock<T>(std::sync::Mutex<T>);
-    impl<T: Send> AsyncLockable<T> for TestLock<T> {
-        type Lock<'a>
-            = MutexGuard<'a, T>
-        where
-            Self: 'a;
-
-        fn new(value: T) -> Self {
-            Self(Mutex::new(value))
-        }
-
-        async fn lock(&self) -> Self::Lock<'_> {
-            self.0.lock().unwrap()
-        }
-    }
     #[tokio::test]
     async fn test_update_switch() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_switch = DefSwitchVector {
@@ -217,14 +205,14 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device.new_param(def_switch).unwrap();
+        device.new_param(def_switch).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
         {
             let param = device
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::SwitchVector(stored) = param.deref() {
                 assert_eq!(
@@ -273,7 +261,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::SwitchVector(stored) = param.deref() {
                 assert_eq!(
@@ -304,7 +292,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_number() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_number = DefNumberVector {
@@ -328,7 +316,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device.new_param(def_number).unwrap();
+        device.new_param(def_number).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -336,7 +324,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::NumberVector(stored) = param.deref() {
                 assert_eq!(
@@ -392,7 +380,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::NumberVector(stored) = param.deref() {
                 assert_eq!(
@@ -426,7 +414,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_text() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_text = DefTextVector {
@@ -446,7 +434,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device.new_param(def_text).unwrap();
+        device.new_param(def_text).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -454,7 +442,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(
@@ -504,7 +492,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(
@@ -534,7 +522,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete() {
-        let mut device: Device<TestLock<Parameter>> = Device::new(String::from("CCD Simulator"));
+        let mut device: Device = Device::new(String::from("CCD Simulator"));
         let timestamp = Timestamp(DateTime::from_str("2022-10-13T07:41:56.301Z").unwrap());
 
         let def_text = DefTextVector {
@@ -554,7 +542,7 @@ mod tests {
             }],
         };
         assert_eq!(device.get_parameters().len(), 0);
-        device.new_param(def_text).unwrap();
+        device.new_param(def_text).await.unwrap();
         assert_eq!(device.get_parameters().len(), 1);
 
         {
@@ -562,7 +550,7 @@ mod tests {
                 .get_parameters()
                 .get("Exposure")
                 .unwrap()
-                .lock()
+                .read()
                 .await;
             if let Parameter::TextVector(stored) = param.deref() {
                 assert_eq!(

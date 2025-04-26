@@ -1,12 +1,12 @@
 use std::cmp::Ordering;
 
 use egui::{Response, Ui, Widget};
+use futures::executor::block_on;
 use indi::{
     client::active_device,
-    serialization::{OneNumber, OneText},
+    serialization::{OneNumber, OneText}, SwitchState,
 };
 use itertools::Itertools;
-use twinkle_client::task::spawn;
 
 pub struct ParameterWidget<'a, T> {
     parameter: &'a T,
@@ -40,21 +40,26 @@ impl<'a> ParameterWidget<'a, indi::NumberVector> {
                     ui.end_row();
                 }
             }
-            indi::PropertyPerm::RW => {
+            indi::PropertyPerm::RW | indi::PropertyPerm::WO => {
                 for (value_name, value) in &self.parameter.values {
                     let new_value = self
                         .param_new
                         .values
                         .entry(value_name.to_string())
                         .or_insert_with(|| value.clone());
-                    if let Some(label) = &value.label {
-                        ui.label(label);
+                    let label_value = if let Some(label) = &value.label {
+                        label
                     } else {
-                        ui.label(value_name);
-                    }
+                        value_name
+                    };
+                    ui.label(label_value);
                     ui.horizontal(|ui| {
                         ui.label(format!("{}", &value));
-                        ui.add(egui::DragValue::new(&mut new_value.value.hour));
+                        ui.add(
+                            egui::DragValue::new(&mut new_value.value.hour)
+                                .speed(value.step)
+                                .range(value.min..=value.max),
+                        );
                         if let Some(mut minute) = new_value.value.minute {
                             ui.label(":");
                             ui.add(egui::DragValue::new(&mut minute));
@@ -67,17 +72,16 @@ impl<'a> ParameterWidget<'a, indi::NumberVector> {
                     ui.end_row();
                 }
             }
-            indi::PropertyPerm::WO => {}
         }
     }
 
     fn render_set_button(&mut self, ui: &mut Ui) -> Response {
-        if self.parameter.perm == indi::PropertyPerm::RW {
+        if self.parameter.perm == indi::PropertyPerm::RW
+            || self.parameter.perm == indi::PropertyPerm::WO
+        {
             let response = ui.button("set");
             if response.clicked() {
-                spawn((), |_| {
-                    let active_device = self.device.clone();
-                    let parameter_name = self.parameter.name.clone();
+                block_on({
                     let values: std::vec::Vec<OneNumber> = self
                         .param_new
                         .values
@@ -88,7 +92,11 @@ impl<'a> ParameterWidget<'a, indi::NumberVector> {
                         })
                         .collect();
                     async move {
-                        active_device.change(&parameter_name, values).await.ok();
+                        self.device
+                            .parameter(&self.parameter.name)
+                            .await
+                            .and_then(|param| Ok(param.set(values)))
+                            .ok();
                     }
                 });
             }
@@ -132,15 +140,14 @@ impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
                 let selectable_label =
                     ui.selectable_label(value.value == indi::SwitchState::On, label);
                 if selectable_label.clicked() {
-                    spawn((), |_| {
-                        let active_device = self.device.clone();
-                        let parameter_name = self.parameter.name.clone();
-                        let value_name = value_name.clone();
-                        let value = value.value == indi::SwitchState::Off;
+                    block_on({
                         async move {
-                            active_device
-                                .change(&parameter_name, vec![(value_name.as_str(), value)])
+                            self.device
+                                .parameter(&self.parameter.name)
                                 .await
+                                .and_then(|param| {
+                                    Ok(param.set(vec![(value_name.as_str(), value.value == SwitchState::Off)]))
+                                })
                                 .ok();
                         }
                     });
@@ -165,7 +172,7 @@ impl<'a> ParameterWidget<'a, indi::TextVector> {
                     ui.end_row();
                 }
             }
-            indi::PropertyPerm::RW => {
+            indi::PropertyPerm::RW | indi::PropertyPerm::WO => {
                 for (value_name, value) in self
                     .parameter
                     .values
@@ -184,23 +191,21 @@ impl<'a> ParameterWidget<'a, indi::TextVector> {
                         ui.label(value_name);
                     }
                     ui.horizontal(|ui| {
-                        ui.label(&value.value);
                         ui.text_edit_singleline(&mut new_value.value);
                     });
                     ui.end_row();
                 }
             }
-            indi::PropertyPerm::WO => {}
         }
     }
 
     fn render_set_button(&mut self, ui: &mut Ui) -> Response {
-        if self.parameter.perm == indi::PropertyPerm::RW {
+        if self.parameter.perm == indi::PropertyPerm::RW
+            || self.parameter.perm == indi::PropertyPerm::WO
+        {
             let response = ui.button("set");
             if response.clicked() {
-                spawn((), |_| {
-                    let active_device = self.device.clone();
-                    let parameter_name = self.parameter.name.clone();
+                block_on({
                     let values: std::vec::Vec<OneText> = self
                         .param_new
                         .values
@@ -212,7 +217,11 @@ impl<'a> ParameterWidget<'a, indi::TextVector> {
                         .collect();
 
                     async move {
-                        active_device.change(&parameter_name, values).await.ok();
+                        self.device
+                            .parameter(&self.parameter.name)
+                            .await
+                            .and_then(|param| Ok(param.set(values)))
+                            .ok();
                     }
                 });
             }

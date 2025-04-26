@@ -3,28 +3,38 @@ use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 
-use twinkle_server::AppState;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+
+use tracing_subscriber::Layer;
+use twinkle_server::{flats, tracing_broadcast, AppState};
 
 #[tokio::main]
 async fn main() {
     // initialize tracing
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+    let fmt = tracing_subscriber::fmt::layer()
+    // .with_filter(LevelFilter::DEBUG)
         .with_span_events(
             tracing_subscriber::fmt::format::FmtSpan::NEW
                 | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
-        )
+        ).with_filter(LevelFilter::DEBUG);
+
+    tracing_subscriber::Registry::default()
+        .with(fmt)
+        .with(tracing_broadcast::TracingBroadcast::new("twinkle_server::flats", flats::TRACE_CHANNEL.clone()))
         .init();
     let state = AppState::default();
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::DELETE])
         .allow_headers(Any)
         .expose_headers(Any);
 
+        
     // build our application with a route
-    let app = twinkle_server::indi::routes(Router::new())
+    let app = twinkle_server::flats::routes(twinkle_server::counts::routes(twinkle_server::indi::routes(Router::new())))
         .with_state(state)
         .layer(cors)
         .fallback_service(ServeDir::new("assets"));

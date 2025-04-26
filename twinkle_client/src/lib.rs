@@ -10,6 +10,7 @@ pub use stream_ext::StreamExt;
 // pub mod feed;
 pub mod notify;
 pub mod task;
+pub mod agent;
 
 // https://stackoverflow.com/questions/74985153/implementing-drop-for-a-future-in-rust
 
@@ -110,6 +111,7 @@ pub trait MaybeSync: Sync {}
 #[cfg(not(target_family = "wasm"))]
 impl<T: Sync> MaybeSync for T {}
 
+#[derive(Debug)]
 pub struct TimeoutError {}
 
 pub async fn timeout<F: Future>(duration: Duration, future: F) -> Result<F::Output, TimeoutError> {

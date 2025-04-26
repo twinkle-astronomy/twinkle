@@ -11,20 +11,45 @@ use twinkle_client::task::{AsyncTask, Status, Task};
 
 pub mod fits;
 pub mod indi;
+pub mod counts;
+pub mod flats;
+
+
+#[cfg(debug_assertions)]
+fn get_websocket_base() -> String {
+    format!("ws://localhost:4000/")
+}
+
+#[cfg(not(debug_assertions))]
+fn get_websocket_base() -> String {
+    // format!("/indi?server_addr={}", encoded_value)
+    format!("/")
+}
+
+#[cfg(debug_assertions)]
+fn get_http_base() -> String {
+    format!("http://localhost:4000/")
+}
+
+#[cfg(not(debug_assertions))]
+fn get_http_base() -> String {
+    // format!("/indi?server_addr={}", encoded_value)
+    format!("/")
+}
 
 #[derive(From, Deref, DerefMut)]
-pub struct Agent<T, S>(AsyncTask<T, S>);
+pub struct Agent<S: std::marker::Sync>(AsyncTask<(), S>);
 
 trait Widget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response;
 }
 
-impl<S: Send + Sync + 'static> egui::Widget for &Agent<(), S>
+impl<S: Send + Sync + 'static> egui::Widget for &Agent<S>
 where
     for<'a> &'a S: crate::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let status = block_on(self.status().lock());
+        let status = block_on(self.status().read());
         if let Status::Running(state) = status.deref() {
             state.ui(ui)
         } else {
@@ -33,12 +58,12 @@ where
     }
 }
 
-impl<S: Send + Sync + 'static> egui::Widget for &mut Agent<(), S>
+impl<S: Send + Sync + 'static> egui::Widget for &mut Agent<S>
 where
     for<'a> &'a S: crate::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let status = block_on(self.status().lock());
+        let status = block_on(self.status().read());
         if let Status::Running(state) = status.deref() {
             state.ui(ui)
         } else {

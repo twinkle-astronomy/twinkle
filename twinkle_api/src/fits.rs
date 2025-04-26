@@ -4,6 +4,16 @@ use std::io::Cursor;
 use fitsrs::Fits;
 use ndarray::{ArrayD, IxDyn};
 
+pub trait AsFits {
+    fn as_fits(&self ) -> FitsImage;
+}
+
+impl AsFits for Vec<u8> {
+    fn as_fits(&self ) -> FitsImage {
+        FitsImage::new(self.as_slice())
+    }
+}
+
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 use core::arch::wasm32::*;
 

@@ -1,11 +1,12 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Add};
 pub mod device;
 pub mod number_vector;
 use std::io::BufRead;
-use std::ops::Deref;
+use std::ops::{AddAssign, Deref, Div, Mul, Sub, SubAssign};
 use std::sync::PoisonError;
 
 pub mod text_vector;
+// use derive_more::{Add, Div, Mul, Sub};
 use quick_xml::de::{IoReader, XmlRead};
 use serde::Serialize;
 
@@ -66,7 +67,7 @@ impl Timestamp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 
 pub enum Command {
     // Commands from Device to Connections
@@ -108,6 +109,11 @@ pub enum Command {
     GetProperties(GetProperties),
 }
 
+impl ToCommand for Command {
+    fn to_command(self, _device_name: String, _param_name: String) -> Command {
+        self
+    }
+}
 pub enum ParamUpdateType {
     Add,
     Update,
@@ -189,11 +195,11 @@ impl Command {
     }
 }
 
-pub trait ToCommand<T> {
+pub trait ToCommand {
     fn to_command(self, device_name: String, param_name: String) -> Command;
 }
 
-impl<I: Into<SwitchState> + Copy> ToCommand<Vec<(&str, I)>> for Vec<(&str, I)> {
+impl<I: Into<SwitchState> + Copy> ToCommand for Vec<(&str, I)> {
     fn to_command(self, device_name: String, param_name: String) -> Command {
         Command::NewSwitchVector(NewSwitchVector {
             device: device_name,
@@ -210,7 +216,7 @@ impl<I: Into<SwitchState> + Copy> ToCommand<Vec<(&str, I)>> for Vec<(&str, I)> {
     }
 }
 
-impl ToCommand<Vec<OneSwitch>> for Vec<OneSwitch> {
+impl ToCommand for Vec<OneSwitch> {
     fn to_command(self, device_name: String, param_name: String) -> Command {
         Command::NewSwitchVector(NewSwitchVector {
             device: device_name,
@@ -221,7 +227,7 @@ impl ToCommand<Vec<OneSwitch>> for Vec<OneSwitch> {
     }
 }
 
-impl ToCommand<Vec<(&str, f64)>> for Vec<(&str, f64)> {
+impl ToCommand for Vec<(&str, Sexagesimal)> {
     fn to_command(self, device_name: String, param_name: String) -> Command {
         Command::NewNumberVector(NewNumberVector {
             device: device_name,
@@ -231,13 +237,14 @@ impl ToCommand<Vec<(&str, f64)>> for Vec<(&str, f64)> {
                 .iter()
                 .map(|x| OneNumber {
                     name: String::from(x.0),
-                    value: x.1.into(),
+                    value: x.1,
                 })
                 .collect(),
         })
     }
 }
-impl ToCommand<Vec<OneNumber>> for Vec<OneNumber> {
+
+impl ToCommand for Vec<OneNumber> {
     fn to_command(self, device_name: String, param_name: String) -> Command {
         Command::NewNumberVector(NewNumberVector {
             device: device_name,
@@ -248,7 +255,7 @@ impl ToCommand<Vec<OneNumber>> for Vec<OneNumber> {
     }
 }
 
-impl ToCommand<Vec<(&str, &str)>> for Vec<(&str, &str)> {
+impl ToCommand for Vec<(&str, &str)> {
     fn to_command(self, device_name: String, param_name: String) -> Command {
         Command::NewTextVector(NewTextVector {
             device: device_name,
@@ -264,7 +271,7 @@ impl ToCommand<Vec<(&str, &str)>> for Vec<(&str, &str)> {
         })
     }
 }
-impl ToCommand<Vec<OneText>> for Vec<OneText> {
+impl ToCommand for Vec<OneText> {
     fn to_command(self, device_name: String, param_name: String) -> Command {
         Command::NewTextVector(NewTextVector {
             device: device_name,
@@ -321,7 +328,7 @@ impl From<UpdateError> for ClientErrors {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "defTextVector")]
 pub struct DefTextVector {
     #[serde(rename = "@device")]
@@ -347,7 +354,7 @@ pub struct DefTextVector {
     pub texts: Vec<DefText>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "defText")]
 pub struct DefText {
     #[serde(rename = "@name")]
@@ -358,7 +365,7 @@ pub struct DefText {
     pub value: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "setTextVector")]
 pub struct SetTextVector {
     #[serde(rename = "@device")]
@@ -378,7 +385,7 @@ pub struct SetTextVector {
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "newTextVector")]
 pub struct NewTextVector {
     #[serde(rename = "@device")]
@@ -392,7 +399,7 @@ pub struct NewTextVector {
     pub texts: Vec<OneText>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "oneText")]
 pub struct OneText {
     #[serde(rename = "@name")]
@@ -408,7 +415,127 @@ pub struct Sexagesimal {
     pub second: Option<f64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+impl Sexagesimal {
+    fn normalize(&mut self) {
+        if let Some(second) = self.second {
+            if second >= 60.0  || second < 0.0{
+                unimplemented!()
+            }
+        }
+        if let Some(minute) = self.minute {
+            if minute >= 60.0 || minute < 0.0 {
+                unimplemented!()
+            }
+        }
+    }
+    pub fn max(self, other: impl Into<Sexagesimal> + std::marker::Copy) -> Sexagesimal {
+        if f64::from(self) >= f64::from(other.into()) {
+            self
+        } else {
+            other.into()
+        }
+    }
+    pub fn min(self, other: impl Into<Sexagesimal> + std::marker::Copy) -> Sexagesimal {
+        if f64::from(self) < f64::from(other.into()) {
+            self
+        } else {
+            other.into()
+        }
+    }
+    fn add_options(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
+        match (lhs, rhs) {
+            (None, None) => None,
+            (None, Some(value)) => Some(value),
+            (Some(value), None) => Some(value),
+            (Some(lhs), Some(rhs)) => Some(lhs + rhs),
+        }
+    }
+    fn sub_options(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
+        match (lhs, rhs) {
+            (None, None) => None,
+            (None, Some(value)) => Some(-value),
+            (Some(value), None) => Some(value),
+            (Some(lhs), Some(rhs)) => Some(lhs - rhs),
+        }
+    }
+    fn mul_options(lhs: Option<f64>, rhs: f64) -> Option<f64> {
+        match lhs {
+            None => None,
+            Some(lhs) => Some(lhs * rhs),
+        }
+    }
+    fn div_options(lhs: Option<f64>, rhs: f64) -> Option<f64> {
+        match lhs {
+            None => None,
+            Some(lhs) => Some(lhs / rhs),
+        }
+    }
+}
+
+impl<T: Into<Sexagesimal> + std::marker::Copy> Add<T> for Sexagesimal {
+    type Output = Sexagesimal;
+
+    fn add(mut self, rhs: T) -> Self::Output {
+        self.hour += rhs.into().hour;
+        self.minute = Self::add_options(self.minute, rhs.into().minute);
+        self.second = Self::add_options(self.second, rhs.into().second);
+        self.normalize();
+        self
+    }
+}
+
+impl<T: Into<Sexagesimal> + std::marker::Copy> Sub<T> for Sexagesimal {
+    type Output = Sexagesimal;
+
+    fn sub(mut self, rhs: T) -> Self::Output {
+        self.hour -= rhs.into().hour;
+        self.minute = Self::sub_options(self.minute, rhs.into().minute);
+        self.second = Self::sub_options(self.second, rhs.into().second);
+        self.normalize();
+
+        self
+    }
+}
+
+impl<T: Into<Sexagesimal> + std::marker::Copy> AddAssign<T> for Sexagesimal {
+    fn add_assign(&mut self, rhs: T) {
+        self.hour += rhs.into().hour;
+        self.minute = Self::add_options(self.minute, rhs.into().minute);
+        self.second = Self::add_options(self.second, rhs.into().second);
+        self.normalize();
+    }
+}
+impl<T: Into<Sexagesimal> + std::marker::Copy> SubAssign<T> for Sexagesimal {
+    fn sub_assign(&mut self, rhs: T) {
+        self.hour -= rhs.into().hour;
+        self.minute = Self::sub_options(self.minute, rhs.into().minute);
+        self.second = Self::sub_options(self.second, rhs.into().second);
+        self.normalize();
+    }
+}
+
+impl<T: Into<Sexagesimal> + std::marker::Copy> Mul<T> for Sexagesimal {
+    type Output = Sexagesimal;
+    fn mul(mut self, rhs: T) -> Self::Output {
+        self.hour *= rhs.into().hour;
+        self.minute = Self::mul_options(self.minute, f64::from(rhs.into()));
+        self.second = Self::mul_options(self.second, f64::from(rhs.into()));
+        self.normalize();
+        self
+    }
+}
+
+impl<T: Into<Sexagesimal> + std::marker::Copy> Div<T> for Sexagesimal {
+    type Output = Sexagesimal;
+    fn div(mut self, rhs: T) -> Self::Output {
+        self.hour *= rhs.into().hour;
+        self.minute = Self::div_options(self.minute, f64::from(rhs.into()));
+        self.second = Self::div_options(self.second, f64::from(rhs.into()));
+        self.normalize();
+        self
+    }
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "defNumberVector")]
 pub struct DefNumberVector {
     #[serde(rename = "@device")]
@@ -434,7 +561,7 @@ pub struct DefNumberVector {
     pub numbers: Vec<DefNumber>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "defNumber")]
 pub struct DefNumber {
     #[serde(rename = "@name")]
@@ -453,7 +580,7 @@ pub struct DefNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "setNumberVector")]
 pub struct SetNumberVector {
     #[serde(rename = "@device")]
@@ -473,7 +600,7 @@ pub struct SetNumberVector {
     pub numbers: Vec<SetOneNumber>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "oneNumber")]
 pub struct SetOneNumber {
     #[serde(rename = "@name")]
@@ -488,7 +615,7 @@ pub struct SetOneNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "newNumberVector")]
 pub struct NewNumberVector {
     #[serde(rename = "@device")]
@@ -511,7 +638,7 @@ pub struct OneNumber {
     pub value: Sexagesimal,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "defSwitchVector")]
 pub struct DefSwitchVector {
     #[serde(rename = "@device")]
@@ -539,7 +666,7 @@ pub struct DefSwitchVector {
     pub switches: Vec<DefSwitch>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "defSwitch")]
 pub struct DefSwitch {
     #[serde(rename = "@name")]
@@ -550,7 +677,7 @@ pub struct DefSwitch {
     pub value: SwitchState,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "setSwitchVector")]
 pub struct SetSwitchVector {
     #[serde(rename = "@device")]
@@ -569,7 +696,7 @@ pub struct SetSwitchVector {
     #[serde(rename = "oneSwitch", default)]
     pub switches: Vec<OneSwitch>,
 }
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "newSwitchVector")]
 pub struct NewSwitchVector {
     #[serde(rename = "@device")]
@@ -583,7 +710,7 @@ pub struct NewSwitchVector {
     pub switches: Vec<OneSwitch>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "oneSwitch")]
 pub struct OneSwitch {
     #[serde(rename = "@name")]
@@ -592,7 +719,7 @@ pub struct OneSwitch {
     pub value: SwitchState,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "defLightVector")]
 pub struct DefLightVector {
     #[serde(rename = "@device")]
@@ -614,7 +741,7 @@ pub struct DefLightVector {
     pub lights: Vec<DefLight>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "defLight")]
 pub struct DefLight {
     #[serde(rename = "@name")]
@@ -625,7 +752,7 @@ pub struct DefLight {
     value: PropertyState,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "setLightVector")]
 pub struct SetLightVector {
     #[serde(rename = "@device")]
@@ -643,7 +770,7 @@ pub struct SetLightVector {
     pub lights: Vec<OneLight>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "oneLight")]
 pub struct OneLight {
     #[serde(rename = "@name")]
@@ -652,7 +779,7 @@ pub struct OneLight {
     value: PropertyState,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename = "defBLOBVector")]
 pub struct DefBlobVector {
     #[serde(rename = "@device")]
@@ -678,7 +805,7 @@ pub struct DefBlobVector {
     pub blobs: Vec<DefBlob>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "defBLOB")]
 pub struct DefBlob {
     #[serde(rename = "@name")]
@@ -725,7 +852,7 @@ pub struct OneBlob {
     pub value: Blob,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "enableBLOB")]
 pub struct EnableBlob {
     #[serde(rename = "@device")]
@@ -747,7 +874,7 @@ pub struct Message {
     pub message: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "delProperty")]
 pub struct DelProperty {
     #[serde(rename = "@device")]
@@ -760,7 +887,7 @@ pub struct DelProperty {
     pub message: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename = "getProperties")]
 pub struct GetProperties {
     #[serde(rename = "@version")]
@@ -770,13 +897,6 @@ pub struct GetProperties {
     #[serde(rename = "@name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
-
-// pub trait XmlSerialization {
-//     fn write<'a, T: std::io::Write>(
-//         &self,
-//         xml_writer: &'a mut Writer<T>,
-//     ) -> XmlResult<&'a mut Writer<T>>;
-// }
 
 #[derive(Debug)]
 pub enum DeError {

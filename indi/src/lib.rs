@@ -50,65 +50,65 @@
 //! }
 //! ```
 //!
-//! ### Using the Client interface
-//! The simple usage above has its uses, but if you want to track and modify the state of devices at an INDI server it is recommended to use
-//! the [client interface](crate::client::Client).  The client allows you to get [devices](crate::client::device::ActiveDevice),
-//! be [notified](crate::client::notify) of changes to those devices, and request [changes](crate::client::device::ActiveDevice::change).
-//! #### Example
-//! ```no_run
-//! use std::time::Duration;
-//! use tokio::net::TcpStream;
-//! use twinkle_client::task::Task;
-//! use twinkle_client::task::Status;
-//! use std::ops::Deref;
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     // Create a client with a connection to localhost listening for all device properties.
-//!     let client_task = indi::client::new(
-//!         TcpStream::connect("127.0.0.1:7624").await.expect("Connecting to INDI server"),
-//!         None,
-//!         None);
-//!     let status = client_task.status();
-//!     if let Status::Running(client) = status.lock().await.deref() {
-//!         // Get an specific camera device
-//!         let camera = client.lock().await
-//!             .get_device("ZWO CCD ASI294MM Pro")
-//!             .await
-//!             .expect("Getting camera device");
-//!    
-//!         // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
-//!         camera
-//!             .change("CONNECTION", vec![("CONNECT", true)])
-//!             .await
-//!             .expect("Connecting to camera");
-//!    
-//!         // Enabling blob transport for the camera.  
-//!         camera
-//!             .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
-//!             .await
-//!             .expect("Enabling image retrieval");
-//!    
-//!         // Configuring a varienty of the camera's properties at the same time.
-//!         tokio::try_join!(
-//!             camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
-//!             camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
-//!             camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
-//!             camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
-//!             camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
-//!             camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
-//!             )
-//!             .expect("Configuring camera");
-//!         #[cfg(feature = "fitsio")]
-//!         {
-//!             // Capture a 5 second exposure from the camera
-//!             let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
-//!    
-//!             // Save the fits file to disk.
-//!             fits.save("flat.fits").expect("Saving image");
-//!         }
-//!     };
-//! }
+// ! ### Using the Client interface
+// ! The simple usage above has its uses, but if you want to track and modify the state of devices at an INDI server it is recommended to use
+// ! the [client interface](crate::client::Client).  The client allows you to get [devices](crate::client::device::ActiveDevice),
+// ! be [notified](crate::client::notify) of changes to those devices, and request [changes](crate::client::device::ActiveDevice::change).
+// ! #### Example
+// ! ```no_run
+// ! use std::time::Duration;
+// ! use tokio::net::TcpStream;
+// ! use twinkle_client::task::Task;
+// ! use twinkle_client::task::Status;
+// ! use std::ops::Deref;
+// !
+// ! #[tokio::main]
+// ! async fn main() {
+// !     // Create a client with a connection to localhost listening for all device properties.
+// !     let client_task = indi::client::new(
+// !         TcpStream::connect("127.0.0.1:7624").await.expect("Connecting to INDI server"),
+// !         None,
+// !         None);
+// !     let status = client_task.status();
+// !     if let Status::Running(client) = status.lock().await.deref() {
+// !         // Get an specific camera device
+// !         let camera = client.lock().await
+// !             .get_device("ZWO CCD ASI294MM Pro")
+// !             .await
+// !             .expect("Getting camera device");
+// !    
+// !         // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
+// !         camera
+// !             .change("CONNECTION", vec![("CONNECT", true)])
+// !             .await
+// !             .expect("Connecting to camera");
+// !    
+// !         // Enabling blob transport for the camera.  
+// !         camera
+// !             .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
+// !             .await
+// !             .expect("Enabling image retrieval");
+// !    
+// !         // Configuring a varienty of the camera's properties at the same time.
+// !         tokio::try_join!(
+// !             camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
+// !             camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
+// !             camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
+// !             camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
+// !             camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
+// !             camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
+// !             )
+// !             .expect("Configuring camera");
+// !         #[cfg(feature = "fitsio")]
+// !         {
+// !             // Capture a 5 second exposure from the camera
+// !             let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
+// !    
+// !             // Save the fits file to disk.
+// !             fits.save("flat.fits").expect("Saving image");
+// !         }
+// !     };
+// ! }
 pub use tokio;
 
 use quick_xml::events::attributes::AttrError;
@@ -149,6 +149,14 @@ pub enum SwitchState {
     Off,
 }
 
+impl From<bool> for SwitchState {
+    fn from(value: bool) -> Self {
+        match value {
+            true => SwitchState::On,
+            false => SwitchState::Off,
+        }
+    }
+}
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum SwitchRule {
     OneOfMany,
@@ -185,6 +193,12 @@ pub struct Switch {
     pub value: SwitchState,
 }
 
+impl Into<SwitchState> for Switch {
+    fn into(self) -> SwitchState {
+        self.value
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct SwitchVector {
     pub name: String,
@@ -216,6 +230,12 @@ pub struct Number {
     pub max: f64,
     pub step: f64,
     pub value: Sexagesimal,
+}
+
+impl Into<Sexagesimal> for Number {
+    fn into(self) -> Sexagesimal {
+        self.value
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -295,6 +315,7 @@ pub struct TextVector {
     pub values: HashMap<String, Text>,
 }
 
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Blob {
     pub label: Option<String>,
@@ -362,6 +383,12 @@ impl Parameter {
             Parameter::BlobVector(p) => &p.label,
         }
     }
+    pub fn get_label_display(&self) -> &String {
+        match self.get_label() {
+            Some(label) => label,
+            None => self.get_name()
+        }
+    }
     pub fn get_state(&self) -> &PropertyState {
         match self {
             Parameter::TextVector(p) => &p.state,
@@ -404,14 +431,6 @@ impl TryEq<Parameter> for Vec<OneSwitch> {
     }
 }
 
-impl Into<SwitchState> for bool {
-    fn into(self) -> SwitchState {
-        match self {
-            true => SwitchState::On,
-            false => SwitchState::Off,
-        }
-    }
-}
 impl<I: Into<SwitchState> + Copy> TryEq<Parameter> for Vec<(&str, I)> {
     fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
         let current_values = other.get_values::<HashMap<String, Switch>>()?;
@@ -431,6 +450,17 @@ impl TryEq<Parameter> for Vec<(&str, f64)> {
         }))
     }
 }
+
+impl TryEq<Parameter> for Vec<(&str, Sexagesimal)> {
+    fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {
+        let current_values = other.get_values::<HashMap<String, Number>>()?;
+
+        Ok(self.iter().all(|other_value| {
+            Some(other_value.1) == current_values.get(other_value.0).map(|x| x.value.into())
+        }))
+    }
+}
+
 
 impl TryEq<Parameter> for Vec<OneNumber> {
     fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {

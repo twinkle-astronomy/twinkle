@@ -1,43 +1,20 @@
-use crate::{indi::agent::State, Agent};
-use egui::Window;
-use futures::executor::block_on;
-use std::{
-    collections::BTreeMap,
-    sync::{mpsc, Arc, OnceLock},
-};
-use tokio::sync::Mutex;
-use twinkle_client::task::Task;
-
+use crate::counts::CountIndex;
+use crate::flats::FlatManager;
+use crate::indi::IndiManager;
+use std::boxed::Box;
+use std::sync::{mpsc, OnceLock};
 static GLOBAL_CALLBACKS: OnceLock<
     std::sync::mpsc::Sender<Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>>,
 > = OnceLock::new();
 
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)]
 pub struct App {
-    server_addr: String,
+    indi_manager: IndiManager,
+    task_ids: CountIndex,
+    flats_manager: FlatManager,
 
-    #[serde(skip)]
-    agents: BTreeMap<String, Agent<(), Arc<Mutex<State>>>>,
-
-    #[serde(skip)]
     callbacks: std::sync::mpsc::Receiver<
         Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>,
     >,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        let (tx, callbacks) = mpsc::channel();
-        GLOBAL_CALLBACKS
-            .set(tx)
-            .expect("GLOBAL_CALLBACKS already set.");
-        Self {
-            server_addr: "indi:7624".to_string(),
-            agents: Default::default(),
-            callbacks,
-        }
-    }
 }
 
 impl App {
@@ -49,20 +26,30 @@ impl App {
         }
     }
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let this: Self = if let Some(storage) = cc.storage {
-            eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
-        } else {
-            Default::default()
-        };
+        // let this: Self = if let Some(storage) = cc.storage {
+        //     eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
+        // } else {
+        //     Default::default()
+        // };
 
-        this
+        let (tx, callbacks) = mpsc::channel();
+        GLOBAL_CALLBACKS
+            .set(tx)
+            .expect("GLOBAL_CALLBACKS already set.");
+
+        Self {
+            task_ids: CountIndex::new(cc.egui_ctx.clone()),
+            callbacks,
+            indi_manager: IndiManager::new(cc),
+            flats_manager: FlatManager::new(),
+        }
     }
 }
 
 impl eframe::App for App {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
+        self.indi_manager.save(storage);
     }
 
     #[tracing::instrument(skip_all)]
@@ -71,40 +58,29 @@ impl eframe::App for App {
         while let Ok(cb) = self.callbacks.try_recv() {
             cb(ctx, frame);
         }
-        self.agents.retain(|id, agent| {
-            if !block_on(agent.running()) {
-                return false;
-            }
-            let mut open = true;
-            Window::new(id.to_string())
-                .open(&mut open)
-                .resizable(true)
-                .scroll([true, false])
-                .show(ctx, |ui| {
-                    ui.add(agent);
-                });
-            open
-        });
+
+
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::widgets::global_theme_preference_buttons(ui);
+                if ui.button("Organize windows").clicked() {
+                    ui.ctx().memory_mut(|mem| mem.reset_areas());
+                }
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.text_edit_singleline(&mut self.server_addr);
+        egui::SidePanel::left("left").show(ctx, |ui| {
+            ui.add(&mut self.indi_manager);
+            ui.separator();
+            ui.add(&mut self.flats_manager);
+            ui.separator();
+            ui.add(&mut self.task_ids);
+        });
 
-            if ui.button("Connect").clicked() {
-                self.agents
-                    .entry(format!("indi -> {}", self.server_addr.clone()))
-                    .or_insert_with(|| {
-                        crate::indi::agent::new(
-                            self.server_addr.clone(),
-                            ctx.clone(),
-                            frame.gl().cloned(),
-                        )
-                    });
-            }
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.task_ids.windows(ui);
+            self.indi_manager.windows(ui);
+            self.flats_manager.windows(ui);
         });
     }
 }

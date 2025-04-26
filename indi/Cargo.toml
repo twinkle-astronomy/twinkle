@@ -17,7 +17,6 @@ encoding = {version = "0.2" }
 base64 = {version = "0.13.0" }
 log = {version = "0.4.17" }
 derivative = {version = "2.2.0" }
-fitsio = {version="0.21.2", features = ["array"], optional=true }
 libc = {version = "0.2.139", optional=true }
 ndarray = {version = "0.15.6" }
 crossbeam-channel = {version = "0.5.6" }
@@ -35,16 +34,15 @@ derive_more = { version = "2.0.1", features = ["full"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-tracing-test = "0.2.5"
+tracing-test = {version = "0.2.5", features = ["no-env-filter"] }
 futures-test = "0.3.31"
+fitsrs = "0.3.2"
+tracing-subscriber = "0.3.19"
 
 [features]
 default = []
-full = ["fitsio"]
-fitsio = [
-    "dep:libc",
-    "dep:fitsio",
-]
+full = []
+
 
 wasm = [
     "dep:wasm-bindgen-futures",

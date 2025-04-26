@@ -14,7 +14,7 @@ use derive_more::{Deref, DerefMut, From};
 use std::{fmt::Debug, future::Future};
 use tokio::sync::{mpsc::UnboundedReceiver, oneshot, Mutex};
 use tokio_stream::StreamExt;
-use tracing::{error, info, Instrument};
+use tracing::{error, Instrument};
 use twinkle_client::{
     self,
     task::{spawn_with_state, AsyncTask},
@@ -28,8 +28,7 @@ use std::{
 };
 
 use crate::{
-    serialization, Command, DeError, GetProperties, Parameter, TypeError, UpdateError,
-    INDI_PROTOCOL_VERSION,
+    serialization, Command, DeError, GetProperties, TypeError, UpdateError, INDI_PROTOCOL_VERSION,
 };
 pub use twinkle_client::notify::{self, wait_fn, Notify};
 
@@ -97,7 +96,7 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
 }
 
 #[derive(From, Deref, DerefMut)]
-pub struct ClientTask<S>(AsyncTask<(), S>);
+pub struct ClientTask<S: std::marker::Sync>(AsyncTask<(), S>);
 
 /// Create a new Client object that will stay in sync with the INDI server
 /// on the other end of `connection`.
@@ -167,6 +166,7 @@ pub fn start_with_streams(
     let writer_connected = connected.clone();
 
     let (reader_finished_tx, reader_finished_rx) = oneshot::channel::<()>();
+
     feedback
         .send(serialization::Command::GetProperties(GetProperties {
             version: INDI_PROTOCOL_VERSION.to_string(),
@@ -174,6 +174,7 @@ pub fn start_with_streams(
             name: writer_parameter,
         }))
         .unwrap();
+
     let writer_future = async move {
         let sender = async {
             loop {
@@ -189,12 +190,10 @@ pub fn start_with_streams(
         if let Err(e) = sender {
             error!("Error in sending task: {:?}", e);
         }
-        dbg!("writer loop done");
 
         if let Err(e) = writer.shutdown().await {
             error!("Error shutting down writer: {:?}", e);
         }
-        dbg!("shutdown writer");
         let _ = reader_finished_rx.await;
         {
             *writer_connected.write().await = false;
@@ -211,21 +210,16 @@ pub fn start_with_streams(
             };
             match command {
                 Ok(command) => {
-                    dbg!(&command);
                     let locked_devices = thread_devices.write().await;
-                    dbg!("locked_devices");
                     let update_result = match command.param_update_type() {
                         serialization::ParamUpdateType::Add => {
-                            dbg!("add");
                             let device_name = command.device_name().cloned();
                             if let Some(device_name) = device_name {
                                 if locked_devices.contains_key(&device_name) {
-                                    dbg!("add -> update");
                                     locked_devices.update(command).await
                                 } else {
-                                    dbg!("add -> create");
                                     let mut locked_devices = locked_devices;
-                                    dbg!(locked_devices.create(command).await)
+                                    locked_devices.create(command).await
                                 }
                             } else {
                                 Ok(None)
@@ -251,7 +245,6 @@ pub fn start_with_streams(
                         }
                         serialization::ParamUpdateType::Noop => Ok(None),
                     };
-                    dbg!(&update_result);
                     if let Err(e) = update_result {
                         error!("Device update error: {:?}", e);
                     }
@@ -263,7 +256,6 @@ pub fn start_with_streams(
         }
         *thread_devices.write().await = Default::default();
         let _ = reader_finished_tx.send(());
-        info!("reader finished");
     }
     .instrument(tracing::info_span!("indi_reader"));
 
@@ -327,8 +319,8 @@ impl Client {
         &'a self,
         name: &str,
     ) -> Result<active_device::ActiveDevice, notify::Error<()>> {
-        let subs = self.devices.subscribe().await;
-        wait_fn(subs, Duration::from_secs(1), |devices| {
+        let mut subs = self.devices.subscribe().await;
+        wait_fn(&mut subs, Duration::from_secs(10), |devices| {
             if let Some(device) = devices.get(name) {
                 return Ok(notify::Status::Complete(active_device::ActiveDevice::new(
                     String::from(name),
@@ -384,7 +376,7 @@ impl Client {
     }
 }
 
-pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device<Notify<Parameter>>>>>;
+pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device>>>;
 
 pub trait DeviceStore {
     /// Update the state of the appropriate device property for a command that came from an INDI server.
@@ -426,14 +418,13 @@ impl DeviceStore for MemoryDeviceStore {
         let name = command.device_name();
         match name {
             Some(name) => {
-                dbg!("getting entry");
                 let device = self
                     .entry(name.clone())
-                    .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))));
+                    .or_insert({
+                        Arc::new(Notify::new(device::Device::new(name.clone())))
+                    });
                 let device_lock = device.write().await;
-                dbg!("got device_lock");
                 Ok(Device::update(device_lock, command).await?)
-                // Ok(None)
             }
             None => Ok(None),
         }
@@ -469,7 +460,7 @@ mod test {
     use futures::channel::oneshot;
     use tokio::net::{TcpListener, TcpStream};
     use tracing_test::traced_test;
-    use twinkle_client::task::{Abortable, Task};
+    use twinkle_client::task::Task;
 
     use std::collections::HashSet;
 
@@ -484,14 +475,12 @@ mod test {
 
             let (server_continue_tx, server_continue_rx) = oneshot::channel::<()>();
             // Server behavior
-            tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 let (mut _socket, _) = listener.accept().await.unwrap();
                 let (mut writer, mut reader) = _socket.to_indi();
+                let _msg = reader.read().await;
 
-                let msg = reader.read().await;
-                info!("Got: {:?}", msg);
                 server_continue_rx.await.expect("waiting to continue");
-                info!("Sending commands");
                 writer
                     .write(serialization::Command::DefTextVector(
                         serialization::DefTextVector {
@@ -694,114 +683,53 @@ mod test {
                     ))
                     .await
                     .unwrap();
-                info!("Shutting down server");
             });
 
             let connection = TcpStream::connect(server_addr)
                 .await
                 .expect("connecting to indi");
-            let client_task = new(connection, None, None).abort_on_drop(true);
 
-            let _ = tokio::join!(
-                client_task.with_state(|state| {
-                    info!("building device_changes 1");
+            let client_task = new(connection, None, None);
+            let mut devices = client_task
+                .status()
+                .changes()
+                .next()
+                .await
+                .unwrap()
+                .unwrap()
+                .with_state(|state| {
                     let client = state.clone();
                     async move {
-                        info!("starting device_changes 1");
                         let lock = client.lock().await;
-                        let mut devices = lock.get_devices().subscribe().await;
-                        info!("subscribed to devices, continuing server");
-                        let _ = server_continue_tx.send(());
-
-                        let mut device_names_expected = vec![
-                            vec![].into_iter().collect(),
-                            vec!["device1".to_string()].into_iter().collect(),
-                            vec!["device1".to_string(), "device2".to_string()]
-                                .into_iter()
-                                .collect(),
-                            vec!["device2".to_string()].into_iter().collect(),
-                            HashSet::new(),
-                        ]
-                        .into_iter();
-                        loop {
-                            let expected = match device_names_expected.next() {
-                                Some(expected) => expected,
-                                None => break,
-                            };
-                            match devices.next().await {
-                                Some(Ok(devices)) => {
-                                    let devices: HashSet<String> =
-                                        devices.keys().map(Clone::clone).collect();
-                                    info!("expected: {:?}", &expected);
-                                    info!("devices : {:?}", devices);
-                                    info!("****************************");
-                                    assert_eq!(devices, expected);
-                                }
-                                _ => panic!("Not enough device changes"),
-                            }
-                        }
-                        info!("finishing device_changes 1");
+                        lock.get_devices().subscribe().await
                     }
-                }) // ,client_task.with_state(|state| {
-                   //     info!("building device_changes 2");
-                   //     let client = state.clone();
-                   //     async move {
-                   //         info!("starting device_changes 2");
-                   //         let lock = client.lock().await;
-                   //         let _devices = lock.get_device("device3").await.expect("Finding device3");
-                   //         info!("finishing device_changes 2");
-                   //     }})
-            );
-            info!("******************************************************");
-            // todo!();
-            // let device_changes = client_task.with_state(|state| {
-            //     info!("building device_changes");
-            //     let client = state.clone();
-            //     async move {
-            //         info!("starting device_changes");
-            //         let mut devices = {
-            //             let lock = client.lock().await;
-            //             // lock.get_devices().subscribe().await
-            //         };
+                })
+                .await
+                .unwrap();
 
-            //     }
-            // });
-            // let device_task = client_task.with_state(|state| {
-            //     info!("building device_changes");
-            //     let client = state.clone();
-            //     async move {
-            //         info!("starting device_changes");
-            //         let mut device3 = {
-            //             let lock = client.lock().await;
-            //             // lock
-            //             //     .get_device("device3")
-            //             //     .await
-            //             //     .unwrap()
-            //             //     .subscribe()
-            //             //     .await
-            //         };
-            //         // info!("Got device3");
+            let _ = server_continue_tx.send(());
 
-            //         // loop {
-            //         //     match device3.next().await {
-            //         //         Some(Ok(device)) => {
-            //         //             let parameter_names: HashSet<String> =
-            //         //                 device.get_parameters().keys().map(Clone::clone).collect();
-            //         //             dbg!(parameter_names);
-            //         //         }
-            //         //         _ => break,
-            //         //     }
-            //         // }
-            //         // dbg!("asldkjfalskjfalskdjf");
-            //     }
-            // });
+            let mut device_names_expected = vec![
+                vec![].into_iter().collect(),
+                vec!["device1".to_string()].into_iter().collect(),
+                vec!["device1".to_string(), "device2".to_string()]
+                    .into_iter()
+                    .collect(),
+                vec!["device2".to_string()].into_iter().collect(),
+                HashSet::new(),
+            ]
+            .into_iter();
 
-            // tokio::time::sleep(Duration::from_millis(100)).await;
-            // let _ = tokio::join!(
-            //     async move { device_task.await.unwrap() },
-            //     async move { device_changes.await.unwrap() },
-            //     async move { server.await.unwrap() }
-            // );
+            while let Some(expected) = device_names_expected.next() {
+                match devices.next().await {
+                    Some(Ok(devices)) => {
+                        let devices: HashSet<String> = devices.keys().map(Clone::clone).collect();
+                        assert_eq!(devices, expected);
+                    }
+                    _ => panic!("Not enough device changes"),
+                }
+            }
+            task.await.unwrap();
         })
         .await
         .expect("timeout");
