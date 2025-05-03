@@ -21,7 +21,7 @@ pub trait Joinable<T> {
 }
 
 pub trait IsRunning {
-    fn running(&self) -> impl std::future::Future<Output = bool> + Send;
+    fn running(&self) -> bool;
 }
 
 pub trait Abortable {
@@ -237,11 +237,8 @@ impl<T, S: Send + Sync + 'static> Task<S> for AsyncTask<T, S> {
 }
 
 impl<T: Send, S: Send + Sync + 'static> IsRunning for AsyncTask<T, S> {
-    async fn running(&self) -> bool {
-        match self.status.read().await.deref() {
-            Status::Running(_) => true,
-            _ => false,
-        }
+    fn running(&self) -> bool {
+        !self.output_rx.is_closed()
     }
 }
 

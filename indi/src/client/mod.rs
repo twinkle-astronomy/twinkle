@@ -12,7 +12,7 @@ use crate::{
 };
 use derive_more::{Deref, DerefMut, From};
 use std::{fmt::Debug, future::Future};
-use tokio::sync::{mpsc::UnboundedReceiver, oneshot, Mutex};
+use tokio::sync::{mpsc::UnboundedReceiver, oneshot};
 use tokio_stream::StreamExt;
 use tracing::{error, Instrument};
 use twinkle_client::{
@@ -113,7 +113,7 @@ pub fn new<T: AsyncClientConnection>(
     connection: T,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> ClientTask<Arc<Mutex<Client>>> {
+) -> (ClientTask<()>, Client) {
     let (feedback, commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
     let client = Client {
         devices: Default::default(),
@@ -121,7 +121,7 @@ pub fn new<T: AsyncClientConnection>(
         feedback: Some(feedback),
     };
     let (writer, reader) = connection.to_indi();
-    start_with_streams(client, commands, writer, reader, device, parameter)
+    (start_with_streams(&client, commands, writer, reader, device, parameter), client)
 }
 
 pub fn new_with_streams(
@@ -129,14 +129,14 @@ pub fn new_with_streams(
     reader: impl AsyncReadConnection + MaybeSend + 'static,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> ClientTask<Arc<Mutex<Client>>> {
+) -> (ClientTask<()>, Client) {
     let (feedback, incoming_commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
     let client = Client {
         devices: Default::default(),
         connected: Arc::new(Notify::new(false)),
         feedback: Some(feedback),
     };
-    start_with_streams(client, incoming_commands, writer, reader, device, parameter)
+    (start_with_streams(&client, incoming_commands, writer, reader, device, parameter), client)
 }
 
 pub fn start<T: AsyncClientConnection>(
@@ -145,19 +145,19 @@ pub fn start<T: AsyncClientConnection>(
     connection: T,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> ClientTask<Arc<Mutex<Client>>> {
+) -> ClientTask<()> {
     let (writer, reader) = connection.to_indi();
-    start_with_streams(client, incoming_commands, writer, reader, device, parameter)
+    start_with_streams(&client, incoming_commands, writer, reader, device, parameter)
 }
 
 pub fn start_with_streams(
-    client: Client,
+    client: &Client,
     mut incoming_commands: UnboundedReceiver<Command>,
     mut writer: impl AsyncWriteConnection + MaybeSend + 'static,
     mut reader: impl AsyncReadConnection + MaybeSend + 'static,
     device: Option<&str>,
     parameter: Option<&str>,
-) -> ClientTask<Arc<Mutex<Client>>> {
+) -> ClientTask<()> {
     let connected = client.connected.clone();
     let feedback = client.feedback.as_ref().unwrap().clone();
 
@@ -259,7 +259,7 @@ pub fn start_with_streams(
     }
     .instrument(tracing::info_span!("indi_reader"));
 
-    let task = spawn_with_state(Arc::new(Mutex::new(client)), |_| async {
+    let task = spawn_with_state((), |_| async {
         tokio::select! {
             _ = writer_future => tracing::info!("writer_future finisehd"),
             _ = reader_future => tracing::info!("reader_future finisehd"),
@@ -372,7 +372,6 @@ impl Client {
 
     pub fn shutdown(&mut self) {
         self.feedback.take();
-        // self.devices = Arc::new(Notify::new(Default::default()));
     }
 }
 
@@ -476,8 +475,8 @@ mod test {
             let (server_continue_tx, server_continue_rx) = oneshot::channel::<()>();
             // Server behavior
             let task = tokio::spawn(async move {
-                let (mut _socket, _) = listener.accept().await.unwrap();
-                let (mut writer, mut reader) = _socket.to_indi();
+                let (socket, _) = listener.accept().await.unwrap();
+                let (mut writer, mut reader) = socket.to_indi();
                 let _msg = reader.read().await;
 
                 server_continue_rx.await.expect("waiting to continue");
@@ -689,24 +688,8 @@ mod test {
                 .await
                 .expect("connecting to indi");
 
-            let client_task = new(connection, None, None);
-            let mut devices = client_task
-                .status()
-                .changes()
-                .next()
-                .await
-                .unwrap()
-                .unwrap()
-                .with_state(|state| {
-                    let client = state.clone();
-                    async move {
-                        let lock = client.lock().await;
-                        lock.get_devices().subscribe().await
-                    }
-                })
-                .await
-                .unwrap();
-
+            let (client_task, client) = new(connection, None, None);
+            let mut devices = client.get_devices().subscribe().await;
             let _ = server_continue_tx.send(());
 
             let mut device_names_expected = vec![

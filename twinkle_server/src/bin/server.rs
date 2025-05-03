@@ -34,7 +34,11 @@ async fn main() {
 
         
     // build our application with a route
-    let app = twinkle_server::flats::routes(twinkle_server::counts::routes(twinkle_server::indi::routes(Router::new())))
+    let app = Router::new()
+        .merge(twinkle_server::flats::routes())
+        .merge(twinkle_server::counts::routes())
+        .merge(twinkle_server::indi::routes())
+        .merge(twinkle_server::settings::routes())
         .with_state(state)
         .layer(cors)
         .fallback_service(ServeDir::new("assets"));

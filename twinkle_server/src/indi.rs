@@ -4,12 +4,12 @@ use axum::{
     body::Body,
     extract::{
         ws::{WebSocket, WebSocketUpgrade},
-        Path, Query, State,
+        Path, State,
     },
     http::{header, Response, StatusCode},
     response::IntoResponse,
-    routing::get,
-    Router,
+    routing::{delete, get, post},
+    Json, Router,
 };
 
 use axum_extra::TypedHeader;
@@ -17,19 +17,63 @@ use indi::{
     client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection},
     serialization::{Blob, OneBlob, SetBlobVector},
 };
-use serde::Deserialize;
-use tokio::{net::TcpStream, sync::RwLock};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt, net::TcpStream, sync::RwLock};
 use tracing::error;
-use twinkle_api::{analysis::Statistics, fits::FitsImage, indi::api::ImageResponse};
+use twinkle_api::{
+    analysis::Statistics,
+    fits::FitsImage,
+    indi::api::{ImageResponse, IndiDriverParams},
+};
 use urlencoding::encode;
 use uuid::Uuid;
 
 use crate::AppState;
 
-pub fn routes(router: Router<AppState>) -> Router<AppState> {
-    router
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/indi/fifo", post(start_driver))
+        .route("/indi/fifo", delete(stop_driver))
         .route("/indi", get(create_connection))
         .route("/indi/blob/:id/:device/:parameter/:value", get(get_blob))
+}
+
+#[tracing::instrument()]
+async fn start_driver(
+    Json(params): Json<IndiDriverParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let mut fifo = OpenOptions::new()
+        .write(true)
+        .open("/indi/control.fifo")
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    fifo.write_all(format!("start {}\n", params.driver_name).as_bytes())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    fifo.shutdown()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok("OK")
+}
+
+#[tracing::instrument()]
+async fn stop_driver(
+    Json(params): Json<IndiDriverParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let mut fifo = OpenOptions::new()
+        .write(true)
+        .open("/indi/control.fifo")
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    fifo.write_all(format!("stop {}\n", params.driver_name).as_bytes())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    fifo.shutdown()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok("OK")
 }
 
 #[derive(Debug, Default)]
@@ -37,28 +81,25 @@ pub struct IndiConnectionData {
     blobs: HashMap<String, Arc<indi::serialization::SetBlobVector>>,
 }
 
-#[derive(Deserialize, Debug)]
-struct IndiConnectionParams {
-    server_addr: String,
-}
-
 #[tracing::instrument(skip(ws, state))]
 async fn create_connection(
     ws: WebSocketUpgrade,
     TypedHeader(host): TypedHeader<axum_extra::headers::Host>, // Use axum_extra::headers
-    Query(params): Query<IndiConnectionParams>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     Ok(ws.on_upgrade(move |socket| async move {
         let id = uuid::Uuid::new_v4();
         let connection_data = Arc::new(RwLock::new(Default::default()));
 
-        {
+        let server_addr = {
             let mut store = state.store.write().await;
-            store.connections.insert(id, connection_data.clone());
-        }
 
-        handle_indi_connection(id, connection_data, socket, params.server_addr, host).await;
+            store.connections.insert(id, connection_data.clone());
+            let settings = store.settings.read().await;
+            settings.indi_server_addr.clone()
+        };
+
+        handle_indi_connection(id, connection_data, socket, server_addr, host).await;
         {
             let mut store = state.store.write().await;
             store.connections.remove(&id);
@@ -157,7 +198,7 @@ async fn handle_indi_connection(
         }
     };
 
-    tokio::select!{
+    tokio::select! {
         _ = reader => {},
         _ = writer => {},
     };

@@ -414,7 +414,7 @@ mod test {
 
     use tracing_test::traced_test;
 
-    use crate::telescope::{OpticsConfig, Telescope, TelescopeConfig};
+    use crate::telescope::{Telescope, TelescopeConfig};
 
     #[tokio::test]
     #[traced_test]
@@ -424,10 +424,6 @@ mod test {
                 "indi:7624",
                 TelescopeConfig {
                     mount: String::from("Telescope Simulator"),
-                    primary_optics: OpticsConfig {
-                        focal_length: 800.0,
-                        aperture: 203.0,
-                    },
                     primary_camera: String::from("CCD Simulator"),
                     focuser: String::from("Focuser Simulator"),
                     filter_wheel: String::from("Filter Simulator"),

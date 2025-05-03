@@ -1,5 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use axum::extract::ws::{CloseFrame, Message, WebSocket};
+use futures::{SinkExt, Stream, StreamExt};
 use indi::IndiConnectionData;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -11,6 +13,9 @@ pub mod indi;
 pub mod counts;
 pub mod flats;
 pub mod tracing_broadcast;
+pub mod settings;
+
+pub mod websocket_handler;
 
 #[derive(Default, Clone)]
 pub struct AppState {
@@ -22,5 +27,6 @@ pub struct AppState {
 struct StateData {
     connections: HashMap<Uuid, Arc<RwLock<IndiConnectionData>>>,
     runs: Arc<Notify<HashMap<Uuid, AsyncTask<(), Arc<Notify<twinkle_api::Count>>>>>>,
-    flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>
+    flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>,
+    settings: Arc<Notify<twinkle_api::Settings>>,
 }

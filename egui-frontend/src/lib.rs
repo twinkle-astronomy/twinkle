@@ -13,6 +13,10 @@ pub mod fits;
 pub mod indi;
 pub mod counts;
 pub mod flats;
+pub mod settings;
+pub mod new_agent;
+
+pub mod sync_task;
 
 
 #[cfg(debug_assertions)]

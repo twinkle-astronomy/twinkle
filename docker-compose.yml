@@ -1,6 +1,7 @@
 volumes:
     prometheus_data: {}
     grafana_data: {}
+    indi_fifo: {}
 
 services:
   twinkle:
@@ -12,6 +13,8 @@ services:
     volumes:
       - .:/app
       - ./.storage/:/storage
+      - indi_fifo:/indi/
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -22,6 +25,21 @@ services:
 
   indi:
     image: ghcr.io/twinkle-astronomy/indi_server:v2.1.1-202412060709
-    command: indiserver -vv indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel indi_simulator_lightpanel
+    command: bash -c "mkfifo /indi/control.fifo;indiserver -vv -f /indi/control.fifo indi_simulator_ccd indi_simulator_focus indi_simulator_guide indi_simulator_rotator indi_simulator_telescope indi_simulator_wheel indi_simulator_lightpanel"
     ports:
       - "7624:7624"
+    volumes:
+      - indi_fifo:/indi/
+
+  indi-fifo-tcp:
+    image: alpine
+    command: >
+      sh -c "apk add --no-cache netcat-openbsd &&
+             mkfifo /tmp/backpipe && 
+             nc -l -k -p 8000 0</tmp/backpipe | tee -a /indi/control.fifo > /tmp/backpipe"
+    ports:
+      - "8000:8000"
+    volumes:
+      - indi_fifo:/indi/
+    depends_on:
+      - indi

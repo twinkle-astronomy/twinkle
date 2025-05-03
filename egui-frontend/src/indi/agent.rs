@@ -8,9 +8,10 @@ use indi::{
 use itertools::Itertools;
 use tokio::sync::Mutex;
 use twinkle_client::{
-    task::{spawn, Abortable, Status, Task},
+    task::{spawn, Abortable},
     OnDropFutureExt,
 };
+use uuid::Uuid;
 
 use std::{
     collections::VecDeque,
@@ -20,9 +21,9 @@ use std::{
 use strum::Display;
 use tokio_stream::StreamExt;
 use tracing::error;
-use url::form_urlencoded;
 
-use crate::{get_websocket_base, Agent};
+use crate::Agent;
+use crate::{get_websocket_base, indi::control};
 
 use super::views::{device::Device, tab::TabView};
 
@@ -39,19 +40,48 @@ impl Default for ConnectionStatus {
     }
 }
 
+#[cfg(not(debug_assertions))]
+const DRIVERS: [&str; 13] = [
+    "---",
+    "indi_deepskydad_fp",
+    "indi_asi_ccd",
+    "indi_asi_focuser",
+    "indi_asi_wheel",
+    "indi_eqmod_telescope",
+];
+
+#[cfg(debug_assertions)]
+const DRIVERS: [&str; 13] = [
+    "---",
+    "indi_simulator_ccd",
+    "indi_simulator_dome",
+    "indi_simulator_focus",
+    "indi_simulator_gps",
+    "indi_simulator_guide",
+    "indi_simulator_lightpanel",
+    "indi_simulator_receiver",
+    "indi_simulator_rotator",
+    "indi_simulator_sqm",
+    "indi_simulator_telescope",
+    "indi_simulator_weather",
+    "indi_simulator_wheel",
+];
+
 struct Connection {
-    addr: String,
-    client: ClientTask<Arc<Mutex<Client>>>,
+    id: Uuid,
+    _client_task: ClientTask<()>,
     devices_tab_view: TabView,
     device_entries: HashMap<String, crate::indi::views::device::Device>,
     messages: VecDeque<String>,
+    logs_tab_view: TabView,
+    control: control::Control<{ DRIVERS.len() }>,
 }
 #[derive(Default)]
 pub struct State {
     connection_status: ConnectionStatus,
 }
-fn get_websocket_url(encoded_value: &str) -> String {
-    format!("{}indi?server_addr={}", get_websocket_base(), encoded_value)
+fn get_websocket_url() -> String {
+    format!("{}indi", get_websocket_base())
 }
 
 #[tracing::instrument(skip_all)]
@@ -87,14 +117,8 @@ async fn process_set_blob_vector(
 }
 
 #[tracing::instrument(skip_all)]
-async fn task(
-    state: Arc<Mutex<State>>,
-    server_addr: String,
-    ctx: Context,
-    glow: Option<std::sync::Arc<glow::Context>>,
-) {
-    let encoded_value = form_urlencoded::byte_serialize(server_addr.as_bytes()).collect::<String>();
-    let url = get_websocket_url(&encoded_value);
+async fn task(state: Arc<Mutex<State>>, ctx: Context, glow: Option<std::sync::Arc<glow::Context>>) {
+    let url = get_websocket_url();
 
     {
         state.lock().await.connection_status = ConnectionStatus::Connecting;
@@ -103,77 +127,69 @@ async fn task(
     let websocket = match tokio_tungstenite_wasm::connect(url).await {
         Ok(websocket) => websocket,
         Err(e) => {
-            error!(
-                "Failed to connect to {}: {:?}",
-                get_websocket_url(&encoded_value),
-                e
-            );
+            error!("Failed to connect to {}: {:?}", get_websocket_url(), e);
             return;
         }
     };
     let (w, r) = websocket.to_indi();
     let (def_blob_sender, mut def_blob_receiver) = tokio::sync::mpsc::unbounded_channel();
 
-    let r =
-        r.filter_map({
-            let ctx = ctx.clone();
-            let state = state.clone();
-            move |x| {
-                ctx.request_repaint();
-                if let Ok(cmd) = &x {
-                    if let Some(message) = cmd.message() {
-                        if message.len() > 0 {
-                            block_on(async {
-                                let mut state = state.lock().await;
-                                if let ConnectionStatus::Connected(connection) =
-                                    &mut state.connection_status
-                                {
-                                    connection.messages.push_back(message.clone());
-                                }
-                            });
-                        }
-                    }
-                }
-                match x {
-                    Ok(indi::serialization::Command::DefBlobVector(dbv)) => {
-                        let _ = def_blob_sender.send(dbv.clone());
-                        Some(Ok(indi::serialization::Command::DefBlobVector(dbv)))
-                    }
-                    Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
-                        spawn((), {
-                            let state = state.clone();
-                            let glow = glow.clone();
-                            |_| {
-                                async move {
-                                    process_set_blob_vector(&mut sbv, state, glow).await
-                                }
-                            }
-                        }).abort_on_drop(false);
-                        None
-                    }
-                    Ok(indi::serialization::Command::Message(msg)) => {
+    let r = r.filter_map({
+        let ctx = ctx.clone();
+        let state = state.clone();
+        move |x| {
+            ctx.request_repaint();
+            if let Ok(cmd) = &x {
+                if let Some(message) = cmd.message() {
+                    if message.len() > 0 {
                         block_on(async {
                             let mut state = state.lock().await;
                             if let ConnectionStatus::Connected(connection) =
                                 &mut state.connection_status
                             {
-                                if let Some(message) = msg.message {
-                                    connection.messages.push_back(message);
-                                }
+                                connection.messages.push_back(message.clone());
                             }
                         });
-                        None
                     }
-                    Ok(cmd) => Some(Ok(cmd)),
-                    Err(e) => Some(Err(e)),
                 }
             }
-        });
+            match x {
+                Ok(indi::serialization::Command::DefBlobVector(dbv)) => {
+                    let _ = def_blob_sender.send(dbv.clone());
+                    Some(Ok(indi::serialization::Command::DefBlobVector(dbv)))
+                }
+                Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
+                    spawn((), {
+                        let state = state.clone();
+                        let glow = glow.clone();
+                        |_| async move { process_set_blob_vector(&mut sbv, state, glow).await }
+                    })
+                    .abort_on_drop(false);
+                    None
+                }
+                Ok(indi::serialization::Command::Message(msg)) => {
+                    block_on(async {
+                        let mut state = state.lock().await;
+                        if let ConnectionStatus::Connected(connection) =
+                            &mut state.connection_status
+                        {
+                            if let Some(message) = msg.message {
+                                connection.messages.push_back(message);
+                            }
+                        }
+                    });
+                    None
+                }
+                Ok(cmd) => Some(Ok(cmd)),
+                Err(e) => Some(Err(e)),
+            }
+        }
+    });
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let client = Client::new(Some(tx.clone()));
     let connected = client.get_connected();
     let devices_sub = { client.get_devices().subscribe().await };
-    let client = indi::client::start_with_streams(client, rx, w, r, None, None);
+    let client_task = indi::client::start_with_streams(&client, rx, w, r, None, None);
     let update_device_list = {
         let state = state.clone();
         let mut sub = devices_sub;
@@ -187,24 +203,21 @@ async fn task(
                 let mut lock = state.lock().await;
                 if let ConnectionStatus::Connected(connection) = &mut lock.connection_status {
                     for device_name in devices.keys() {
-                        if let Status::Running(client) =
-                            connection.client.status().read().await.deref()
-                        {
-                            let device =
-                                client.lock().await.device::<()>(device_name.as_str()).await;
-                            if let Some(device) = device {
-                                connection
-                                    .device_entries
-                                    .entry(device_name.clone())
-                                    .or_insert_with(|| Device::new(device.clone()));
-                            }
+                        let device = client.device::<()>(device_name.as_str()).await;
+                        if let Some(device) = device {
+                            connection
+                                .device_entries
+                                .entry(device_name.clone())
+                                .or_insert_with(|| Device::new(device.clone()));
                         }
+                        connection
+                            .device_entries
+                            .retain(|k, _| devices.keys().any(|d| d == k));
                     }
                 }
             }
         }
-    }
-    .on_drop(|| tracing::info!("Dropping update_device_list"));
+    };
     let enable_blobs = {
         async move {
             loop {
@@ -237,11 +250,16 @@ async fn task(
     };
     {
         state.lock().await.connection_status = ConnectionStatus::Connected(Connection {
-            addr: server_addr.clone(),
-            client,
+            id: Uuid::new_v4(),
+            _client_task: client_task,
             devices_tab_view: Default::default(),
             device_entries: Default::default(),
             messages: Default::default(),
+            logs_tab_view: Default::default(),
+            control: control::Control {
+                drivers: DRIVERS,
+                current_driver: 0,
+            },
         });
     }
     tokio::select! {
@@ -252,14 +270,10 @@ async fn task(
     ctx.request_repaint();
 }
 
-pub fn new(
-    server_addr: String,
-    ctx: Context,
-    glow: Option<std::sync::Arc<glow::Context>>,
-) -> Agent<Arc<Mutex<State>>> {
+pub fn new(ctx: Context, glow: Option<std::sync::Arc<glow::Context>>) -> Agent<Arc<Mutex<State>>> {
     let state = Arc::new(Mutex::new(Default::default()));
     spawn(state, |state| {
-        task(state.clone(), server_addr, ctx, glow).on_drop({
+        task(state.clone(), ctx, glow).on_drop({
             let state = state.clone();
             move || {
                 let mut status = block_on(state.lock());
@@ -278,22 +292,32 @@ impl crate::Widget for &Arc<Mutex<State>> {
             ConnectionStatus::Disconnected => ui.label("Disconnected"),
             ConnectionStatus::Connecting => ui.spinner(),
             ConnectionStatus::Connected(connection) => {
-                egui::TopBottomPanel::bottom(connection.addr.clone())
+                egui::TopBottomPanel::bottom(connection.id.to_string())
                     .resizable(false)
                     .min_height(0.0)
                     .show_inside(ui, |ui| {
-                        let text_style = TextStyle::Body;
-                        let row_height = ui.text_style_height(&text_style);
-                        ScrollArea::vertical().auto_shrink(false).show_rows(
-                            ui,
-                            row_height,
-                            connection.messages.len(),
-                            |ui, row_range| {
-                                for row in connection.messages.range(row_range) {
-                                    ui.label(format!("{:?}", row));
-                                }
-                            },
-                        );
+                        let selected = connection
+                            .logs_tab_view
+                            .show(ui, ["Logs".to_string(), "Drivers".to_string()].iter());
+
+                        if let Some(selected) = selected {
+                            if selected == "Logs" {
+                                let text_style = TextStyle::Body;
+                                let row_height = ui.text_style_height(&text_style);
+                                ScrollArea::vertical().auto_shrink(false).show_rows(
+                                    ui,
+                                    row_height,
+                                    connection.messages.len(),
+                                    |ui, row_range| {
+                                        for row in connection.messages.range(row_range) {
+                                            ui.label(format!("{:?}", row));
+                                        }
+                                    },
+                                );
+                            } else if selected == "Drivers" {
+                                ui.add(&mut connection.control);
+                            }
+                        }
                     });
 
                 egui::CentralPanel::default()

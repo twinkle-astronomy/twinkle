@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
+        ws::{Message, WebSocketUpgrade},
         State,
     },
     http::StatusCode,
@@ -10,20 +10,18 @@ use axum::{
     routing::get,
     Router,
 };
-use axum_extra::TypedHeader;
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use once_cell::sync::Lazy;
-
 
 use indi::client::ChangeError;
 use logic::start;
+use tokio_stream::wrappers::ReceiverStream;
 use twinkle_api::flats::*;
-use twinkle_client::{agent::Agent, task::Joinable};
-use twinkle_client::{notify::Notify, task::Abortable};
+use twinkle_client::task::Abortable;
+use twinkle_client::task::Joinable;
 
 use crate::{
-    telescope::{DeviceError, OpticsConfig, Telescope, TelescopeConfig, TelescopeError},
-    AppState,
+    telescope::{DeviceError, Telescope, TelescopeError}, websocket_handler::WebsocketHandler, AppState
 };
 // Global broadcast channel for trace events
 pub static TRACE_CHANNEL: Lazy<tokio::sync::broadcast::Sender<String>> = Lazy::new(|| {
@@ -40,7 +38,7 @@ pub enum FlatError {
     FitsError(fitsrs::error::Error),
     TelescopeError(TelescopeError<()>),
     ChangeError(ChangeError<()>),
-    SendError(tokio::sync::mpsc::error::SendError<twinkle_api::flats::MessageToClient>),
+    SendError(tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>),
     SerdeError(serde_json::Error),
     AxumError(axum::Error),
     UnexpectedMessage,
@@ -68,10 +66,8 @@ impl From<serde_json::Error> for FlatError {
         FlatError::SerdeError(value)
     }
 }
-impl From<tokio::sync::mpsc::error::SendError<twinkle_api::flats::MessageToClient>> for FlatError {
-    fn from(
-        value: tokio::sync::mpsc::error::SendError<twinkle_api::flats::MessageToClient>,
-    ) -> Self {
+impl From<tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>> for FlatError {
+    fn from(value: tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>) -> Self {
         FlatError::SendError(value)
     }
 }
@@ -99,70 +95,51 @@ impl From<fitsrs::error::Error> for FlatError {
     }
 }
 
-pub fn routes(router: Router<AppState>) -> Router<AppState> {
-    router.route("/flats", get(create_connection))
+pub fn routes() -> Router<AppState> {
+    Router::new().route("/flats", get(create_connection))
 }
 
 #[tracing::instrument(skip_all)]
 async fn create_connection(
     ws: WebSocketUpgrade,
-    TypedHeader(host): TypedHeader<axum_extra::headers::Host>,
-    State(state): State<AppState>,
+    state: State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let flats = state.store.read().await.flats.clone();
     Ok(ws.on_upgrade(move |socket| async move {
-        handle_connection(socket, host, flats).await;
+        handle_connection(socket.into(), state).await;
     }))
 }
 
 #[tracing::instrument(skip_all)]
-async fn handle_connection(
-    socket: WebSocket,
-    _host: axum_extra::headers::Host,
-    task_status: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>,
-) {
+async fn handle_connection(mut socket: WebsocketHandler, State(state): State<AppState>) {
+    let store = state.store.read().await;
+    let task_status = store.flats.clone();
+    let settings = store.settings.read().await;
+    tracing::info!("settings: {:?}", &settings);
+    
     let telescope = Arc::new(
         Telescope::new(
-            "192.168.8.197:7624",
-            TelescopeConfig {
-                mount: String::from("EQMod Mount"),
-                primary_optics: OpticsConfig {
-                    focal_length: 800.0,
-                    aperture: 203.0,
-                },
-                primary_camera: String::from("ZWO CCD ASI294MM Pro"),
-                focuser: String::from("ZWO EAF"),
-                filter_wheel: String::from("ZWO EFW"),
-                flat_panel: String::from("Deep Sky Dad FP"),
-            },
-            // "indi:7624",
-            // TelescopeConfig {
-            //     mount: String::from("Telescope Simulator"),
-            //     primary_optics: OpticsConfig {
-            //         focal_length: 800.0,
-            //         aperture: 203.0,
-            //     },
-            //     primary_camera: String::from("CCD Simulator"),
-            //     focuser: String::from("Focuser Simulator"),
-            //     filter_wheel: String::from("Filter Simulator"),
-            //     flat_panel: String::from("Light Panel Simulator"),
-            // },
+            settings.indi_server_addr.clone(),
+            settings.telescope_config.clone(),
         )
         .await,
     );
+    drop(settings);
+    drop(store);
+    
+    let (message_tx, message_rx) = tokio::sync::mpsc::channel::<Message>(10);
 
-    let (mut ws_write, mut ws_read) = socket.split();
-    let (message_tx, mut message_rx) =
-        tokio::sync::mpsc::channel::<twinkle_api::flats::MessageToClient>(10);
+    let (from_websocket_tx, from_websocket_rx) = tokio::sync::mpsc::channel::<Message>(10);
 
     let log_sender = {
         let mut sub = TRACE_CHANNEL.subscribe();
         let message_tx = message_tx.clone();
 
         async move {
-            loop  {
-                message_tx.send(MessageToClient::Log(sub.recv().await?)).await?;
+            while let Ok(log) = sub.recv().await {
+                let msg = Message::Text(serde_json::to_string(&MessageToClient::Log(log)).unwrap());
+                message_tx.send(msg).await?;
             }
+            Ok(())
         }
     };
     let task_status_sender = {
@@ -170,19 +147,10 @@ async fn handle_connection(
         let message_tx = message_tx.clone();
         async move {
             while let Some(Ok(task_status)) = task_status_sub.next().await {
-                message_tx.send(MessageToClient::Status(task_status)).await?;
-            }
-            Result::<(), FlatError>::Ok(())
-        }
-    };
-
-    let websocket_sender = {
-        async move {
-            while let Some(msg) = message_rx.recv().await {
-                ws_write
-                    .send(Message::Text(serde_json::to_string(&msg).unwrap()))
-                    .await?;
-                
+                let msg = Message::Text(
+                    serde_json::to_string(&MessageToClient::Status(task_status)).unwrap(),
+                );
+                message_tx.send(msg).await?;
             }
             Result::<(), FlatError>::Ok(())
         }
@@ -191,8 +159,9 @@ async fn handle_connection(
     let websocket_receiver = {
         let task_status = task_status.clone();
         let telescope = telescope.clone();
+        let mut from_websocket_rx = ReceiverStream::new(from_websocket_rx);
         async move {
-            while let Some(Ok(msg)) = ws_read.next().await {
+            while let Some(msg) = from_websocket_rx.next().await {
                 match msg {
                     Message::Text(msg) => {
                         match serde_json::from_str::<twinkle_api::flats::MessageToServer>(
@@ -216,9 +185,7 @@ async fn handle_connection(
                             }
                         }
                     }
-                    _ => {
-                        Err(FlatError::UnexpectedMessage)?
-                    }
+                    _ => Err(FlatError::UnexpectedMessage)?,
                 }
             }
             Result::<(), FlatError>::Ok(())
@@ -235,17 +202,14 @@ async fn handle_connection(
             let mut filters_subscription = filters.subscribe().await;
             let mut params = Parameterization::default();
             params.binnings = vec![1, 2, 4];
-            message_tx
-                .send(twinkle_api::flats::MessageToClient::Parameterization(
-                    params.clone(),
-                ))
-                .await?;
             while let Some(Ok(filters)) = filters_subscription.next().await {
-
                 params.filters = filters.get()?.into_iter().map(|x| x.into()).collect();
                 message_tx
-                    .send(twinkle_api::flats::MessageToClient::Parameterization(
-                        params.clone(),
+                    .send(Message::Text(
+                        serde_json::to_string(
+                            &twinkle_api::flats::MessageToClient::Parameterization(params.clone()),
+                        )
+                        .unwrap(),
                     ))
                     .await?;
             }
@@ -253,12 +217,15 @@ async fn handle_connection(
         }
     };
     drop(task_status);
-    if let Err(e) = tokio::select!{
+
+    socket.set_sender(from_websocket_tx);
+    
+    if let Err(e) = tokio::select! {
         v = param_sender => v,
-        v = websocket_sender => v,
         v = websocket_receiver => v,
         v = task_status_sender => v,
         v = log_sender => v,
+        v = async move { socket.handle_websocket_stream(ReceiverStream::new(message_rx)).await; Ok(())} => v,
     } {
         tracing::error!("Got error processing flats websocket: {:?}", e);
     }

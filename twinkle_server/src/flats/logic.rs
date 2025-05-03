@@ -71,7 +71,7 @@ pub async fn start(telescope: Arc<Telescope>, config: Config, state: Arc<Notify<
                     )
                     .await {
                         Ok(blob) => {
-                            let filename = Path::new("/storage/");
+                            let filename = Path::new("/storage/calibration/Flats/data");
                             let filename = filename
                                 .join(format!("bin_{}", binning))
                                 .join(&filter.name);

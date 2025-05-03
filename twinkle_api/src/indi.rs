@@ -22,4 +22,8 @@ pub mod api {
             self.serialize(&mut serializer).unwrap();
         }
     }
+    #[derive(Debug, Deserialize, Serialize)]
+    pub struct IndiDriverParams {
+        pub driver_name: String,
+    }
 }

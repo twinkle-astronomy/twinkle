@@ -31,9 +31,16 @@ impl From<BroadcastStreamRecvError> for StreamRecvError {
 }
 
 
-#[derive(Default)]
 pub struct Agent<S> {
     task: AsyncTask<(), Arc<Notify<S>>>,
+}
+
+impl<S> Default for Agent<S> {
+    fn default() -> Self {
+        Agent {
+            task: AsyncTask::default()
+        }
+    }
 }
 
 impl<S> Deref for Agent<S> {
@@ -61,7 +68,7 @@ impl<S, E> From<Status<Result<S, E>>> for Result<Status<S>, E> {
     }
 }
 
-impl<S: Clone + Send + Sync + 'static> Agent<S> {
+impl<S: Send + Sync + 'static> Agent<S> {
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.task = self.task.with_timeout(timeout);
         self
@@ -90,6 +97,9 @@ impl<S: Clone + Send + Sync + 'static> Agent<S> {
             |state| func(state.clone()),
         );
     }
+}
+
+impl<S: Clone + Send + Sync + 'static> Agent<S> {
     pub async fn subscribe(
         &self,
     ) -> impl Stream<Item = Result<crate::task::Status<Result<S, StreamRecvError>>, StreamRecvError>>
@@ -153,11 +163,60 @@ impl<S: Clone + Send + Sync + 'static> Agent<S> {
 
 #[cfg(test)]
 mod test {
+    use std::future::pending;
+
     use tracing_test::traced_test;
 
-    use crate::task::{Joinable, Status};
+    use crate::{notify::{self, wait_fn}, task::{Abortable, Joinable, Status}, OnDropFutureExt};
 
     use super::*;
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_state_drop() {
+        let value = Arc::new(0);
+        let mut agent = Agent::<Arc<usize>>::default();
+        
+        let status = agent.status().read().await;
+        match status.deref() {
+            Status::Pending => {},
+            _ => panic!("unexpected status"),
+        }
+        drop(status);
+
+        assert_eq!(Arc::strong_count(&value), 1);
+
+        agent.spawn(value.clone(), |v| {
+            let v = v.clone();
+            async move {
+                pending::<()>().await;
+                dbg!(v);
+            }.on_drop(|| tracing::info!("dropped"))
+        });
+
+        let mut status_sub = agent.status().subscribe().await;
+        wait_fn(&mut status_sub, Duration::from_secs(1), |status| {
+            match status.deref() {
+                Status::Running(_) => Result::<_, ()>::Ok(notify::Status::Complete(())),
+                _ => Ok(notify::Status::Pending),
+            }
+        }).await.unwrap();
+        let status = agent.status().read().await;
+        match status.deref() {
+            Status::Running(_) => {},
+            _ => panic!("unexpected status"),
+        }
+        drop(status);
+
+        agent.abort();
+        wait_fn(&mut status_sub, Duration::from_secs(1), |status| {
+            match status.deref() {
+                Status::Aborted => Result::<_, ()>::Ok(notify::Status::Complete(())),
+                _ => Ok(notify::Status::Pending),
+            }
+        }).await.unwrap();
+        assert_eq!(Arc::strong_count(&value), 1);
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     // #[tokio::test]

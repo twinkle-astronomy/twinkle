@@ -28,8 +28,8 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-pub fn routes(router: Router<AppState>) -> Router<AppState> {
-    router
+pub fn routes() -> Router<AppState> {
+    Router::new()
         .route("/counts", post(create_async_task))
         .route("/counts/:id", delete(delete_async_task))
         .route("/counts", get(subscribe_counts))

@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::fmt::Display;
 
 use camera::Camera;
 use filter_wheel::FilterWheel;
@@ -11,12 +11,13 @@ use indi::{
     Parameter, TypeError,
 };
 use parameter_with_config::BlobParameter;
-use tokio::{net::TcpStream, sync::Mutex};
+use tokio::net::TcpStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
+use twinkle_api::TelescopeConfig;
 use twinkle_client::{
     notify::{self, ArcCounter},
-    task::{Abortable, Joinable, Task, TaskStatusError},
+    task::{Abortable, Joinable, TaskStatusError},
 };
 
 pub mod camera;
@@ -122,16 +123,19 @@ impl From<notify::Error<ChangeError<()>>> for DeviceError {
 
 pub struct Telescope {
     pub config: TelescopeConfig,
-    pub client: ClientTask<Arc<tokio::sync::Mutex<Client>>>,
-    pub image_client: ClientTask<Arc<tokio::sync::Mutex<Client>>>,
+    pub client: Client,
+    pub image_client: Client,
+
+    pub client_task: ClientTask<()>,
+    pub image_client_task: ClientTask<()>,
 }
 
 impl Telescope {
     pub async fn new(
-        addr: impl tokio::net::ToSocketAddrs + Copy + Display + Send + 'static,
+        addr: impl tokio::net::ToSocketAddrs + Clone + Display + Send + 'static,
         config: TelescopeConfig,
     ) -> Telescope {
-        let client = indi::client::new(
+        let (client_task, client) = indi::client::new(
             TcpStream::connect(addr.clone())
                 .await
                 .expect(format!("Unable to connect to {}", addr).as_str()),
@@ -139,7 +143,7 @@ impl Telescope {
             None,
         );
 
-        let image_client = indi::client::new(
+        let (image_client_task, image_client) = indi::client::new(
         TcpStream::connect(addr.clone())
             .await
             .expect(format!("Unable to connect to {}", addr).as_str()),
@@ -152,6 +156,8 @@ impl Telescope {
             config,
             client,
             image_client,
+            client_task,
+            image_client_task,
         }
     }
 
@@ -184,41 +190,17 @@ impl Telescope {
 
     pub async fn join(&mut self) {
         tokio::select!(
-            _ = self.client.join()=> self.image_client.abort(),
-            _ = self.image_client.join() => self.client.abort()
+            _ = self.client_task.join()=> self.image_client_task.abort(),
+            _ = self.image_client_task.join() => self.client_task.abort()
         )
     }
 
     async fn get_device(
-        client: &ClientTask<Arc<Mutex<Client>>>,
+        client: &Client,
         name: &str,
     ) -> Result<ActiveDevice, TelescopeError<()>> {
-        let running_status = client.running_status().await?;
-        let client = running_status
-            .with_state(|state| {
-                let state = state.clone();
-                async move { state.clone() }
-            })
-            .await
-            .unwrap();
-        drop(running_status);
-        let lock = client.lock().await;
-        Ok(lock.get_device(name).await?)
+        Ok(client.get_device(name).await?)
     }
-}
-
-pub struct OpticsConfig {
-    pub focal_length: f64,
-    pub aperture: f64,
-}
-
-pub struct TelescopeConfig {
-    pub mount: String,
-    pub primary_optics: OpticsConfig,
-    pub primary_camera: String,
-    pub focuser: String,
-    pub filter_wheel: String,
-    pub flat_panel: String,
 }
 
 pub trait Connectable {

@@ -164,19 +164,9 @@ mod test {
         let connection = TcpStream::connect("indi:7624")
             .await
             .expect("connecting to indi");
-        let mut client = new(connection, None, None);
-        {
-            client.status().changes().next().await.unwrap().unwrap()
-                .with_state(|state| {
-                    let state = state.clone();
-                    async move {
-                        state.lock().await.shutdown();
-                    }
-                })
-                .await
-                .unwrap();
-        }
-        client.join().await.unwrap();
+        let (mut client_task, mut client) = new(connection, None, None);
+        client.shutdown();
+        client_task.join().await.unwrap();
     }
 
     #[tokio::test]
@@ -216,8 +206,8 @@ mod test {
         let connection = TcpStream::connect(server_addr)
             .await
             .expect("connecting to indi");
-        let mut client = new(connection, None, None);
-        let mut status_sub = client.status().subscribe().await;
+        let (mut client_task, client) = new(connection, None, None);
+        let mut status_sub = client_task.status().subscribe().await;
         
         match status_sub.next().await.unwrap().unwrap().deref() {
             Status::Pending => {},
@@ -226,31 +216,12 @@ mod test {
             Status::Aborted => panic!("Aborted"),
         };
 
-        let mut sub = if let Status::Running(connected) = status_sub.next().await.unwrap().unwrap().deref() {
-            connected.lock().await.get_connected().subscribe().await
-        } else {
-            panic!("Not connected");
-        };
+        assert!(client.connected.read().await.deref());
+
         tokio::time::sleep(Duration::from_millis(100)).await;
         server_stop_tx.send(()).unwrap();
 
         let timeout_duration = Duration::from_secs(1);
-        let timeout_result = tokio::join!(
-            timeout(timeout_duration, client.join()),
-            timeout(timeout_duration, async move {
-                loop {
-                    match sub.next().await {
-                        Some(Ok(connected)) => {
-                            if !connected.deref() {
-                                break;
-                            }
-                        }
-                        None | Some(Err(_)) => break,
-                    }
-                }
-            }),
-        );
-        timeout_result.0.expect("task timeout").expect("task");
-        timeout_result.1.expect("sub timeout");
+        timeout(timeout_duration, client_task.join()).await.unwrap().unwrap();
     }
 }
