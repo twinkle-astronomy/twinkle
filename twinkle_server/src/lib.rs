@@ -1,7 +1,5 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
-use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use futures::{SinkExt, Stream, StreamExt};
 use indi::IndiConnectionData;
 use tokio::sync::RwLock;
 use uuid::Uuid;

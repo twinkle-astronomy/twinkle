@@ -45,6 +45,12 @@ impl<T> ArcCounter<T> {
     }
 }
 
+impl<T> From<T> for ArcCounter<T> {
+    fn from(value: T) -> Self {
+        ArcCounter::new(value)
+    }
+}
+
 impl<T: PartialEq> PartialEq for ArcCounter<T> {
     fn eq(&self, other: &Self) -> bool {
         match &self.value {

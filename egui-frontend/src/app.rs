@@ -1,5 +1,4 @@
 use crate::flats::FlatWidget;
-// use crate::counts::CountIndex;
 use crate::indi::IndiManager;
 use crate::settings::SettingsWidget;
 use crate::sync_task::SyncTask;
@@ -11,7 +10,6 @@ static GLOBAL_CALLBACKS: OnceLock<
 
 pub struct App {
     indi_manager: IndiManager,
-    // task_ids: CountIndex,
     flats_manager: SyncTask<FlatWidget>,
     settings_manager: SyncTask<SettingsWidget>,
 
@@ -29,12 +27,6 @@ impl App {
         }
     }
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // let this: Self = if let Some(storage) = cc.storage {
-        //     eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
-        // } else {
-        //     Default::default()
-        // };
-
         let (tx, callbacks) = mpsc::channel();
         GLOBAL_CALLBACKS
             .set(tx)
@@ -51,13 +43,7 @@ impl App {
 }
 
 impl eframe::App for App {
-    /// Called by the frame work to save state before shutdown.
-    // fn save(&mut self, storage: &mut dyn eframe::Storage) {
-    //     self.indi_manager.save(storage);
-    // }
-
     #[tracing::instrument(skip_all)]
-    /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         while let Ok(cb) = self.callbacks.try_recv() {
             cb(ctx, frame);
@@ -78,13 +64,10 @@ impl eframe::App for App {
             ui.separator();
             ui.add(&mut self.flats_manager);
             ui.separator();
-            // ui.add(&mut self.task_ids);
-            // ui.separator();
             ui.add(&mut self.settings_manager);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // self.task_ids.windows(ui);
             self.indi_manager.windows(ui);
             self.flats_manager.windows(ui);
             self.settings_manager.windows(ui);

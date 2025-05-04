@@ -147,8 +147,9 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
         let message_tx = message_tx.clone();
         async move {
             while let Some(Ok(task_status)) = task_status_sub.next().await {
+                let message_status = task_status.map(|x| x.map(|y| y.as_ref().clone()));
                 let msg = Message::Text(
-                    serde_json::to_string(&MessageToClient::Status(task_status)).unwrap(),
+                    serde_json::to_string(&MessageToClient::Status(message_status)).unwrap(),
                 );
                 message_tx.send(msg).await?;
             }

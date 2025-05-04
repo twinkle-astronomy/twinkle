@@ -12,7 +12,10 @@ use crate::{
 };
 use derive_more::{Deref, DerefMut, From};
 use std::{fmt::Debug, future::Future};
-use tokio::sync::{mpsc::UnboundedReceiver, oneshot};
+use tokio::sync::{
+    mpsc::{error::SendError, UnboundedReceiver},
+    oneshot,
+};
 use tokio_stream::StreamExt;
 use tracing::{error, Instrument};
 use twinkle_client::{
@@ -121,7 +124,10 @@ pub fn new<T: AsyncClientConnection>(
         feedback: Some(feedback),
     };
     let (writer, reader) = connection.to_indi();
-    (start_with_streams(&client, commands, writer, reader, device, parameter), client)
+    (
+        start_with_streams(&client, commands, writer, reader, device, parameter),
+        client,
+    )
 }
 
 pub fn new_with_streams(
@@ -136,7 +142,17 @@ pub fn new_with_streams(
         connected: Arc::new(Notify::new(false)),
         feedback: Some(feedback),
     };
-    (start_with_streams(&client, incoming_commands, writer, reader, device, parameter), client)
+    (
+        start_with_streams(
+            &client,
+            incoming_commands,
+            writer,
+            reader,
+            device,
+            parameter,
+        ),
+        client,
+    )
 }
 
 pub fn start<T: AsyncClientConnection>(
@@ -147,7 +163,14 @@ pub fn start<T: AsyncClientConnection>(
     parameter: Option<&str>,
 ) -> ClientTask<()> {
     let (writer, reader) = connection.to_indi();
-    start_with_streams(&client, incoming_commands, writer, reader, device, parameter)
+    start_with_streams(
+        &client,
+        incoming_commands,
+        writer,
+        reader,
+        device,
+        parameter,
+    )
 }
 
 pub fn start_with_streams(
@@ -210,41 +233,7 @@ pub fn start_with_streams(
             };
             match command {
                 Ok(command) => {
-                    let locked_devices = thread_devices.write().await;
-                    let update_result = match command.param_update_type() {
-                        serialization::ParamUpdateType::Add => {
-                            let device_name = command.device_name().cloned();
-                            if let Some(device_name) = device_name {
-                                if locked_devices.contains_key(&device_name) {
-                                    locked_devices.update(command).await
-                                } else {
-                                    let mut locked_devices = locked_devices;
-                                    locked_devices.create(command).await
-                                }
-                            } else {
-                                Ok(None)
-                            }
-                        }
-                        serialization::ParamUpdateType::Update => {
-                            locked_devices.update(command).await
-                        }
-                        serialization::ParamUpdateType::Remove => {
-                            let device_name = command.device_name().cloned();
-
-                            let update = locked_devices.update(command).await;
-                            if let Some(device_name) = device_name {
-                                if let Some(device) = locked_devices.get(&device_name) {
-                                    if device.read().await.get_parameters().len() == 0 {
-                                        let mut locked_devices = locked_devices;
-                                        locked_devices.remove(&device_name);
-                                    }
-                                }
-                            }
-
-                            update
-                        }
-                        serialization::ParamUpdateType::Noop => Ok(None),
-                    };
+                    let update_result = DeviceStore::update(&thread_devices, command).await;
                     if let Err(e) = update_result {
                         error!("Device update error: {:?}", e);
                     }
@@ -270,7 +259,7 @@ pub fn start_with_streams(
 
 /// Struct used to keep track of a the devices and their properties.
 pub struct Client {
-    devices: Arc<Notify<MemoryDeviceStore>>,
+    devices: MemoryDeviceStore,
     connected: Arc<Notify<bool>>,
     feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
 }
@@ -345,8 +334,8 @@ impl Client {
     }
 
     /// Returns the a read-only lock on client's MemoryDeviceStore.
-    pub fn get_devices(&self) -> Arc<Notify<MemoryDeviceStore>> {
-        self.devices.clone()
+    pub fn get_devices(&self) -> &MemoryDeviceStore {
+        &self.devices
     }
 
     pub fn get_connected(&self) -> Arc<Notify<bool>> {
@@ -373,21 +362,22 @@ impl Client {
     pub fn shutdown(&mut self) {
         self.feedback.take();
     }
+
+    pub fn send(&self, cmd: Command) -> Result<(), SendError<Command>> {
+        if let Some(feedback) = &self.feedback {
+            feedback.send(cmd)?;
+        }
+        Ok(())
+    }
 }
 
-pub type MemoryDeviceStore = HashMap<String, Arc<Notify<device::Device>>>;
+pub type MemoryDeviceStore = Arc<Notify<HashMap<String, Arc<Notify<device::Device>>>>>;
 
 pub trait DeviceStore {
     /// Update the state of the appropriate device property for a command that came from an INDI server.
     #[allow(async_fn_in_trait)]
     async fn update(
         &self,
-        command: serialization::Command,
-    ) -> Result<Option<DeviceUpdate>, UpdateError>;
-
-    #[allow(async_fn_in_trait)]
-    async fn create(
-        &mut self,
         command: serialization::Command,
     ) -> Result<Option<DeviceUpdate>, UpdateError>;
 }
@@ -397,36 +387,73 @@ impl DeviceStore for MemoryDeviceStore {
         &self,
         command: serialization::Command,
     ) -> Result<Option<DeviceUpdate>, UpdateError> {
-        let name = command.device_name();
-        match name {
-            Some(name) => {
-                let device = self.get(name);
-                match device {
-                    Some(device) => Ok(Device::update(device.write().await, command).await?),
-                    None => Ok(None),
+        let locked_devices = self.write().await;
+        match command.param_update_type() {
+            serialization::ParamUpdateType::Add => {
+                let device_name = command.device_name().cloned();
+                if let Some(device_name) = device_name {
+                    if locked_devices.contains_key(&device_name) {
+                        update(&locked_devices, command).await
+                    } else {
+                        let mut locked_devices = locked_devices;
+                        create(&mut locked_devices, command).await
+                    }
+                } else {
+                    Ok(None)
                 }
             }
-            None => Ok(None),
+            serialization::ParamUpdateType::Update => update(&locked_devices, command).await,
+            serialization::ParamUpdateType::Remove => {
+                let device_name = command.device_name().cloned();
+
+                let update = update(&locked_devices, command).await;
+                if let Some(device_name) = device_name {
+                    if let Some(device) = locked_devices.get(&device_name) {
+                        if device.read().await.get_parameters().len() == 0 {
+                            let mut locked_devices = locked_devices;
+                            locked_devices.remove(&device_name);
+                        }
+                    }
+                }
+
+                update
+            }
+            serialization::ParamUpdateType::Noop => Ok(None),
         }
     }
+}
 
-    async fn create(
-        &mut self,
-        command: serialization::Command,
-    ) -> Result<Option<DeviceUpdate>, UpdateError> {
-        let name = command.device_name();
-        match name {
-            Some(name) => {
-                let device = self
-                    .entry(name.clone())
-                    .or_insert({
-                        Arc::new(Notify::new(device::Device::new(name.clone())))
-                    });
-                let device_lock = device.write().await;
-                Ok(Device::update(device_lock, command).await?)
+async fn update(
+    devices: &HashMap<String, Arc<Notify<device::Device>>>,
+    command: serialization::Command,
+) -> Result<Option<DeviceUpdate>, UpdateError> {
+    let name = command.device_name();
+    match name {
+        Some(name) => {
+            let device = devices.get(name);
+            match device {
+                Some(device) => Ok(Device::update(device.write().await, command).await?),
+                None => Ok(None),
             }
-            None => Ok(None),
         }
+        None => Ok(None),
+    }
+}
+
+async fn create(
+    devices: &mut HashMap<String, Arc<Notify<device::Device>>>,
+    command: serialization::Command,
+) -> Result<Option<DeviceUpdate>, UpdateError> {
+    let name = command.device_name();
+    match name {
+        Some(name) => {
+            let device = devices
+                .entry(name.clone())
+                .or_insert(Arc::new(Notify::new(device::Device::new(name.clone()))));
+            let device_lock = device.write().await;
+            Ok(Device::update(device_lock, command).await?)
+        }
+        None => Ok(None),
     }
 }
 
@@ -459,7 +486,6 @@ mod test {
     use futures::channel::oneshot;
     use tokio::net::{TcpListener, TcpStream};
     use tracing_test::traced_test;
-    use twinkle_client::task::Task;
 
     use std::collections::HashSet;
 
@@ -688,7 +714,7 @@ mod test {
                 .await
                 .expect("connecting to indi");
 
-            let (client_task, client) = new(connection, None, None);
+            let (_client_task, client) = new(connection, None, None);
             let mut devices = client.get_devices().subscribe().await;
             let _ = server_continue_tx.send(());
 

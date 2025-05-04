@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use egui::{WidgetText, Window};
+use egui::{Id, WidgetText, Window};
 use twinkle_client::{
     task::{Abortable, AsyncTask, IsRunning},
     MaybeSend,
@@ -12,6 +12,15 @@ use twinkle_client::{
 pub struct Sender<T> {
     tx: tokio::sync::mpsc::UnboundedSender<T>,
     ctx: egui::Context,
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        Sender {
+            tx: self.tx.clone(),
+            ctx: self.ctx.clone(),
+        }
+    }
 }
 
 impl<T> Sender<T> {
@@ -26,10 +35,19 @@ pub trait SyncAble {
     type MessageFromTask;
     type MessageToTask;
 
-    fn reset(&mut self);
+    fn reset(
+        &mut self,
+        _tx: tokio::sync::mpsc::UnboundedSender<Self::MessageToTask>,
+        _from_task_tx: Sender<Self::MessageFromTask>,
+    ) {
+    }
+
     fn update(&mut self, msg: Self::MessageFromTask);
     fn window_name(&self) -> impl Into<WidgetText>;
-
+    fn window_id(&self) -> Id {
+        let text: WidgetText = self.window_name().into();
+        text.text().to_string().into()
+    }
     fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -60,19 +78,22 @@ where
         }
     }
 
-    pub fn windows(&mut self, ui: &mut egui::Ui) {
+    pub fn windows(&mut self, ui: &mut egui::Ui) -> bool {
         self.sync_value();
         if self.running() {
             let mut open = true;
             Window::new(self.window_name())
                 .open(&mut open)
+                .id(self.window_id())
                 .resizable(true)
                 .scroll([false, false])
                 .show(ui.ctx(), |ui| self.value.ui(ui, self.to_task_tx.clone()));
             if !open {
                 self.abort();
             }
+            return open;
         }
+        return false;
     }
 }
 
@@ -105,7 +126,13 @@ impl<T: SyncAble> SyncTask<T> {
         let (to_task_tx, to_task_rx) = tokio::sync::mpsc::unbounded_channel();
         self.to_task_tx = to_task_tx;
 
-        self.value.reset();
+        self.value.reset(
+            self.to_task_tx.clone(),
+            Sender {
+                tx: from_task_tx.clone(),
+                ctx: self.ctx.clone(),
+            },
+        );
         self.task.spawn((), |_| {
             func(
                 Sender {

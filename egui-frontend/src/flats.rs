@@ -1,14 +1,20 @@
 use crate::sync_task::{SyncAble, SyncTask};
-use crate::{get_websocket_base, Widget};
-use egui::{ScrollArea, TextStyle};
+use crate::get_websocket_base;
+use egui::{ScrollArea, TextStyle, Widget};
 use futures::SinkExt;
 use futures::StreamExt;
 
 use std::time::Duration;
 use tokio_tungstenite_wasm::Message;
-use twinkle_api::flats::{Config, FlatRun, MessageToClient, MessageToServer};
+use twinkle_api::flats::{MessageToClient, MessageToServer};
 
-impl crate::Widget for &mut Config {
+
+
+#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::AsRef, derive_more::AsMut, derive_more::From, Debug)]
+pub struct Config(twinkle_api::flats::Config);
+
+
+impl egui::Widget for &mut Config {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         egui::Grid::new("config")
             .num_columns(2)
@@ -52,14 +58,18 @@ impl crate::Widget for &mut Config {
     }
 }
 
-impl crate::Widget for &FlatRun {
+
+#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::AsRef, derive_more::AsMut, derive_more::From, derive_more::Into, Debug)]
+pub struct FlatRun(twinkle_api::flats::FlatRun);
+
+impl egui::Widget for &FlatRun {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.add(egui::widgets::ProgressBar::new(self.progress))
     }
 }
 pub struct FlatWidget {
     config: Config,
-    status: twinkle_client::task::Status<FlatRun>,
+    status: twinkle_client::task::Status<twinkle_api::flats::FlatRun>,
     // sender: tokio::sync::mpsc::Sender<MessageToServer>,
     messages: Vec<String>,
 }
@@ -68,7 +78,7 @@ impl Default for FlatWidget {
     fn default() -> Self {
         tracing::info!("new FlatWidget");
         FlatWidget {
-            config: Config {
+            config: twinkle_api::flats::Config {
                 count: 30,
                 filters: vec![].into_iter().collect(),
                 adu_target: u16::MAX / 2,
@@ -77,7 +87,7 @@ impl Default for FlatWidget {
                 gain: 120.,
                 offset: 10.,
                 exposure: Duration::from_secs(3),
-            },
+            }.into(),
             status: twinkle_client::task::Status::Completed,
             messages: Default::default(),
         }
@@ -87,11 +97,6 @@ impl Default for FlatWidget {
 impl SyncAble for FlatWidget {
     type MessageFromTask = twinkle_api::flats::MessageToClient;
     type MessageToTask = twinkle_api::flats::MessageToServer;
-
-    fn reset(&mut self) {
-        tracing::info!("reset!");
-        // self.status = twinkle_client::task::Status::Completed;
-    }
 
     fn update(&mut self, msg: Self::MessageFromTask) {
         match msg {
@@ -126,7 +131,7 @@ impl SyncAble for FlatWidget {
                 if ui.button("Stop").clicked() {
                     tx.send(MessageToServer::Stop).unwrap();
                 }
-                status.ui(ui);
+                ui.add(&FlatRun(status.clone()));
             } else {
                 if ui.button("Start").clicked() {
                     tx

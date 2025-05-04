@@ -1,28 +1,23 @@
+use bytes::BytesMut;
 use eframe::glow;
 use egui::{ahash::HashMap, Context, ScrollArea, TextStyle};
 use futures::executor::block_on;
 use indi::{
-    client::{AsyncClientConnection, Client, ClientTask},
-    serialization::{EnableBlob, SetBlobVector},
+    client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection, Client},
+    serialization::{Command, EnableBlob, GetProperties, SetBlobVector},
 };
 use itertools::Itertools;
-use tokio::sync::Mutex;
-use twinkle_client::{
-    task::{spawn, Abortable},
-    OnDropFutureExt,
-};
+use ndarray::ArrayD;
+use tokio_stream::StreamExt;
+use twinkle_api::{analysis::Statistics, indi::api::ImageResponse};
+use twinkle_client::task::{spawn, Abortable};
 use uuid::Uuid;
 
-use std::{
-    collections::VecDeque,
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::collections::VecDeque;
 use strum::Display;
-use tokio_stream::StreamExt;
-use tracing::error;
+use tracing::{error, Instrument};
 
-use crate::Agent;
+use crate::sync_task::{Sender, SyncAble, SyncTask};
 use crate::{get_websocket_base, indi::control};
 
 use super::views::{device::Device, tab::TabView};
@@ -68,190 +63,18 @@ const DRIVERS: [&str; 13] = [
 ];
 
 struct Connection {
-    id: Uuid,
-    _client_task: ClientTask<()>,
+    client: Client,
     devices_tab_view: TabView,
     device_entries: HashMap<String, crate::indi::views::device::Device>,
     messages: VecDeque<String>,
     logs_tab_view: TabView,
     control: control::Control<{ DRIVERS.len() }>,
 }
-#[derive(Default)]
-pub struct State {
-    connection_status: ConnectionStatus,
-}
-fn get_websocket_url() -> String {
-    format!("{}indi", get_websocket_base())
-}
 
-#[tracing::instrument(skip_all)]
-async fn process_set_blob_vector(
-    sbv: &mut SetBlobVector,
-    state: Arc<Mutex<State>>,
-    glow: Option<std::sync::Arc<glow::Context>>,
-) {
-    for blob in sbv.blobs.iter_mut() {
-        let image_name = format!("{}.{}", sbv.name, blob.name);
-
-        if blob.format == "download" {
-            {
-                let mut state = state.lock().await;
-                if let ConnectionStatus::Connected(connection) = &mut state.connection_status {
-                    if let Some(device) = connection.device_entries.get_mut(&sbv.device) {
-                        device
-                            .download_image(
-                                image_name.clone(),
-                                <std::option::Option<Arc<eframe::glow::Context>> as Clone>::clone(
-                                    &glow,
-                                )
-                                .unwrap()
-                                .deref(),
-                                String::from_utf8_lossy(&blob.value.0).to_string(),
-                            )
-                            .await;
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[tracing::instrument(skip_all)]
-async fn task(state: Arc<Mutex<State>>, ctx: Context, glow: Option<std::sync::Arc<glow::Context>>) {
-    let url = get_websocket_url();
-
-    {
-        state.lock().await.connection_status = ConnectionStatus::Connecting;
-    }
-
-    let websocket = match tokio_tungstenite_wasm::connect(url).await {
-        Ok(websocket) => websocket,
-        Err(e) => {
-            error!("Failed to connect to {}: {:?}", get_websocket_url(), e);
-            return;
-        }
-    };
-    let (w, r) = websocket.to_indi();
-    let (def_blob_sender, mut def_blob_receiver) = tokio::sync::mpsc::unbounded_channel();
-
-    let r = r.filter_map({
-        let ctx = ctx.clone();
-        let state = state.clone();
-        move |x| {
-            ctx.request_repaint();
-            if let Ok(cmd) = &x {
-                if let Some(message) = cmd.message() {
-                    if message.len() > 0 {
-                        block_on(async {
-                            let mut state = state.lock().await;
-                            if let ConnectionStatus::Connected(connection) =
-                                &mut state.connection_status
-                            {
-                                connection.messages.push_back(message.clone());
-                            }
-                        });
-                    }
-                }
-            }
-            match x {
-                Ok(indi::serialization::Command::DefBlobVector(dbv)) => {
-                    let _ = def_blob_sender.send(dbv.clone());
-                    Some(Ok(indi::serialization::Command::DefBlobVector(dbv)))
-                }
-                Ok(indi::serialization::Command::SetBlobVector(mut sbv)) => {
-                    spawn((), {
-                        let state = state.clone();
-                        let glow = glow.clone();
-                        |_| async move { process_set_blob_vector(&mut sbv, state, glow).await }
-                    })
-                    .abort_on_drop(false);
-                    None
-                }
-                Ok(indi::serialization::Command::Message(msg)) => {
-                    block_on(async {
-                        let mut state = state.lock().await;
-                        if let ConnectionStatus::Connected(connection) =
-                            &mut state.connection_status
-                        {
-                            if let Some(message) = msg.message {
-                                connection.messages.push_back(message);
-                            }
-                        }
-                    });
-                    None
-                }
-                Ok(cmd) => Some(Ok(cmd)),
-                Err(e) => Some(Err(e)),
-            }
-        }
-    });
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let client = Client::new(Some(tx.clone()));
-    let connected = client.get_connected();
-    let devices_sub = { client.get_devices().subscribe().await };
-    let client_task = indi::client::start_with_streams(&client, rx, w, r, None, None);
-    let update_device_list = {
-        let state = state.clone();
-        let mut sub = devices_sub;
-
-        async move {
-            loop {
-                let devices = match sub.next().await {
-                    Some(Ok(devices)) => devices,
-                    _ => break,
-                };
-                let mut lock = state.lock().await;
-                if let ConnectionStatus::Connected(connection) = &mut lock.connection_status {
-                    for device_name in devices.keys() {
-                        let device = client.device::<()>(device_name.as_str()).await;
-                        if let Some(device) = device {
-                            connection
-                                .device_entries
-                                .entry(device_name.clone())
-                                .or_insert_with(|| Device::new(device.clone()));
-                        }
-                        connection
-                            .device_entries
-                            .retain(|k, _| devices.keys().any(|d| d == k));
-                    }
-                }
-            }
-        }
-    };
-    let enable_blobs = {
-        async move {
-            loop {
-                let dbv = match def_blob_receiver.recv().await {
-                    Some(msg) => msg,
-                    None => return,
-                };
-                {
-                    let _ = tx.send(indi::serialization::Command::EnableBlob(EnableBlob {
-                        device: dbv.device.clone(),
-                        name: Some(dbv.name.clone()),
-                        enabled: indi::BlobEnable::Also,
-                    }));
-                }
-            }
-        }
-    };
-
-    let still_connected = async move {
-        let mut stream = connected.subscribe().await;
-        loop {
-            let connected = match stream.next().await {
-                Some(Ok(c)) => *c,
-                _ => false,
-            };
-            if !connected {
-                break;
-            }
-        }
-    };
-    {
-        state.lock().await.connection_status = ConnectionStatus::Connected(Connection {
-            id: Uuid::new_v4(),
-            _client_task: client_task,
+impl Connection {
+    fn new(sender: tokio::sync::mpsc::UnboundedSender<Command>) -> Self {
+        Connection {
+            client: Client::new(Some(sender)),
             devices_tab_view: Default::default(),
             device_entries: Default::default(),
             messages: Default::default(),
@@ -260,39 +83,178 @@ async fn task(state: Arc<Mutex<State>>, ctx: Context, glow: Option<std::sync::Ar
                 drivers: DRIVERS,
                 current_driver: 0,
             },
-        });
+        }
     }
-    tokio::select! {
-        _ = still_connected => { },
-        _ = enable_blobs => {}
-        _ = update_device_list => {}
-    };
-    ctx.request_repaint();
 }
 
-pub fn new(ctx: Context, glow: Option<std::sync::Arc<glow::Context>>) -> Agent<Arc<Mutex<State>>> {
-    let state = Arc::new(Mutex::new(Default::default()));
-    spawn(state, |state| {
-        task(state.clone(), ctx, glow).on_drop({
-            let state = state.clone();
-            move || {
-                let mut status = block_on(state.lock());
-                status.connection_status = ConnectionStatus::Disconnected;
+pub struct State {
+    id: Uuid,
+    glow: Option<std::sync::Arc<glow::Context>>,
+    connection_status: ConnectionStatus,
+    from_task_tx: Option<Sender<MessageFromTask>>,
+    to_task_tx: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
+}
+
+impl State {
+    fn new(glow: Option<std::sync::Arc<glow::Context>>) -> Self {
+        State {
+            id: Uuid::new_v4(),
+            glow,
+            connection_status: Default::default(),
+            from_task_tx: None,
+            to_task_tx: None,
+        }
+    }
+}
+
+impl State {
+    fn update_for_command(&mut self, cmd: Command) {
+        if let ConnectionStatus::Connected(connection) = &mut self.connection_status {
+            let cmd = match cmd {
+                indi::serialization::Command::DefBlobVector(dbv) => {
+                    if let Err(e) =
+                        connection
+                            .client
+                            .send(indi::serialization::Command::EnableBlob(EnableBlob {
+                                device: dbv.device.clone(),
+                                name: Some(dbv.name.clone()),
+                                enabled: indi::BlobEnable::Also,
+                            }))
+                    {
+                        tracing::error!("Error enabling blob: {:?}", e);
+                    }
+
+                    indi::serialization::Command::DefBlobVector(dbv)
+                }
+                indi::serialization::Command::SetBlobVector(sbv) => {
+                    spawn((), {
+                        let tx = self.from_task_tx.clone().unwrap();
+                        |_| async move { process_set_blob_vector(sbv, tx).await }
+                    })
+                    .abort_on_drop(false);
+                    return;
+                }
+                indi::serialization::Command::Message(msg) => {
+                    if let Some(message) = &msg.message {
+                        connection.messages.push_back(message.clone());
+                    }
+
+                    indi::serialization::Command::Message(msg)
+                }
+                cmd => cmd,
+            };
+
+            if let Some(message) = cmd.message() {
+                if message.len() > 0 {
+                    connection.messages.push_back(message.clone());
+                }
             }
-        })
-    })
-    .into()
+
+            block_on(async move {
+                if let Err(e) =
+                    indi::client::DeviceStore::update(connection.client.get_devices(), cmd).await
+                {
+                    tracing::error!("Error updating devices: {:?}", e);
+                }
+                let devices = connection.client.get_devices().read().await;
+                for device_name in devices.keys() {
+                    let device = connection.client.device::<()>(device_name.as_str()).await;
+                    if let Some(device) = device {
+                        connection
+                            .device_entries
+                            .entry(device_name.clone())
+                            .or_insert_with(|| Device::new(device.clone()));
+                    }
+                    connection
+                        .device_entries
+                        .retain(|k, _| devices.keys().any(|d| d == k));
+                }
+            });
+        }
+    }
+}
+pub enum MessageFromTask {
+    Command(Command),
+    Connected,
+    DownloadProgress {
+        device: String,
+        name: String,
+        progress: f32,
+    },
+    Image {
+        device: String,
+        name: String,
+        data: ArrayD<u16>,
+        stats: Statistics,
+    },
 }
 
-impl crate::Widget for &Arc<Mutex<State>> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let mut status = block_on(self.lock());
-        let state = status.deref_mut();
-        match &mut state.connection_status {
+impl SyncAble for State {
+    type MessageFromTask = MessageFromTask;
+
+    type MessageToTask = Command;
+
+    fn reset(
+        &mut self,
+        to_task_tx: tokio::sync::mpsc::UnboundedSender<Self::MessageToTask>,
+        from_task_tx: Sender<Self::MessageFromTask>,
+    ) {
+        self.to_task_tx = Some(to_task_tx);
+        self.from_task_tx = Some(from_task_tx);
+        self.connection_status = ConnectionStatus::Connecting;
+    }
+
+    fn update(&mut self, cmd: Self::MessageFromTask) {
+        let tx = self.to_task_tx.as_ref().unwrap().clone();
+        match cmd {
+            MessageFromTask::Command(command) => self.update_for_command(command),
+            MessageFromTask::Connected => {
+                self.connection_status = ConnectionStatus::Connected(Connection::new(tx))
+            }
+            MessageFromTask::DownloadProgress {
+                device,
+                name,
+                progress,
+            } => {
+                if let ConnectionStatus::Connected(connection) = &mut self.connection_status {
+                    let device = connection.device_entries.get_mut(&device).unwrap();
+                    let renderer = device.get_or_create_render(name, self.glow.as_ref().unwrap());
+                    renderer.set_progress(progress);
+                }
+            }
+            MessageFromTask::Image {
+                device,
+                name,
+                data,
+                stats,
+            } => {
+                if let ConnectionStatus::Connected(connection) = &mut self.connection_status {
+                    let device = connection.device_entries.get_mut(&device).unwrap();
+                    let renderer = device.get_or_create_render(name, self.glow.as_ref().unwrap());
+                    renderer.set_image(data, stats);
+                }
+            }
+        }
+    }
+
+    fn window_name(&self) -> impl Into<egui::WidgetText> {
+        "Indi"
+    }
+
+    fn window_id(&self) -> egui::Id {
+        self.id.to_string().into()
+    }
+
+    fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        _tx: tokio::sync::mpsc::UnboundedSender<Self::MessageToTask>,
+    ) -> egui::Response {
+        match &mut self.connection_status {
             ConnectionStatus::Disconnected => ui.label("Disconnected"),
             ConnectionStatus::Connecting => ui.spinner(),
             ConnectionStatus::Connected(connection) => {
-                egui::TopBottomPanel::bottom(connection.id.to_string())
+                egui::TopBottomPanel::bottom(format!("bottom:{}", &self.id))
                     .resizable(false)
                     .min_height(0.0)
                     .show_inside(ui, |ui| {
@@ -345,4 +307,145 @@ impl crate::Widget for &Arc<Mutex<State>> {
             }
         }
     }
+}
+fn get_websocket_url() -> String {
+    format!("{}indi", get_websocket_base())
+}
+
+#[tracing::instrument(skip_all)]
+async fn process_set_blob_vector(mut sbv: SetBlobVector, tx: Sender<MessageFromTask>) {
+    for blob in sbv.blobs.iter_mut() {
+        let image_name = format!("{}.{}", sbv.name, blob.name);
+
+        if blob.format == "download" {
+            {
+                let bytes = async {
+                    let client = reqwest::Client::new();
+
+                    // Use a relative path - reqwest will use the current origin in a WASM context
+                    let response = client
+                        .get(String::from_utf8_lossy(&blob.value.0).to_string())
+                        .send()
+                        .await
+                        .unwrap();
+
+                    if !response.status().is_success() {
+                        // You might want to handle this differently
+                        tracing::error!("HTTP error: {}", response.status());
+                    }
+                    let total_size = response.content_length().unwrap_or(0);
+
+                    // Prepare a buffer for the data
+                    let mut buffer = BytesMut::new();
+                    let mut downloaded = 0;
+
+                    // Get the response as a byte stream
+                    let mut stream = response.bytes_stream();
+
+                    // Process the stream chunk by chunk
+                    while let Some(chunk) = stream.next().await {
+                        let chunk = chunk.unwrap(); // Handle this error appropriately in production
+                        downloaded += chunk.len() as u64;
+                        buffer.extend_from_slice(&chunk);
+
+                        // Calculate and report progress
+                        if total_size > 0 {
+                            let progress = (downloaded as f32) / (total_size as f32);
+                            tx.send(MessageFromTask::DownloadProgress {
+                                device: sbv.device.clone(),
+                                name: image_name.clone(),
+                                progress,
+                            })
+                            .unwrap();
+                        }
+                    }
+
+                    buffer.to_vec()
+                }
+                .instrument(tracing::info_span!("download_indi_image"))
+                .await;
+
+                let resp: ImageResponse<'_> = {
+                    let _span = tracing::info_span!("rmp_serde::from_slice").entered();
+                    twinkle_api::indi::api::ImageResponse::from_bytes(bytes.as_ref()).unwrap()
+                };
+
+                let data = {
+                    let _span = tracing::info_span!("read_fits").entered();
+                    resp.image.read_image().unwrap()
+                };
+                tx.send(MessageFromTask::Image {
+                    device: sbv.device.clone(),
+                    name: image_name.clone(),
+                    data,
+                    stats: resp.stats,
+                })
+                .unwrap();
+            }
+        }
+    }
+}
+
+#[tracing::instrument(skip_all)]
+async fn task(
+    tx: Sender<<State as SyncAble>::MessageFromTask>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<<State as SyncAble>::MessageToTask>,
+) {
+    let websocket = match tokio_tungstenite_wasm::connect(get_websocket_url()).await {
+        Ok(websocket) => websocket,
+        Err(e) => {
+            error!("Failed to connect to {}: {:?}", get_websocket_url(), e);
+            return;
+        }
+    };
+    tx.send(MessageFromTask::Connected).unwrap();
+
+    let (mut w, mut r) = websocket.to_indi();
+
+    let reader_future = {
+        async move {
+            while let Some(cmd) = r.read().await {
+                match cmd {
+                    Ok(cmd) => {
+                        tx.send(MessageFromTask::Command(cmd)).unwrap();
+                    }
+                    Err(e) => {
+                        tracing::error!("Got error from indi server: {:?}", e);
+                    }
+                }
+            }
+        }
+    };
+
+    let writer_future = {
+        async move {
+            w.write(indi::serialization::Command::GetProperties(GetProperties {
+                version: indi::INDI_PROTOCOL_VERSION.to_string(),
+                device: None,
+                name: None,
+            }))
+            .await
+            .unwrap();
+
+            while let Some(cmd) = rx.recv().await {
+                w.write(cmd).await.unwrap();
+            }
+            if let Err(e) = w.shutdown().await {
+                tracing::error!("Unable to shutdwon connection: {:?}", e);
+            }
+        }
+    };
+
+    tokio::select! {
+        _ = reader_future => {},
+        _ = writer_future => {},
+    }
+}
+
+pub fn new(ctx: Context, glow: Option<std::sync::Arc<glow::Context>>) -> SyncTask<State> {
+    // let state = Default::default();
+    let mut sync_task: SyncTask<State> = SyncTask::new(State::new(glow), ctx);
+
+    sync_task.spawn(|tx, rx| async move { task(tx, rx).await });
+    sync_task
 }

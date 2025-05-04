@@ -5,9 +5,10 @@ use std::time::Duration;
 use std::{future::Future, pin::Pin, sync::Arc};
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, Stream};
 
+use crate::notify::NotifyArc;
 use crate::task::Status;
 use crate::{
-    notify::{ArcCounter, Notify},
+    notify::Notify,
     task::{AsyncTask, Task},
     MaybeSend,
 };
@@ -97,12 +98,10 @@ impl<S: Send + Sync + 'static> Agent<S> {
             |state| func(state.clone()),
         );
     }
-}
-
-impl<S: Clone + Send + Sync + 'static> Agent<S> {
+    
     pub async fn subscribe(
         &self,
-    ) -> impl Stream<Item = Result<crate::task::Status<Result<S, StreamRecvError>>, StreamRecvError>>
+    ) -> impl Stream<Item = Result<crate::task::Status<Result<NotifyArc<S>, StreamRecvError>>, StreamRecvError>>
     {
         futures::stream::unfold(
             (
@@ -110,7 +109,7 @@ impl<S: Clone + Send + Sync + 'static> Agent<S> {
                 std::option::Option::<
                     Pin<
                         Box<
-                            dyn Stream<Item = Result<ArcCounter<S>, BroadcastStreamRecvError>>
+                            dyn Stream<Item = Result<NotifyArc<S>, BroadcastStreamRecvError>>
                                 + Send,
                         >,
                     >,
@@ -122,7 +121,7 @@ impl<S: Clone + Send + Sync + 'static> Agent<S> {
                         match next {
                             Ok(next) => {
                                 return Some((
-                                    Ok(crate::task::Status::Running(Ok(next.deref().clone()))),
+                                    Ok(crate::task::Status::Running(Ok(next))),
                                     (status_sub, Some(status_notify_sub)),
                                 ))
                             }
@@ -137,7 +136,7 @@ impl<S: Clone + Send + Sync + 'static> Agent<S> {
 
                             match status_notify_sub.next().await.unwrap() {
                                 Ok(next) => Some((
-                                    Ok(crate::task::Status::Running(Ok(next.deref().clone()))),
+                                    Ok(crate::task::Status::Running(Ok(next))),
                                     (status_sub, Some(status_notify_sub.boxed())),
                                 )),
                                 Err(e) => Some((Err(e.into()), (status_sub, None))),
@@ -233,8 +232,8 @@ mod test {
 
                     subscribers.push(tokio::task::spawn(async move {
                         assert_eq!(Some(Ok(Status::Pending)), agent_sub.next().await);
-                        assert_eq!(Some(Ok(Status::Running(Ok(10)))), agent_sub.next().await);
-                        assert_eq!(Some(Ok(Status::Running(Ok(11)))), agent_sub.next().await);
+                        assert_eq!(Some(Ok(Status::Running(Ok(10.into())))), agent_sub.next().await);
+                        assert_eq!(Some(Ok(Status::Running(Ok(11.into())))), agent_sub.next().await);
                         assert_eq!(Some(Ok(Status::Completed)), agent_sub.next().await);
                         assert_eq!(None, agent_sub.next().await);
                     }));

@@ -72,6 +72,18 @@ pub enum Status<S> {
     Aborted,
 }
 
+impl<S> Status<S> {
+    pub fn map<F, U>(self, f: F) -> Status<U> 
+    where F: FnOnce(S) -> U {
+        match self {
+            Status::Pending => Status::Pending,
+            Status::Running(v) => Status::Running(f(v)),
+            Status::Completed => Status::Completed,
+            Status::Aborted => Status::Aborted,
+        }
+    }
+}
+
 
 impl<S> Status<S> {
     pub async fn with_state<'a, V, R, F>(&'a self, func: F) -> Result<V, Error>

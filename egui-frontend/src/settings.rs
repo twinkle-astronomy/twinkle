@@ -30,6 +30,7 @@ impl egui::Widget for &mut SyncTask<SettingsWidget> {
             }
             false => {
                 if ui.selectable_label(false, "Settings").clicked() {
+                    self.data = None;
                     self.spawn(|tx, _rx| SettingsWidget::task(tx));
                 }
             }
@@ -96,10 +97,6 @@ pub struct SettingsData {
 impl SyncAble for SettingsWidget {
     type MessageFromTask = Settings;
     type MessageToTask = ();
-
-    fn reset(&mut self) {
-        self.data = None;
-    }
 
     fn update(&mut self, settings: Settings) {
         match &mut self.data {
@@ -178,14 +175,12 @@ impl SyncAble for SettingsWidget {
                                 async move {
                                     let client = reqwest::Client::new();
 
-                                    // Use a relative path - reqwest will use the current origin in a WASM context
                                     let response =
                                         client.post(post_url()).json(&settings).send().await;
 
                                     match response {
                                         Ok(response) => {
                                             if !response.status().is_success() {
-                                                // You might want to handle this differently
                                                 tracing::error!(
                                                     "HTTP error: {}",
                                                     response.status()
