@@ -36,7 +36,7 @@ impl Default for ConnectionStatus {
 }
 
 #[cfg(not(debug_assertions))]
-const DRIVERS: [&str; 13] = [
+const DRIVERS: [&str; 6] = [
     "---",
     "indi_deepskydad_fp",
     "indi_asi_ccd",

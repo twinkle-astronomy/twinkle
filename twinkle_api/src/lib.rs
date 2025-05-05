@@ -57,7 +57,7 @@ impl From<&Filter> for f64 {
 
 
 #[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TelescopeConfig {
     pub mount: String,
     pub primary_camera: String,
@@ -68,7 +68,7 @@ pub struct TelescopeConfig {
 
 
 #[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub indi_server_addr: String,
     pub telescope_config: TelescopeConfig,

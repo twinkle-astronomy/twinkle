@@ -1,10 +1,7 @@
-FROM rust:1.84-bullseye AS dev
+FROM rust:1.86-bookworm AS dev
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcfitsio-dev \
-    libopencv-dev \
-    clang \
-    libclang-dev \
+    libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt
 RUN rustup target add wasm32-unknown-unknown
@@ -25,7 +22,8 @@ RUN groupadd -g ${GROUP_ID} ${USER} && \
 RUN chown ${USER}:${USER} /app
 USER ${USER}
 
-RUN cargo install trunk
+ENV DATABASE_URL sqlite:///storage/db.sqlite
+RUN cargo install trunk diesel_cli
 
 FROM dev AS twinkle-build
 COPY . /app
@@ -36,9 +34,9 @@ RUN cargo build --release --bin server
 # Build frontend
 RUN cd egui-frontend && trunk build --release
 
-FROM debian:bullseye-slim AS twinkle
+FROM debian:bookworm-slim AS twinkle
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcfitsio-dev \
+    libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN mkdir /app
 COPY --from=twinkle-build /app/target/release/server /app/server

@@ -11,6 +11,9 @@ pub mod settings;
 
 pub mod sync_task;
 
+#[cfg(target_arch = "wasm32")]
+use eframe::wasm_bindgen::*;
+
 #[cfg(debug_assertions)]
 fn get_websocket_base() -> String {
     format!("ws://localhost:4000/")
@@ -18,17 +21,15 @@ fn get_websocket_base() -> String {
 
 #[cfg(not(debug_assertions))]
 fn get_websocket_base() -> String {
-    // format!("/indi?server_addr={}", encoded_value)
     format!("/")
 }
 
 #[cfg(debug_assertions)]
-fn get_http_base() -> String {
+fn get_http_base() -> String { 
     format!("http://localhost:4000/")
 }
 
 #[cfg(not(debug_assertions))]
 fn get_http_base() -> String {
-    // format!("/indi?server_addr={}", encoded_value)
-    format!("/")
+    web_sys::window().expect("No global window exists").location().href().expect("No location exists")
 }

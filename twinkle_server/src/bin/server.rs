@@ -24,7 +24,7 @@ async fn main() {
         .with(fmt)
         .with(tracing_broadcast::TracingBroadcast::new("twinkle_server::flats", flats::TRACE_CHANNEL.clone()))
         .init();
-    let state = AppState::default();
+    let state = AppState::new().await.expect("Loading AppState");
 
     let cors = CorsLayer::new()
         .allow_origin(Any)

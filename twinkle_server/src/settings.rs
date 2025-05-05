@@ -26,10 +26,15 @@ pub fn routes() -> Router<AppState> {
 #[tracing::instrument(skip(state))]
 pub async fn set_settings(
     State(state): State<AppState>,
-    Json(params): Json<Settings>,
+    Json(settings): Json<Settings>,
 ) -> impl IntoResponse {
-    let store = state.store.write().await;
-    *store.settings.write().await = params;
+    let mut store = state.store.write().await;
+    if let Err(e) = store.save_settings(&settings).await {
+        tracing::error!("Unable to save settings: {:?}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+    *store.settings.write().await = settings;
+    StatusCode::OK
 }
 
 #[tracing::instrument(skip_all)]
