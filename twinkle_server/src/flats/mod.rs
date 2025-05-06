@@ -13,7 +13,7 @@ use axum::{
 use futures::StreamExt;
 use once_cell::sync::Lazy;
 
-use indi::client::ChangeError;
+use indi::{client::{active_device::SendError, ChangeError}, serialization::Command};
 use logic::start;
 use tokio_stream::wrappers::ReceiverStream;
 use twinkle_api::flats::*;
@@ -39,11 +39,18 @@ pub enum FlatError {
     TelescopeError(TelescopeError<()>),
     ChangeError(ChangeError<()>),
     SendError(tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>),
+    SendCommandError(SendError<Command>),
     SerdeError(serde_json::Error),
     AxumError(axum::Error),
     UnexpectedMessage,
     RecvError(tokio::sync::broadcast::error::RecvError),
     IoError(std::io::Error),
+}
+
+impl From<SendError<Command>> for FlatError {
+    fn from(value: SendError<Command>) -> Self {
+        FlatError::SendCommandError(value)
+    }
 }
 
 impl From<std::io::Error> for FlatError {

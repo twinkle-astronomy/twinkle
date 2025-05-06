@@ -3,10 +3,27 @@ use std::{path::Path, sync::Arc, time::Duration};
 use indi::{client::Notify, Blob};
 use tokio::{fs::File, io::AsyncWriteExt};
 use twinkle_api::{analysis::Statistics, fits::AsFits, flats::{Config, FlatRun}};
+use twinkle_client::OnDropFutureExt;
 
 use crate::{flats::FlatError, telescope::{camera::{self, CaptureFormat, TransferFormat}, filter_wheel, flat_panel, Telescope}};
-
 pub async fn start(telescope: Arc<Telescope>, config: Config, state: Arc<Notify<FlatRun>>) -> Result<(), FlatError> {
+    let flat_panel = telescope
+        .get_flat_panel()
+        .await?;
+    
+    let light = flat_panel.light().await?;
+    light.set(true)?;
+
+    inner_start(telescope, config, state).on_drop(|| {
+        if let Err(e) = light.set(false) {
+            tracing::error!("Unable to to turn off flatpanel: {:?}", e);
+        }
+    }).await?;
+
+    Ok(())
+}
+
+pub async fn inner_start(telescope: Arc<Telescope>, config: Config, state: Arc<Notify<FlatRun>>) -> Result<(), FlatError> {
     let flat_panel = telescope
         .get_flat_panel()
         .await?;
