@@ -126,14 +126,6 @@ impl State {
 
                     indi::serialization::Command::DefBlobVector(dbv)
                 }
-                indi::serialization::Command::SetBlobVector(sbv) => {
-                    spawn((), {
-                        let tx = self.from_task_tx.clone().unwrap();
-                        |_| async move { process_set_blob_vector(sbv, tx).await }
-                    })
-                    .abort_on_drop(false);
-                    return;
-                }
                 indi::serialization::Command::Message(msg) => {
                     if let Some(message) = &msg.message {
                         connection.messages.push_back(message.clone());
@@ -402,13 +394,29 @@ async fn task(
 
     let (mut w, mut r) = websocket.to_indi();
 
+    let (sbv_tx, mut sbv_rx) = tokio::sync::mpsc::channel(1);
+
+    let sbv_future = {
+        let tx = tx.clone();
+        async move {
+            while let Some(sbv) = sbv_rx.recv().await {
+                process_set_blob_vector(sbv, tx.clone()).await;
+            }
+        }
+    };
+
     let reader_future = {
         async move {
             while let Some(cmd) = r.read().await {
                 match cmd {
-                    Ok(cmd) => {
-                        tx.send(MessageFromTask::Command(cmd)).unwrap();
-                    }
+                    Ok(cmd) => match cmd {
+                        indi::serialization::Command::SetBlobVector(sbv) => {
+                            sbv_tx.try_send(sbv).ok();
+                        }
+                        cmd => {
+                            tx.send(MessageFromTask::Command(cmd)).unwrap();
+                        }
+                    },
                     Err(e) => {
                         tracing::error!("Got error from indi server: {:?}", e);
                     }
@@ -439,6 +447,7 @@ async fn task(
     tokio::select! {
         _ = reader_future => {},
         _ = writer_future => {},
+        _ = sbv_future => {},
     }
 }
 
