@@ -1,4 +1,4 @@
-use twinkle_api::{Settings, TelescopeConfig};
+use twinkle_api::settings::{Settings, TelescopeConfig};
 
 use diesel_async::RunQueryDsl;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};

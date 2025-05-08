@@ -11,7 +11,7 @@ use axum::{
 };
 use futures::{StreamExt, TryStreamExt};
 
-use twinkle_api::Settings;
+use twinkle_api::settings::Settings;
 use twinkle_client::notify::Notify;
 
 use crate::websocket_handler::WebsocketHandler;

@@ -1,6 +1,6 @@
 use bytes::BytesMut;
 use eframe::glow;
-use egui::{ahash::HashMap, Context, ScrollArea, TextStyle};
+use egui::{ahash::HashMap, ScrollArea, TextStyle};
 use futures::executor::block_on;
 use indi::{
     client::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection, Client},
@@ -10,15 +10,13 @@ use itertools::Itertools;
 use ndarray::ArrayD;
 use tokio_stream::StreamExt;
 use twinkle_api::{analysis::Statistics, indi::api::ImageResponse};
-use twinkle_client::task::{spawn, Abortable};
 use uuid::Uuid;
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
 use strum::Display;
 use tracing::{error, Instrument};
 
-use crate::sync_task::{Sender, SyncAble, SyncTask};
-use crate::{get_websocket_base, indi::control};
+use crate::{agent::{Agent, AgentLock, Widget}, get_websocket_base, indi::control};
 
 use super::views::{device::Device, tab::TabView};
 
@@ -89,82 +87,18 @@ impl Connection {
 
 pub struct State {
     id: Uuid,
-    glow: Option<std::sync::Arc<glow::Context>>,
     connection_status: ConnectionStatus,
-    from_task_tx: Option<Sender<MessageFromTask>>,
-    to_task_tx: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
 }
 
 impl State {
-    fn new(glow: Option<std::sync::Arc<glow::Context>>) -> Self {
+    fn new() -> Self {
         State {
             id: Uuid::new_v4(),
-            glow,
             connection_status: Default::default(),
-            from_task_tx: None,
-            to_task_tx: None,
         }
     }
 }
 
-impl State {
-    fn update_for_command(&mut self, cmd: Command) {
-        if let ConnectionStatus::Connected(connection) = &mut self.connection_status {
-            let cmd = match cmd {
-                indi::serialization::Command::DefBlobVector(dbv) => {
-                    if let Err(e) =
-                        connection
-                            .client
-                            .send(indi::serialization::Command::EnableBlob(EnableBlob {
-                                device: dbv.device.clone(),
-                                name: Some(dbv.name.clone()),
-                                enabled: indi::BlobEnable::Also,
-                            }))
-                    {
-                        tracing::error!("Error enabling blob: {:?}", e);
-                    }
-
-                    indi::serialization::Command::DefBlobVector(dbv)
-                }
-                indi::serialization::Command::Message(msg) => {
-                    if let Some(message) = &msg.message {
-                        connection.messages.push_back(message.clone());
-                    }
-
-                    indi::serialization::Command::Message(msg)
-                }
-                cmd => cmd,
-            };
-
-            if let Some(message) = cmd.message() {
-                if message.len() > 0 {
-                    connection.messages.push_back(message.clone());
-                }
-            }
-
-            block_on(async move {
-                if let Err(e) =
-                    indi::client::DeviceStore::update(connection.client.get_devices(), cmd).await
-                {
-                    tracing::error!("Error updating devices: {:?}", e);
-                }
-                let devices = connection.client.get_devices().read().await;
-                for device_name in devices.keys() {
-                    let device = connection.client.device::<()>(device_name.as_str()).await;
-                    if let Some(device) = device {
-                        connection
-                            .device_entries
-                            .entry(device_name.clone())
-                            .or_insert_with(|| Device::new(device.clone()));
-                    }
-                    connection
-                        .device_entries
-                        .retain(|k, _| devices.keys().any(|d| d == k));
-                }
-            });
-        }
-    }
-}
 pub enum MessageFromTask {
     Command(Command),
     Connected,
@@ -181,67 +115,12 @@ pub enum MessageFromTask {
     },
 }
 
-impl SyncAble for State {
-    type MessageFromTask = MessageFromTask;
+fn get_websocket_url() -> String {
+    format!("{}indi", get_websocket_base())
+}
 
-    type MessageToTask = Command;
-
-    fn reset(
-        &mut self,
-        to_task_tx: tokio::sync::mpsc::UnboundedSender<Self::MessageToTask>,
-        from_task_tx: Sender<Self::MessageFromTask>,
-    ) {
-        self.to_task_tx = Some(to_task_tx);
-        self.from_task_tx = Some(from_task_tx);
-        self.connection_status = ConnectionStatus::Connecting;
-    }
-
-    fn update(&mut self, cmd: Self::MessageFromTask) {
-        let tx = self.to_task_tx.as_ref().unwrap().clone();
-        match cmd {
-            MessageFromTask::Command(command) => self.update_for_command(command),
-            MessageFromTask::Connected => {
-                self.connection_status = ConnectionStatus::Connected(Connection::new(tx))
-            }
-            MessageFromTask::DownloadProgress {
-                device,
-                name,
-                progress,
-            } => {
-                if let ConnectionStatus::Connected(connection) = &mut self.connection_status {
-                    let device = connection.device_entries.get_mut(&device).unwrap();
-                    let renderer = device.get_or_create_render(name, self.glow.as_ref().unwrap());
-                    renderer.set_progress(progress);
-                }
-            }
-            MessageFromTask::Image {
-                device,
-                name,
-                data,
-                stats,
-            } => {
-                if let ConnectionStatus::Connected(connection) = &mut self.connection_status {
-                    let device = connection.device_entries.get_mut(&device).unwrap();
-                    let renderer = device.get_or_create_render(name, self.glow.as_ref().unwrap());
-                    renderer.set_image(data, stats);
-                }
-            }
-        }
-    }
-
-    fn window_name(&self) -> impl Into<egui::WidgetText> {
-        "Indi"
-    }
-
-    fn window_id(&self) -> egui::Id {
-        self.id.to_string().into()
-    }
-
-    fn ui(
-        &mut self,
-        ui: &mut egui::Ui,
-        _tx: tokio::sync::mpsc::UnboundedSender<Self::MessageToTask>,
-    ) -> egui::Response {
+impl Widget for &mut State {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         match &mut self.connection_status {
             ConnectionStatus::Disconnected => ui.label("Disconnected"),
             ConnectionStatus::Connecting => ui.spinner(),
@@ -300,13 +179,11 @@ impl SyncAble for State {
         }
     }
 }
-fn get_websocket_url() -> String {
-    format!("{}indi", get_websocket_base())
-}
 
 #[tracing::instrument(skip_all)]
-async fn process_set_blob_vector(mut sbv: SetBlobVector, tx: Sender<MessageFromTask>) {
+async fn process_set_blob_vector(state: Arc<AgentLock<State>>, mut sbv: SetBlobVector, glow: Option<std::sync::Arc<glow::Context>>) {
     for blob in sbv.blobs.iter_mut() {
+        let device_name = sbv.device.clone();
         let image_name = format!("{}.{}", sbv.name, blob.name);
 
         if blob.format == "download" {
@@ -343,12 +220,21 @@ async fn process_set_blob_vector(mut sbv: SetBlobVector, tx: Sender<MessageFromT
                         // Calculate and report progress
                         if total_size > 0 {
                             let progress = (downloaded as f32) / (total_size as f32);
-                            tx.send(MessageFromTask::DownloadProgress {
-                                device: sbv.device.clone(),
-                                name: image_name.clone(),
-                                progress,
-                            })
-                            .unwrap();
+                            
+                            let mut lock = state.write();
+                            block_on({
+                                let device_name = device_name.clone();
+                                let image_name = image_name.clone();
+                                let glow = glow.clone().unwrap();
+                                async move {
+                                if let ConnectionStatus::Connected(connection) =
+                                    &mut lock.connection_status
+                                {
+                                    let device = connection.device_entries.get_mut(&device_name).unwrap();
+                                    let renderer = device.get_or_create_render(image_name, &glow);
+                                    renderer.set_progress(progress);
+                                }
+                            }});
                         }
                     }
 
@@ -366,23 +252,30 @@ async fn process_set_blob_vector(mut sbv: SetBlobVector, tx: Sender<MessageFromT
                     let _span = tracing::info_span!("read_fits").entered();
                     resp.image.read_image().unwrap()
                 };
-                tx.send(MessageFromTask::Image {
-                    device: sbv.device.clone(),
-                    name: image_name.clone(),
-                    data,
-                    stats: resp.stats,
-                })
-                .unwrap();
+                let mut lock = state.write();
+                block_on({
+                    let device_name = device_name.clone();
+                    let image_name = image_name.clone();
+                    let glow = glow.clone().unwrap();
+                    async move {
+                    if let ConnectionStatus::Connected(connection) =
+                        &mut lock.connection_status
+                    {
+                        let device = connection.device_entries.get_mut(&device_name).unwrap();
+                        let renderer = device.get_or_create_render(image_name, &glow);
+                        renderer.set_image(data, resp.stats);
+
+                    }
+                }});
             }
         }
     }
 }
 
 #[tracing::instrument(skip_all)]
-async fn task(
-    tx: Sender<<State as SyncAble>::MessageFromTask>,
-    mut rx: tokio::sync::mpsc::UnboundedReceiver<<State as SyncAble>::MessageToTask>,
-) {
+async fn task(state: Arc<AgentLock<State>>, glow: Option<std::sync::Arc<glow::Context>>) {
+    state.write().connection_status = ConnectionStatus::Connecting;
+
     let websocket = match tokio_tungstenite_wasm::connect(get_websocket_url()).await {
         Ok(websocket) => websocket,
         Err(e) => {
@@ -390,17 +283,21 @@ async fn task(
             return;
         }
     };
-    tx.send(MessageFromTask::Connected).unwrap();
-
+    
     let (mut w, mut r) = websocket.to_indi();
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+    state.write().connection_status = ConnectionStatus::Connected(Connection::new(tx));
 
     let (sbv_tx, mut sbv_rx) = tokio::sync::mpsc::channel(1);
 
     let sbv_future = {
-        let tx = tx.clone();
+        let state = state.clone();
+        let glow = glow.clone();
         async move {
             while let Some(sbv) = sbv_rx.recv().await {
-                process_set_blob_vector(sbv, tx.clone()).await;
+                process_set_blob_vector(state.clone(), sbv, glow.clone()).await;
             }
         }
     };
@@ -414,7 +311,65 @@ async fn task(
                             sbv_tx.try_send(sbv).ok();
                         }
                         cmd => {
-                            tx.send(MessageFromTask::Command(cmd)).unwrap();
+                            let mut lock = state.write();
+                            block_on(async move {
+                                if let ConnectionStatus::Connected(connection) =
+                                    &mut lock.connection_status
+                                {
+                                    let cmd = match cmd {
+                                        indi::serialization::Command::DefBlobVector(dbv) => {
+                                            if let Err(e) = connection.client.send(
+                                                indi::serialization::Command::EnableBlob(EnableBlob {
+                                                    device: dbv.device.clone(),
+                                                    name: Some(dbv.name.clone()),
+                                                    enabled: indi::BlobEnable::Also,
+                                                }),
+                                            ) {
+                                                tracing::error!("Error enabling blob: {:?}", e);
+                                            }
+    
+                                            indi::serialization::Command::DefBlobVector(dbv)
+                                        }
+                                        indi::serialization::Command::Message(msg) => {
+                                            if let Some(message) = &msg.message {
+                                                connection.messages.push_back(message.clone());
+                                            }
+    
+                                            indi::serialization::Command::Message(msg)
+                                        }
+                                        cmd => cmd,
+                                    };
+    
+                                    if let Some(message) = cmd.message() {
+                                        if message.len() > 0 {
+                                            connection.messages.push_back(message.clone());
+                                        }
+                                    }
+                                    
+                                    if let Err(e) = indi::client::DeviceStore::update(
+                                        connection.client.get_devices(),
+                                        cmd,
+                                    ).await
+                                    
+                                    {
+                                        tracing::error!("Error updating devices: {:?}", e);
+                                    }
+                                    let devices = connection.client.get_devices().read().await;
+                                    for device_name in devices.keys() {
+                                        let device =
+                                            connection.client.device::<()>(device_name.as_str()).await;
+                                        if let Some(device) = device {
+                                            connection
+                                                .device_entries
+                                                .entry(device_name.clone())
+                                                .or_insert_with(|| Device::new(device.clone()));
+                                        }
+                                        connection
+                                            .device_entries
+                                            .retain(|k, _| devices.keys().any(|d| d == k));
+                                    }
+                                }
+                            });                         
                         }
                     },
                     Err(e) => {
@@ -451,10 +406,15 @@ async fn task(
     }
 }
 
-pub fn new(ctx: Context, glow: Option<std::sync::Arc<glow::Context>>) -> SyncTask<State> {
-    // let state = Default::default();
-    let mut sync_task: SyncTask<State> = SyncTask::new(State::new(glow), ctx);
-
-    sync_task.spawn(|tx, rx| async move { task(tx, rx).await });
-    sync_task
+pub fn new(ctx: egui::Context, glow: Option<std::sync::Arc<glow::Context>>) -> Agent<State> {
+    let state = Arc::new(AgentLock::new(ctx.clone(), State::new()));
+    let mut agent: Agent<State> = Default::default();
+    agent.spawn(state, |state| {
+        let state = state.clone();
+        let glow = glow.clone();
+        async move {
+            task(state, glow).await
+         }
+    });
+    agent
 }

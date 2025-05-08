@@ -41,7 +41,7 @@ struct StateData {
     connections: HashMap<Uuid, Arc<RwLock<IndiConnectionData>>>,
     runs: Arc<Notify<HashMap<Uuid, AsyncTask<(), Arc<Notify<twinkle_api::Count>>>>>>,
     flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>,
-    settings: Arc<Notify<twinkle_api::Settings>>,
+    settings: Arc<Notify<twinkle_api::settings::Settings>>,
     db: SyncConnectionWrapper<SqliteConnection>,
 }
 

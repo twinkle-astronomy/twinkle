@@ -14,7 +14,7 @@ use parameter_with_config::BlobParameter;
 use tokio::net::TcpStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
-use twinkle_api::TelescopeConfig;
+use twinkle_api::settings::TelescopeConfig;
 use twinkle_client::{
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},

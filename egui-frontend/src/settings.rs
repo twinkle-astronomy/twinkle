@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use futures::{SinkExt, StreamExt};
 use tokio_tungstenite_wasm::Message;
-use twinkle_api::Settings;
+use twinkle_api::settings::Settings;
 use twinkle_client::{
     sleep,
     task::{spawn, Abortable},

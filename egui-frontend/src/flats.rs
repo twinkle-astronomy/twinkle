@@ -76,7 +76,6 @@ pub struct FlatWidget {
 
 impl Default for FlatWidget {
     fn default() -> Self {
-        tracing::info!("new FlatWidget");
         FlatWidget {
             config: twinkle_api::flats::Config {
                 count: 30,
