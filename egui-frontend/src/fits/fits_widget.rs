@@ -147,8 +147,6 @@ impl FitsWidget {
 
             if r.image_mesh.dirty {
                 r.image_mesh.load_data(gl);
-                r.image_mesh.image = ArrayD::<u16>::zeros(IxDyn(&[10, 10]));
-                r.image_mesh.dirty = false;
             }
             if r.circles_mesh.dirty {
                 r.circles_mesh.load_data(gl);

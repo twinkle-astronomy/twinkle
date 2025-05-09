@@ -168,6 +168,10 @@ impl FitsRender {
             texture = gl.create_texture().expect("Cannot create texture");
             let shape = [10, 10];
 
+            // Create the two PBO buffers
+            let pbo1 = gl.create_buffer().expect("Cannot create PBO buffer 1");
+            let pbo2 = gl.create_buffer().expect("Cannot create PBO buffer 2");
+
             let image = ArrayD::<u16>::ones(IxDyn(&shape)); //ArrayD::<u16>::zeros(IxDyn(&shape));
             image_mesh = ImageMesh {
                 texture,
@@ -182,6 +186,11 @@ impl FitsRender {
                 histogram_mtf,
                 histogram_high,
                 dirty: true,
+
+                // Initialize the new PBO-related fields
+                pbo_buffers: [pbo1, pbo2],
+                current_pbo: 0,
+                pbo_initialized: false, // Will be initialized in first load_data call
             };
 
             let program = Self::get_circle_program(gl);
