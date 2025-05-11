@@ -1,0 +1,17 @@
+{
+    "sysroot":     "/usr/local/rustup/toolchains/1.86.0-x86_64-unknown-linux-gnu",
+    "sysroot_src": "/usr/local/rustup/toolchains/1.86.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library",
+    "crates": [
+        {
+            "root_module": "twinkle_server/src/main.rs",
+            "edition": "2021",
+            "deps": []
+        },
+        {
+            "root_module": "egui-frontend/src/lib.rs",
+            "edition": "2021",
+            "cfg": ["target_arch=\"wasm32\"", "target_os=\"unknown\""],
+            "deps": []
+        }
+    ]
+}

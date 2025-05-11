@@ -1,6 +1,7 @@
 
 use parking_lot::Mutex;
 
+use crate::capture::CaptureManager;
 use crate::flats::FlatWidget;
 use crate::indi::IndiManager;
 use crate::settings::SettingsWidget;
@@ -16,6 +17,7 @@ pub struct App {
     indi_manager: Arc<Mutex<IndiManager>>,
     flats_manager: SyncTask<FlatWidget>,
     settings_manager: SyncTask<SettingsWidget>,
+    capture_manager: Arc<Mutex<CaptureManager>>,
 
     callbacks: std::sync::mpsc::Receiver<
         Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>,
@@ -36,14 +38,12 @@ impl App {
             .set(tx)
             .expect("GLOBAL_CALLBACKS already set.");
 
-        let indi_manager = Arc::new(Mutex::new(IndiManager::new(cc)));
-
         Self {
-            // task_ids: CountIndex::new(cc.egui_ctx.clone()),
             callbacks,
-            indi_manager: indi_manager,
+            indi_manager: Arc::new(Mutex::new(IndiManager::new(cc))),
             flats_manager: SyncTask::new(Default::default(), cc.egui_ctx.clone()),
             settings_manager: SyncTask::new(Default::default(), cc.egui_ctx.clone()),
+            capture_manager: Arc::new(Mutex::new(CaptureManager::new(cc)))
         }
     }
 }
@@ -51,8 +51,6 @@ impl App {
 impl eframe::App for App {
     #[tracing::instrument(skip_all)]
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        tracing::info!("update!");
-
         while let Ok(cb) = self.callbacks.try_recv() {
             cb(ctx, frame);
         }
@@ -67,6 +65,7 @@ impl eframe::App for App {
         });
 
         let mut indi_manager = self.indi_manager.lock();
+        let mut capture_manager = self.capture_manager.lock();
 
         egui::SidePanel::left("left").show(ctx, |ui| {
             ui.add(indi_manager.deref_mut());
@@ -74,12 +73,16 @@ impl eframe::App for App {
             ui.add(&mut self.flats_manager);
             ui.separator();
             ui.add(&mut self.settings_manager);
+            ui.separator();
+            ui.add(capture_manager.deref_mut());
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             indi_manager.windows(ui);
             self.flats_manager.windows(ui);
             self.settings_manager.windows(ui);
+            capture_manager.windows(ui);
+            
         });
     }
 }

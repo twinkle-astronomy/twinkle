@@ -5,7 +5,7 @@ authors = ["Chris Constantine <cconstan@gmail.com>"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 
-
+[workspace]
 
 [dependencies]
 egui = "0.31"

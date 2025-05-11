@@ -153,6 +153,9 @@ impl<T: SyncAble> SyncTask<T> {
     }
 
     pub fn sync_value(&mut self) {
+        if self.from_task_rx.len() > 100 {
+            tracing::error!("from_task_rx.len() > 100: {}", self.from_task_rx.len())
+        }
         while let Ok(settings) = self.from_task_rx.try_recv() {
             self.value.update(settings)
         }

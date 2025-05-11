@@ -3,7 +3,6 @@ use std::sync::Arc;
 use eframe::{egui_glow, glow::HasContext};
 use egui::{mutex::Mutex, Pos2};
 use egui_glow::glow;
-use ndarray::{ArrayD, IxDyn};
 
 use super::FitsRender;
 

@@ -1,10 +1,11 @@
 
 [workspace]
 members = [
-    "egui-frontend",
+    #"egui-frontend",
     #"fits_inspect",
     "indi",
-    "phd2", "twinkle_api",
+    "phd2",
+    "twinkle_api",
     "twinkle_client",
     "twinkle_server",
 ]

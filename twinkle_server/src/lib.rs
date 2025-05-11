@@ -19,6 +19,7 @@ pub mod flats;
 pub mod indi;
 pub mod settings;
 pub mod tracing_broadcast;
+pub mod capture;
 
 pub mod websocket_handler;
 
@@ -42,6 +43,7 @@ struct StateData {
     runs: Arc<Notify<HashMap<Uuid, AsyncTask<(), Arc<Notify<twinkle_api::Count>>>>>>,
     flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>,
     settings: Arc<Notify<twinkle_api::settings::Settings>>,
+    capture: Agent<twinkle_api::capture::CaptureProgress>,
     db: SyncConnectionWrapper<SqliteConnection>,
 }
 
@@ -60,6 +62,7 @@ impl StateData {
         Ok(StateData {
             connections: Default::default(),
             runs: Default::default(),
+            capture: Default::default(),
             flats: Default::default(),
             settings: Arc::new(Notify::new(settings.unwrap_or_default())),
             db,

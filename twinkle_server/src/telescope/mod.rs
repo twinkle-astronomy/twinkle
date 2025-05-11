@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use camera::Camera;
 use filter_wheel::FilterWheel;
@@ -14,11 +14,12 @@ use parameter_with_config::BlobParameter;
 use tokio::net::TcpStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
-use twinkle_api::settings::TelescopeConfig;
+use twinkle_api::settings::{Settings, TelescopeConfig};
 use twinkle_client::{
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},
 };
+use twinkle_client::notify::Notify;
 
 pub mod camera;
 pub mod filter_wheel;
@@ -131,6 +132,13 @@ pub struct Telescope {
 }
 
 impl Telescope {
+    pub async fn new_from_settings(settings: &Arc<Notify<Settings>>) -> Telescope {
+        let settings = settings.read().await;
+        Telescope::new(
+            settings.indi_server_addr.clone(),
+            settings.telescope_config.clone(),
+        ).await
+    }
     pub async fn new(
         addr: impl tokio::net::ToSocketAddrs + Clone + Display + Send + 'static,
         config: TelescopeConfig,

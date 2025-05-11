@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use futures::{SinkExt, Stream, StreamExt};
+use twinkle_api::ToWebsocketMessage;
 
 pub struct WebsocketHandler {
     socket: WebSocket,
@@ -20,10 +21,13 @@ impl WebsocketHandler {
         self.sender.replace(sender)
     }
 
-    pub async fn handle_websocket_stream(
+    pub async fn handle_websocket_stream<S, T>(
         mut self,
-        mut stream: impl Stream<Item = axum::extract::ws::Message> + Unpin,
-    ) {
+        mut stream: S,
+    ) where 
+    S: Stream<Item = T> + Unpin,
+    T: ToWebsocketMessage,
+    {
         let (ws_send, mut ws_recv) = tokio::sync::mpsc::channel(10);
         let (mut w, mut r) = self.socket.split();
     
@@ -34,7 +38,6 @@ impl WebsocketHandler {
                 while let Some(msg) = r.next().await {
                     match msg {
                         Ok(Message::Close(msg)) => {
-                            tracing::info!("Received close message: {:?}", msg);
                             if let Err(e) = ws_send.send(Message::Close(msg)).await {
                                 tracing::error!("Got error sending close: {:?}", e);
                             }
@@ -92,7 +95,7 @@ impl WebsocketHandler {
             let ws_send = ws_send.clone();
             async move {
                 while let Some(next) = stream.next().await {
-                    if let Err(e) = ws_send.send(next).await {
+                    if let Err(e) = ws_send.send(next.to_message()).await {
                         tracing::error!("Error streaming settings: {:?}", e);
                         break;
                     }

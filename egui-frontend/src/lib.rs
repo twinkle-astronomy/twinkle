@@ -4,6 +4,7 @@ mod app;
 
 pub use app::App;
 
+pub mod capture;
 pub mod fits;
 pub mod flats;
 pub mod indi;

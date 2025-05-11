@@ -37,15 +37,17 @@ pub trait Abortable {
     fn set_abort_on_drop(&mut self, abort: bool);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TaskStatusError {
-    BroadcastStreamRecvError(BroadcastStreamRecvError),
+    Lagged(u64),
     Finished,
 }
 
 impl From<BroadcastStreamRecvError> for TaskStatusError {
     fn from(value: BroadcastStreamRecvError) -> Self {
-        TaskStatusError::BroadcastStreamRecvError(value)
+        match value {
+            BroadcastStreamRecvError::Lagged(n) => TaskStatusError::Lagged(n)
+        }
     }
 }
 #[allow(async_fn_in_trait)]

@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.linkedProjects": [
+        // "twinkle_server/Cargo.toml",
+         "egui-frontend/Cargo.toml"
+    ]
+    
+}

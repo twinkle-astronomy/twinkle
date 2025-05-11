@@ -105,8 +105,15 @@ impl<T: std::fmt::Display> std::fmt::Display for ArcCounter<T> {
         }
     }
 }
+impl<T: Clone> ArcCounter<T> {
+    pub fn into_inner(self) -> T {
+        self.deref().clone()
+    }
+}
 
 impl<T> ArcCounter<T> {
+
+
     async fn not_cloned(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
         crate::timeout(timeout, async {
             self.not_cloned_inner().await;

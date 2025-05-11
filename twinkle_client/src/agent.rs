@@ -1,36 +1,16 @@
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use std::{future::Future, pin::Pin, sync::Arc};
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, Stream};
 
 use crate::notify::NotifyArc;
-use crate::task::Status;
+use crate::task::{Status, TaskStatusError};
 use crate::{
     notify::Notify,
     task::{AsyncTask, Task},
     MaybeSend,
 };
-
-/// An error returned from the inner stream of a [`BroadcastStream`].
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub enum StreamRecvError {
-    /// The receiver lagged too far behind. Attempting to receive again will
-    /// return the oldest message still retained by the channel.
-    ///
-    /// Includes the number of skipped messages.
-    Lagged(u64),
-}
-
-impl From<BroadcastStreamRecvError> for StreamRecvError {
-    fn from(value: BroadcastStreamRecvError) -> Self {
-        match value {
-            BroadcastStreamRecvError::Lagged(n) => StreamRecvError::Lagged(n),
-        }
-    }
-}
-
 
 pub struct Agent<S> {
     task: AsyncTask<(), Arc<Notify<S>>>,
@@ -101,7 +81,7 @@ impl<S: Send + Sync + 'static> Agent<S> {
     
     pub async fn subscribe(
         &self,
-    ) -> impl Stream<Item = Result<crate::task::Status<Result<NotifyArc<S>, StreamRecvError>>, StreamRecvError>>
+    ) -> impl Stream<Item = Result<crate::task::Status<Result<NotifyArc<S>, TaskStatusError>>, TaskStatusError>>
     {
         futures::stream::unfold(
             (

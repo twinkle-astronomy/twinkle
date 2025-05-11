@@ -199,7 +199,6 @@ async fn task(
 
     let writer = async move {
         while let Some(msg) = rx.recv().await {
-            tracing::info!("Sending: {:?}", msg);
             if let Err(e) = ws_write
                 .send(Message::Text(serde_json::to_string(&msg).unwrap()))
                 .await

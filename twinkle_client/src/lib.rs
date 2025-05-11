@@ -7,7 +7,6 @@ use std::time::Duration;
 mod stream_ext;
 pub use stream_ext::StreamExt;
 
-// pub mod feed;
 pub mod agent;
 pub mod notify;
 pub mod task;

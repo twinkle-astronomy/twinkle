@@ -54,15 +54,13 @@ async fn handle_websocket(socket: WebsocketHandler, settings: Arc<Notify<Setting
     let sub = settings
         .subscribe()
         .await
-        .map_ok(|item| {
-            axum::extract::ws::Message::Text(serde_json::to_string(item.deref()).unwrap())
-        })
         .take_while(|item| {
             if let Err(e) = &item {
                 tracing::error!("Error streaming settings: {:?}", e);
             }
             futures::future::ready(item.is_ok())
         })
-        .filter_map(|item| futures::future::ready(item.ok()));
+        .filter_map(|item| futures::future::ready(item.ok()))
+        .map(|x| x.deref().clone());
     socket.handle_websocket_stream(sub).await;
 }

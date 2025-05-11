@@ -1,9 +1,13 @@
 use std::{
+    future::Future,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
-use twinkle_client::task::{AsyncTask, Status, Task};
+use twinkle_client::{
+    task::{AsyncTask, Status, Task},
+    MaybeSend,
+};
 
 #[derive(Default)]
 pub struct AgentLock<T> {
@@ -42,7 +46,6 @@ impl<'a, T> DerefMut for AgentLockWriteGuard<'a, T> {
 
 impl<'a, T> Drop for AgentLockWriteGuard<'a, T> {
     fn drop(&mut self) {
-        tracing::info!("request_repaint");
         self.ctx.request_repaint();
     }
 }
@@ -78,6 +81,20 @@ impl<S: Sync> Default for Agent<S> {
     }
 }
 
+impl<S: Sync> Agent<S> {
+    pub fn spawn<F, U>(&mut self, ctx: egui::Context, state: S, func: F)
+    where
+        S: Send + 'static,
+        F: FnOnce(Arc<AgentLock<S>>) -> U,
+        U: Future<Output = ()> + MaybeSend + 'static,
+    {
+        self.0.spawn(Arc::new(AgentLock::new(ctx, state)), |state| {
+            let state = state.clone();
+            func(state)
+        });
+    }
+}
+
 pub trait Widget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response;
 }
@@ -89,7 +106,6 @@ where
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         let status = futures::executor::block_on(self.status().read());
         if let Status::Running(state) = status.deref() {
-            tracing::info!("create write state lock");
             state.ui(ui)
         } else {
             ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
