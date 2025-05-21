@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use twinkle_client::agent::StreamRecvError;
+use twinkle_client::task::TaskStatusError;
 
 use crate::Filter;
 
@@ -15,7 +15,7 @@ pub struct ConnectionParams {
 #[derive(Debug, Clone)]
 pub enum MessageToClient {
     Parameterization(Parameterization),
-    Status(twinkle_client::task::Status<Result<crate::flats::FlatRun, StreamRecvError>>),
+    Status(twinkle_client::task::Status<Result<crate::flats::FlatRun, TaskStatusError>>),
     Log(String),
 }
 

@@ -45,6 +45,17 @@ impl FilterWheel {
     }
 }
 
+impl super::Connectable for FilterWheel {
+    async fn connect(
+        &self,
+    ) -> Result<
+        impl futures::Stream<Item = Result<twinkle_client::notify::ArcCounter<indi::Parameter>, tokio_stream::wrappers::errors::BroadcastStreamRecvError>>,
+        indi::client::ChangeError<()>,
+    > {
+        self.device.change("CONNECTION", vec![("CONNECT", true)]).await
+    }
+}
+
 impl From<ActiveDevice> for FilterWheel {
     fn from(value: ActiveDevice) -> Self {
         FilterWheel {
@@ -129,7 +140,6 @@ impl FromParam for FilterListParamConfig {
         Self: Sized,
     {
         let values = param.deref().get_values::<HashMap<String, Text>>()?;
-        tracing::warn!("Filters: {:?}", &values);
         let values: Vec<TelescopeFilter> = values
             .iter()
             .map(|(slot, name)| {

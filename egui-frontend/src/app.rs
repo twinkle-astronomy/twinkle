@@ -1,10 +1,10 @@
 
 use parking_lot::Mutex;
 
-use crate::flats::FlatWidget;
+use crate::capture::CaptureManager;
+use crate::flats::FlatManager;
 use crate::indi::IndiManager;
-use crate::settings::SettingsWidget;
-use crate::sync_task::SyncTask;
+use crate::settings::SettingsManager;
 use std::boxed::Box;
 use std::ops::DerefMut;
 use std::sync::{mpsc, Arc, OnceLock};
@@ -14,8 +14,9 @@ static GLOBAL_CALLBACKS: OnceLock<
 
 pub struct App {
     indi_manager: Arc<Mutex<IndiManager>>,
-    flats_manager: SyncTask<FlatWidget>,
-    settings_manager: SyncTask<SettingsWidget>,
+    flats_manager: Arc<Mutex<FlatManager>>,
+    settings_manager: Arc<Mutex<SettingsManager>>,
+    capture_manager: Arc<Mutex<CaptureManager>>,
 
     callbacks: std::sync::mpsc::Receiver<
         Box<dyn FnOnce(&egui::Context, &mut eframe::Frame) + Sync + Send>,
@@ -36,14 +37,12 @@ impl App {
             .set(tx)
             .expect("GLOBAL_CALLBACKS already set.");
 
-        let indi_manager = Arc::new(Mutex::new(IndiManager::new(cc)));
-
         Self {
-            // task_ids: CountIndex::new(cc.egui_ctx.clone()),
             callbacks,
-            indi_manager: indi_manager,
-            flats_manager: SyncTask::new(Default::default(), cc.egui_ctx.clone()),
-            settings_manager: SyncTask::new(Default::default(), cc.egui_ctx.clone()),
+            indi_manager: Arc::new(Mutex::new(IndiManager::new(cc))),
+            flats_manager: Default::default(),
+            settings_manager: Arc::new(Mutex::new(SettingsManager::new())),
+            capture_manager: Arc::new(Mutex::new(CaptureManager::new()))
         }
     }
 }
@@ -51,8 +50,6 @@ impl App {
 impl eframe::App for App {
     #[tracing::instrument(skip_all)]
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        tracing::info!("update!");
-
         while let Ok(cb) = self.callbacks.try_recv() {
             cb(ctx, frame);
         }
@@ -67,19 +64,26 @@ impl eframe::App for App {
         });
 
         let mut indi_manager = self.indi_manager.lock();
+        let mut capture_manager = self.capture_manager.lock();
+        let mut settings_manager = self.settings_manager.lock();
+        let mut flats_manager = self.flats_manager.lock();
 
         egui::SidePanel::left("left").show(ctx, |ui| {
             ui.add(indi_manager.deref_mut());
             ui.separator();
-            ui.add(&mut self.flats_manager);
+            ui.add(flats_manager.deref_mut());
             ui.separator();
-            ui.add(&mut self.settings_manager);
+            ui.add(settings_manager.deref_mut());
+            ui.separator();
+            ui.add(capture_manager.deref_mut());
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             indi_manager.windows(ui);
-            self.flats_manager.windows(ui);
-            self.settings_manager.windows(ui);
+            flats_manager.windows(ui);
+            settings_manager.windows(ui);
+            capture_manager.windows(ui);
+            
         });
     }
 }

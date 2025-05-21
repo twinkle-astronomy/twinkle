@@ -7,21 +7,21 @@ use std::{
 use binning::{BinningConfig, BinningParameter};
 use capture_format::CaptureFormatParameter;
 use cooler::CoolerParameter;
+use futures::Stream;
 use image_type::ImageTypeParameter;
 use indi::{
-    client::{active_device::ActiveDevice, wait_fn, ChangeError},
-    Blob, Number, PropertyState, Switch, Text,
+    client::{active_device::ActiveDevice, ChangeError}, Blob, Number, Parameter, PropertyState, Switch, Text
 };
-use tokio_stream::StreamExt;
+use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use transfer_format::TransferFormatParameter;
-use twinkle_client::notify;
+use twinkle_client::{notify::ArcCounter, OnDropFutureExt};
+use twinkle_client::timeout;
 
 use super::{
     parameter_with_config::{
         get_parameter_value, ActiveParameterWithConfig, BlobParameter, NumberParameter, OneOfMany,
         SingleValueParamConfig, SwitchParameter,
-    },
-    DeviceError, DeviceSelectionError,
+    }, Connectable, DeviceError, DeviceSelectionError
 };
 
 mod transfer_format;
@@ -42,6 +42,7 @@ pub use image_type::ImageType;
 pub struct Camera {
     device: ActiveDevice,
     config: CameraConfig,
+    ccd: BlobParameter,
 }
 
 struct CameraConfig {
@@ -202,12 +203,20 @@ impl Camera {
             _ => Err(DeviceSelectionError::DeviceMismatch),
         }
     }
-    pub async fn new(device: ActiveDevice) -> Result<Self, super::DeviceSelectionError> {
+    pub async fn new(
+        device: ActiveDevice,
+        ccd_device: ActiveDevice,
+    ) -> Result<Self, super::DeviceSelectionError> {
         let driver_name = Self::get_driver_name(&device).await?;
+        let config = Self::get_config(&driver_name)?;
 
+        let ccd = Camera::image(&ccd_device, config.image.clone()).await?;
+
+        ccd.enable_blob(indi::BlobEnable::Also).await?;
         Ok(Camera {
             device,
-            config: Self::get_config(&driver_name)?,
+            config,
+            ccd,
         })
     }
 
@@ -283,12 +292,13 @@ impl Camera {
         )
     }
 
-    pub async fn image(&self) -> Result<BlobParameter, DeviceError> {
-        Ok(
-            ActiveParameterWithConfig::new(&self.device, self.config.image.clone())
-                .await?
-                .into(),
-        )
+    pub async fn image(
+        device: &ActiveDevice,
+        config: SingleValueParamConfig<Blob>,
+    ) -> Result<BlobParameter, DeviceError> {
+        Ok(ActiveParameterWithConfig::new(&device, config)
+            .await?
+            .into())
     }
 
     pub async fn abort(&self) -> Result<SwitchParameter, DeviceError> {
@@ -299,62 +309,59 @@ impl Camera {
         )
     }
 
-    pub async fn capture_image_from_param(
-        &self,
-        exposure: Duration,
-        image_param: &BlobParameter,
-    ) -> Result<Blob, DeviceError> {
-        use twinkle_client::OnDropFutureExt;
+    #[tracing::instrument(skip(self))]
+    pub async fn capture_image(&self, exposure: Duration) -> Result<Blob, DeviceError> {
         let exposure = exposure.as_secs_f64();
         let exposure_param = self.exposure().await?;
-        image_param.enable_blob(indi::BlobEnable::Also).await.unwrap();
 
-        let mut image_changes = image_param.changes();
+        let mut image_changes = self.ccd.changes();
         let mut exposure_changes = exposure_param.changes();
 
         exposure_param.set(exposure)?;
-        // drop(exposure_param);
 
-        let mut previous_exposure_secs = exposure;
         let exposing = Arc::new(Mutex::new(true));
         let exposing_ondrop = exposing.clone();
 
         let abort = self.abort().await?;
 
-        // Wait for exposure to run out
-        wait_fn(
-            &mut exposure_changes,
+        timeout(
             Duration::from_secs(exposure.ceil() as u64 + 10),
-            move |exposure_param| {
-                // Exposure goes to idle when canceled
-                if *exposure_param.get_state() == PropertyState::Idle {
-                    return Err(ChangeError::<()>::Canceled);
-                }
-                let remaining_exposure: f64 = exposure_param.get().unwrap().value.into();
-                // Image is done exposing, new image data should be sent very soon
-                if remaining_exposure == 0.0 {
-                    *exposing.lock().unwrap() = false;
-                    return Ok(notify::Status::Complete(exposure_param));
-                }
-                // remaining exposure didn't change, nothing to check
-                if previous_exposure_secs == remaining_exposure {
-                    return Ok(notify::Status::Pending);
-                }
-                // Make sure exposure changed by a reasonable amount.
-                // If another exposure is started before our exposure is finished
-                //  there is a good chance the remaining exposure won't have changed
-                //  by the amount of time since the last tick.
-                let exposure_change = Duration::from_millis(
-                    ((previous_exposure_secs - remaining_exposure).abs() * 1000.0) as u64,
-                );
-                if exposure_change > Duration::from_millis(1100) {
-                    return Err(ChangeError::Canceled);
-                }
-                previous_exposure_secs = remaining_exposure;
+            async move {
+                let mut started = false;
+                while let Some(exposure_param) = exposure_changes.try_next().await? {
+                    let remaining_exposure: f64 = exposure_param.get().unwrap().value.into();
+                    if !started {
+                        if remaining_exposure == exposure {
+                            started = true;
+                        }
+                        continue;
+                    }
+                    // Image is done exposing, new image data should be sent very soon
+                    if remaining_exposure == 0.0 {
+                        *exposing.lock().unwrap() = false;
+                        if *exposure_param.get_state() == PropertyState::Idle {
+                            tracing::error!("Detected external abort");
+                            return Err(DeviceError::Missing);
+                        }
 
-                // Nothing funky happened, so we're still waiting for the
-                // exposure to finish.
-                Ok(notify::Status::Pending)
+                        break;
+                    }
+                }
+
+                match image_changes.next().await {
+                    Some(Ok(image)) => {
+                        tracing::info!("Got image");
+                        Ok(image.get()?)
+                    }
+                    Some(Err(e)) => {
+                        tracing::info!("Error getting image: {:?}", e);
+                        Err(DeviceError::Missing)
+                    }
+                    None => {
+                        tracing::info!("Missing image");
+                        Err(DeviceError::Missing)
+                    }
+                }
             },
         )
         .on_drop(|| {
@@ -365,16 +372,7 @@ impl Camera {
                 }
             }
         })
-        .await?;
-
-        match image_changes.next().await {
-            Some(Ok(image)) => {
-                let blob = image.get()?;
-                Ok(blob)
-            }
-            Some(Err(_)) => Err(DeviceError::Missing),
-            None => Err(DeviceError::Missing),
-        }
+        .await?
     }
 
     pub async fn pixel_scale(&self) -> f64 {
@@ -408,10 +406,23 @@ impl Camera {
     }
 }
 
+
+impl Connectable for Camera {
+    async fn connect(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+        ChangeError<()>,
+    > {
+        self.device.change("CONNECTION", vec![("CONNECT", true)]).await
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::{sync::Arc, time::Duration};
 
+    use tokio::time::Instant;
     use tracing_test::traced_test;
 
     use crate::telescope::{Telescope, TelescopeConfig};
@@ -433,25 +444,20 @@ mod test {
             .await,
         );
 
-        let capture_task = tokio::task::spawn({
-            let camera = telescope.get_primary_camera().await.unwrap();
-            let camera_ccd = telescope.get_primary_camera_ccd().await.unwrap();
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            async move {
+        let camera = telescope.get_primary_camera().await.unwrap();
+        for _ in 0..5 {
+            tokio::time::timeout(Duration::from_millis(1500), async {
+                let now = Instant::now();
                 let fits_data = camera
-                    .capture_image_from_param(Duration::from_secs(1), &camera_ccd)
+                    .capture_image(Duration::from_secs_f32(0.01))
                     .await
                     .unwrap();
 
                 fits_data.value.unwrap();
-            }
-        });
-
-        let connect_task = tokio::task::spawn({
-            async move {
-
-            }
-        });
-        tokio::try_join!(capture_task, connect_task).unwrap();
+                tracing::info!("got image: {:?}", now.elapsed());
+            })
+            .await
+            .unwrap();
+        }
     }
 }

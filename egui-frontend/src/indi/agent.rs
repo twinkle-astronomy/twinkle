@@ -407,10 +407,9 @@ async fn task(state: Arc<AgentLock<State>>, glow: Option<std::sync::Arc<glow::Co
 }
 
 pub fn new(ctx: egui::Context, glow: Option<std::sync::Arc<glow::Context>>) -> Agent<State> {
-    let state = Arc::new(AgentLock::new(ctx.clone(), State::new()));
+    let state =  State::new();
     let mut agent: Agent<State> = Default::default();
-    agent.spawn(state, |state| {
-        let state = state.clone();
+    agent.spawn(ctx, state, |state| {
         let glow = glow.clone();
         async move {
             task(state, glow).await

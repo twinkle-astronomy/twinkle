@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use camera::Camera;
 use filter_wheel::FilterWheel;
@@ -10,15 +10,15 @@ use indi::{
     serialization::Command,
     Parameter, TypeError,
 };
-use parameter_with_config::BlobParameter;
 use tokio::net::TcpStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
-use twinkle_api::settings::TelescopeConfig;
+use twinkle_api::settings::{Settings, TelescopeConfig};
 use twinkle_client::{
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},
 };
+use twinkle_client::notify::Notify;
 
 pub mod camera;
 pub mod filter_wheel;
@@ -28,7 +28,21 @@ mod parameter_with_config;
 #[derive(Debug)]
 pub enum DeviceSelectionError {
     DeviceMismatch,
+    DeviceError(DeviceError),
+    NotifyError(twinkle_client::notify::Error<()>),
     UnkownDevice,
+}
+
+impl From<twinkle_client::notify::Error<()>> for DeviceSelectionError {
+    fn from(value: twinkle_client::notify::Error<()>) -> Self {
+        DeviceSelectionError::NotifyError(value)
+    }
+}
+
+impl From<DeviceError> for DeviceSelectionError {
+    fn from(value: DeviceError) -> Self {
+        DeviceSelectionError::DeviceError(value)
+    }
 }
 
 #[derive(Debug)]
@@ -85,6 +99,20 @@ pub enum DeviceError {
     Missing,
     UnknownVarient,
     SendError(SendError<Command>),
+    TimeoutError,
+    BroadcastStreamRecvError,
+}
+
+impl From<BroadcastStreamRecvError> for DeviceError {
+    fn from(_: BroadcastStreamRecvError) -> Self {
+        DeviceError::BroadcastStreamRecvError
+    }
+}
+
+impl From<twinkle_client::TimeoutError> for DeviceError {
+    fn from(_: twinkle_client::TimeoutError) -> Self {
+        DeviceError::TimeoutError
+    }
 }
 
 impl From<notify::Error<()>> for DeviceError {
@@ -131,6 +159,13 @@ pub struct Telescope {
 }
 
 impl Telescope {
+    pub async fn new_from_settings(settings: &Arc<Notify<Settings>>) -> Telescope {
+        let settings = settings.read().await;
+        Telescope::new(
+            settings.indi_server_addr.clone(),
+            settings.telescope_config.clone(),
+        ).await
+    }
     pub async fn new(
         addr: impl tokio::net::ToSocketAddrs + Clone + Display + Send + 'static,
         config: TelescopeConfig,
@@ -162,14 +197,10 @@ impl Telescope {
     }
 
     pub async fn get_primary_camera(&self) -> Result<Camera, TelescopeError<()>> {
-        Ok(Camera::new(Self::get_device(&self.client, &self.config.primary_camera).await?).await?)
-    }
-
-    pub async fn get_primary_camera_ccd(&self) -> Result<BlobParameter, TelescopeError<()>> {
-        let image_camera = Camera::new(Self::get_device(&self.image_client, &self.config.primary_camera).await?).await?;
-        let image_param = image_camera.image().await?;
-        image_param.enable_blob(indi::BlobEnable::Also).await?;
-        Ok(image_param)
+        Ok(Camera::new(
+            Self::get_device(&self.client, &self.config.primary_camera).await?,
+            Self::get_device(&self.image_client, &self.config.primary_camera).await?
+        ).await?)
     }
 
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
@@ -243,5 +274,3 @@ impl<E> From<ChangeError<E>> for ParameterError<E> {
         ParameterError::ChangeError(value)
     }
 }
-
-pub trait Baseline {}

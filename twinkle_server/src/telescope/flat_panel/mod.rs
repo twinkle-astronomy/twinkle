@@ -6,8 +6,7 @@ use indi::{
 use super::{
     parameter_with_config::{
         get_parameter_value, ActiveParameterWithConfig, NumberParameter, OneOfMany, SingleValueParamConfig
-    },
-    DeviceError, DeviceSelectionError,
+    }, Connectable, DeviceError, DeviceSelectionError
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -96,6 +95,17 @@ impl FlatPanel {
     }
 }
 
+
+impl Connectable for FlatPanel {
+    async fn connect(
+        &self,
+    ) -> Result<
+        impl futures::Stream<Item = Result<twinkle_client::notify::ArcCounter<indi::Parameter>, tokio_stream::wrappers::errors::BroadcastStreamRecvError>>,
+        indi::client::ChangeError<()>,
+    > {
+        self.device.change("CONNECTION", vec![("CONNECT", true)]).await
+    }
+}
 
 pub struct Config {
     pub is_on: bool,

@@ -39,6 +39,7 @@ async fn main() {
         .merge(twinkle_server::counts::routes())
         .merge(twinkle_server::indi::routes())
         .merge(twinkle_server::settings::routes())
+        .merge(twinkle_server::capture::routes())
         .with_state(state)
         .layer(cors)
         .fallback_service(ServeDir::new("assets"));

@@ -54,7 +54,7 @@ impl<T> From<T> for ArcCounter<T> {
 impl<T: PartialEq> PartialEq for ArcCounter<T> {
     fn eq(&self, other: &Self) -> bool {
         match &self.value {
-            Some(value) => value.deref().ne(other.deref()),
+            Some(value) => value.deref().eq(other.deref()),
             _ => false,
         }
     }
@@ -105,8 +105,15 @@ impl<T: std::fmt::Display> std::fmt::Display for ArcCounter<T> {
         }
     }
 }
+impl<T: Clone> ArcCounter<T> {
+    pub fn into_inner(self) -> T {
+        self.deref().clone()
+    }
+}
 
 impl<T> ArcCounter<T> {
+
+
     async fn not_cloned(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
         crate::timeout(timeout, async {
             self.not_cloned_inner().await;
@@ -117,8 +124,12 @@ impl<T> ArcCounter<T> {
     async fn not_cloned_inner(&mut self) {
         // Polling based way of waiting for clone count to hit 0.
         loop {
-            if Arc::strong_count(&self.value.as_ref().unwrap()) == 1 {
+            let count = Arc::strong_count(&self.value.as_ref().unwrap());
+            if count == 1 {
                 break;
+            }
+            if count > 2 {
+                tracing::warn!("yielding for count: {}", count);
             }
             tokio::task::yield_now().await;
         }
@@ -226,7 +237,7 @@ impl<T> Notify<T> {
             id: NOTIFY_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
             subject: RwLock::new(NotifyArc::new(value)),
             to_notify: tx,
-            timeout: Duration::from_millis(1),
+            timeout: Duration::from_millis(1000),
         }
     }
     pub fn id(&self) -> usize {
@@ -474,7 +485,10 @@ impl<'a, T> NotifyMutexGuard<'a, T> {
                 Ok(_) => break,
                 Err(e) => {
                     ret = Err(e);
-                    let _ = self.to_notify.send(None);
+                    let _ = {
+                        tracing::error!("Timeout waitng for not_cloned, sending None");
+                        self.to_notify.send(None)
+                    };
                 }
             }
         }

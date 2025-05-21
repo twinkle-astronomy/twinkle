@@ -5,7 +5,7 @@ use tokio::{fs::File, io::AsyncWriteExt};
 use twinkle_api::{analysis::Statistics, fits::AsFits, flats::{Config, FlatRun}};
 use twinkle_client::OnDropFutureExt;
 
-use crate::{flats::FlatError, telescope::{camera::{self, CaptureFormat, TransferFormat}, filter_wheel, flat_panel, Telescope}};
+use crate::{flats::FlatError, telescope::{camera::{self, CaptureFormat, TransferFormat}, filter_wheel, flat_panel, Connectable, Telescope}};
 pub async fn start(telescope: Arc<Telescope>, config: Config, state: Arc<Notify<FlatRun>>) -> Result<(), FlatError> {
     let flat_panel = telescope
         .get_flat_panel()
@@ -27,12 +27,17 @@ pub async fn inner_start(telescope: Arc<Telescope>, config: Config, state: Arc<N
     let flat_panel = telescope
         .get_flat_panel()
         .await?;
+    let _ = flat_panel.connect().await?;
+
     let filter_wheel = telescope
         .get_filter_wheel()
         .await?;
+    let _ = filter_wheel.connect().await?;
+
     let camera = telescope
         .get_primary_camera()
         .await?;
+    let _ = filter_wheel.connect().await?;
 
     let fp_config = flat_panel::Config { is_on: true.into() };
     let _ = fp_config.set(&flat_panel).await?;
@@ -127,10 +132,6 @@ pub async fn run(
         .get_flat_panel()
         .await?;
 
-    let camera_ccd = telescope
-        .get_primary_camera_ccd()
-        .await?;
-
     let fp_brightness = flat_panel.brightness().await?;
     let mut fp_level = fp_brightness.get().await?;
 
@@ -143,7 +144,7 @@ pub async fn run(
 
         tracing::info!("Exposing for {}s", exposure.as_millis() as f64 / 1000f64);
         let fits_data = camera
-            .capture_image_from_param(exposure, &camera_ccd)
+            .capture_image(exposure)
             .await?;
 
         let stats = {

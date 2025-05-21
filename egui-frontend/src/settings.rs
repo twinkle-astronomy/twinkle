@@ -1,16 +1,15 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
+use egui::Window;
 use futures::{SinkExt, StreamExt};
 use tokio_tungstenite_wasm::Message;
 use twinkle_api::settings::Settings;
 use twinkle_client::{
     sleep,
-    task::{spawn, Abortable},
+    task::{spawn, Abortable, IsRunning},
 };
 
-use crate::sync_task::{Sender, SyncAble, SyncTask};
-
-use crate::get_http_base;
+use crate::{agent::{Agent, AgentLock, Widget}, get_http_base};
 
 fn get_websocket_url() -> String {
     format!("{}settings", crate::get_websocket_base())
@@ -20,18 +19,41 @@ fn post_url() -> String {
     format!("{}settings", get_http_base())
 }
 
-impl egui::Widget for &mut SyncTask<SettingsWidget> {
+pub struct SettingsManager {
+    agent: Agent<SettingsWidget>,
+}
+
+impl SettingsManager {
+pub fn new() -> Self {
+        SettingsManager { agent: Default::default() }
+    }
+
+
+    pub fn windows(&mut self, ui: &mut egui::Ui) {
+        if self.agent.running() {
+            let mut open = true;
+            Window::new("Settings")
+                .open(&mut open)
+                .resizable(true)
+                .scroll([false, false])
+                .show(ui.ctx(), |ui| ui.add(&mut self.agent));
+            if !open {
+                self.agent.abort();
+            }
+        }
+    }
+}
+impl egui::Widget for &mut SettingsManager {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.vertical(|ui| match self.running() {
+        ui.vertical(|ui| match self.agent.running() {
             true => {
                 if ui.selectable_label(true, "Settings").clicked() {
-                    self.abort();
+                    self.agent.abort();
                 }
             }
             false => {
                 if ui.selectable_label(false, "Settings").clicked() {
-                    self.data = None;
-                    self.spawn(|tx, _rx| SettingsWidget::task(tx));
+                    self.agent.spawn(ui.ctx().clone(), Default::default(), |state| SettingsWidget::task(state));
                 }
             }
         })
@@ -46,7 +68,7 @@ pub struct SettingsWidget {
 
 impl SettingsWidget {
 
-    async fn task(tx: Sender<Settings>) {
+    async fn task(state: Arc<AgentLock<SettingsWidget>>) {
         loop {
             let websocket_url = get_websocket_url();
             let websocket = match tokio_tungstenite_wasm::connect(websocket_url).await {
@@ -72,8 +94,18 @@ impl SettingsWidget {
                 match r.next().await {
                     Some(Ok(Message::Text(msg))) => {
                         let new_settings = serde_json::from_str(msg.as_str()).unwrap();
-                        if let Err(e) = tx.send(new_settings) {
-                            tracing::error!("Error sending settings: {:?}", e);
+                        let mut lock = state.write();
+
+                        match &mut lock.data {
+                            Some(value) => {
+                                value.settings = new_settings;
+                            }
+                            None => {
+                                lock.data = Some(SettingsData {
+                                    settings: new_settings.clone(),
+                                    entries: new_settings,
+                                })
+                            }
                         }
                     }
                     Some(Err(e)) => {
@@ -94,29 +126,8 @@ pub struct SettingsData {
     entries: Settings,
 }
 
-impl SyncAble for SettingsWidget {
-    type MessageFromTask = Settings;
-    type MessageToTask = ();
-
-    fn update(&mut self, settings: Settings) {
-        match &mut self.data {
-            Some(value) => {
-                value.settings = settings;
-            }
-            None => {
-                self.data = Some(SettingsData {
-                    settings: settings.clone(),
-                    entries: settings,
-                })
-            }
-        }
-    }
-
-    fn window_name(&self) -> impl Into<egui::WidgetText> {
-        "Settings"
-    }
-
-    fn ui(&mut self, ui: &mut egui::Ui, _tx: tokio::sync::mpsc::UnboundedSender<()>) -> egui::Response {
+impl Widget for &mut SettingsWidget {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         match &mut self.data {
             Some(settings_data) => {
                 ui.vertical(|ui| {
@@ -201,5 +212,4 @@ impl SyncAble for SettingsWidget {
             None => ui.spinner(),
         }
     }
-
 }

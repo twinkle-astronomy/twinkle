@@ -1,12 +1,18 @@
-use crate::sync_task::{SyncAble, SyncTask};
+use crate::agent::Agent;
+use crate::agent::AgentLock;
+use crate::agent::Widget;
 use crate::get_websocket_base;
-use egui::{ScrollArea, TextStyle, Widget};
+use egui::Window;
+use egui::{ScrollArea, TextStyle};
 use futures::SinkExt;
 use futures::StreamExt;
+use twinkle_client::task::Abortable;
+use twinkle_client::task::IsRunning;
 
+use std::sync::Arc;
 use std::time::Duration;
 use tokio_tungstenite_wasm::Message;
-use twinkle_api::flats::{MessageToClient, MessageToServer};
+use twinkle_api::flats::MessageToServer;
 
 
 
@@ -70,12 +76,12 @@ impl egui::Widget for &FlatRun {
 pub struct FlatWidget {
     config: Config,
     status: twinkle_client::task::Status<twinkle_api::flats::FlatRun>,
-    // sender: tokio::sync::mpsc::Sender<MessageToServer>,
+    sender: tokio::sync::mpsc::Sender<MessageToServer>,
     messages: Vec<String>,
 }
 
-impl Default for FlatWidget {
-    fn default() -> Self {
+impl FlatWidget {
+    fn new(sender: tokio::sync::mpsc::Sender<MessageToServer>) -> Self {
         FlatWidget {
             config: twinkle_api::flats::Config {
                 count: 30,
@@ -88,54 +94,26 @@ impl Default for FlatWidget {
                 exposure: Duration::from_secs(3),
             }.into(),
             status: twinkle_client::task::Status::Completed,
+            sender,
             messages: Default::default(),
         }
     }
 }
 
-impl SyncAble for FlatWidget {
-    type MessageFromTask = twinkle_api::flats::MessageToClient;
-    type MessageToTask = twinkle_api::flats::MessageToServer;
-
-    fn update(&mut self, msg: Self::MessageFromTask) {
-        match msg {
-            twinkle_api::flats::MessageToClient::Parameterization(parameterization) => {
-                self.config.filters = parameterization
-                    .filters
-                    .into_iter()
-                    .map(|filter| (filter, false))
-                    .collect();
-            }
-            twinkle_api::flats::MessageToClient::Status(status) => {
-                match status.into() {
-                    Ok(updated_status) => self.status = updated_status,
-                    Err(e) => {
-                        tracing::error!("Error syncing state: {:?}", e);
-                    }
-                }
-            }
-            twinkle_api::flats::MessageToClient::Log(msg) => {
-                // tracing::warn!(msg);
-                self.messages.push(msg);
-            }
-        }
-    }
-
-
-    fn ui(&mut self, ui: &mut egui::Ui, tx: tokio::sync::mpsc::UnboundedSender<MessageToServer>) -> egui::Response {
+impl Widget for &mut FlatWidget {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.vertical(|ui| {
-            self.config.ui(ui);
+            ui.add(&mut self.config);
             ui.separator();
             if let twinkle_client::task::Status::Running(status) = &self.status {
                 if ui.button("Stop").clicked() {
-                    tx.send(MessageToServer::Stop).unwrap();
+                    self.sender.try_send(MessageToServer::Stop).ok();
                 }
                 ui.add(&FlatRun(status.clone()));
             } else {
                 if ui.button("Start").clicked() {
-                    tx
-                        .send(MessageToServer::Start(self.config.clone()))
-                        .unwrap();
+                    self.sender
+                        .try_send(MessageToServer::Start(self.config.clone())).ok();
                 }
             }
             ui.separator();
@@ -154,10 +132,6 @@ impl SyncAble for FlatWidget {
         })
         .response
     }
-
-    fn window_name(&self) -> impl Into<egui::WidgetText> {
-        "Flats"
-    }
 }
 
 fn get_websocket_url() -> String {
@@ -166,8 +140,8 @@ fn get_websocket_url() -> String {
 
 
 async fn task(
-    tx: crate::sync_task::Sender<MessageToClient>,
-    mut rx: tokio::sync::mpsc::UnboundedReceiver<MessageToServer>,
+    state: Arc<AgentLock<FlatWidget>>,
+    mut rx: tokio::sync::mpsc::Receiver<MessageToServer>,
 ) {
     let websocket = match tokio_tungstenite_wasm::connect(get_websocket_url()).await {
         Ok(websocket) => websocket,
@@ -181,14 +155,28 @@ async fn task(
         loop {
             match ws_read.next().await {
                 Some(Ok(Message::Text(msg))) => {
-                    let msg: twinkle_api::flats::MessageToClient =
-                        serde_json::from_str(msg.as_str()).unwrap();
+                    let msg: twinkle_api::flats::MessageToClient = serde_json::from_str(msg.as_str()).unwrap();
 
-                    if let Err(e) = tx.send(msg) {
-                        tracing::error!("Unable to send message to client: {:?}", e);
-                        break;
-                    }
-                   
+                    match msg {
+                        twinkle_api::flats::MessageToClient::Parameterization(parameterization) => {
+                            state.write().config.filters = parameterization
+                                .filters
+                                .into_iter()
+                                .map(|filter| (filter, false))
+                                .collect();
+                        }
+                        twinkle_api::flats::MessageToClient::Status(status) => {
+                            match status.into() {
+                                Ok(updated_status) => state.write().status = updated_status,
+                                Err(e) => {
+                                    tracing::error!("Error syncing state: {:?}", e);
+                                }
+                            }
+                        }
+                        twinkle_api::flats::MessageToClient::Log(msg) => {
+                            state.write().messages.push(msg);
+                        }
+                    }                   
                 }
                 _ => {
                     break;
@@ -199,7 +187,6 @@ async fn task(
 
     let writer = async move {
         while let Some(msg) = rx.recv().await {
-            tracing::info!("Sending: {:?}", msg);
             if let Err(e) = ws_write
                 .send(Message::Text(serde_json::to_string(&msg).unwrap()))
                 .await
@@ -216,17 +203,38 @@ async fn task(
     };
 }
 
-impl egui::Widget for &mut SyncTask<FlatWidget> {
+
+#[derive(Default)]
+pub struct FlatManager {
+    agent: Agent<FlatWidget>
+}
+impl FlatManager {
+    pub fn windows(&mut self, ui: &mut egui::Ui) {
+        if self.agent.running() {
+            let mut open = true;
+            Window::new("Flats")
+                .open(&mut open)
+                .resizable(true)
+                .scroll([false, false])
+                .show(ui.ctx(), |ui| ui.add(&mut self.agent));
+            if !open {
+                self.agent.abort();
+            }
+        }
+    }
+}
+impl egui::Widget for &mut FlatManager {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.vertical(|ui| match self.running() {
+        ui.vertical(|ui| match self.agent.running() {
             true => {
                 if ui.selectable_label(true, "Flats").clicked() {
-                    self.abort();
+                    self.agent.abort();
                 }
             }
             false => {
                 if ui.selectable_label(false, "Flats").clicked() {
-                    self.spawn(|tx, rx| task(tx, rx));
+                    let (tx, rx) = tokio::sync::mpsc::channel(10);
+                    self.agent.spawn(ui.ctx().clone(), FlatWidget::new(tx), |state| task(state, rx));
                 }
             }
         })

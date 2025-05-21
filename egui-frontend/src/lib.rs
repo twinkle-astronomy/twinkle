@@ -3,15 +3,13 @@
 mod app;
 
 pub use app::App;
+pub mod agent;
 
+pub mod capture;
 pub mod fits;
 pub mod flats;
 pub mod indi;
 pub mod settings;
-
-pub mod sync_task;
-pub mod agent;
-
 
 #[cfg(debug_assertions)]
 fn get_websocket_base() -> String {

@@ -21,7 +21,7 @@ use twinkle_client::task::Abortable;
 use twinkle_client::task::Joinable;
 
 use crate::{
-    telescope::{DeviceError, Telescope, TelescopeError}, websocket_handler::WebsocketHandler, AppState
+    telescope::{Connectable, DeviceError, Telescope, TelescopeError}, websocket_handler::WebsocketHandler, AppState
 };
 // Global broadcast channel for trace events
 pub static TRACE_CHANNEL: Lazy<tokio::sync::broadcast::Sender<String>> = Lazy::new(|| {
@@ -38,7 +38,7 @@ pub enum FlatError {
     FitsError(fitsrs::error::Error),
     TelescopeError(TelescopeError<()>),
     ChangeError(ChangeError<()>),
-    SendError(tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>),
+    SendError(tokio::sync::mpsc::error::SendError<MessageToClient>),
     SendCommandError(SendError<Command>),
     SerdeError(serde_json::Error),
     AxumError(axum::Error),
@@ -73,8 +73,8 @@ impl From<serde_json::Error> for FlatError {
         FlatError::SerdeError(value)
     }
 }
-impl From<tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>> for FlatError {
-    fn from(value: tokio::sync::mpsc::error::SendError<axum::extract::ws::Message>) -> Self {
+impl From<tokio::sync::mpsc::error::SendError<MessageToClient>> for FlatError {
+    fn from(value: tokio::sync::mpsc::error::SendError<MessageToClient>) -> Self {
         FlatError::SendError(value)
     }
 }
@@ -121,7 +121,6 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
     let store = state.store.read().await;
     let task_status = store.flats.clone();
     let settings = store.settings.read().await;
-    tracing::info!("settings: {:?}", &settings);
     
     let telescope = Arc::new(
         Telescope::new(
@@ -133,7 +132,7 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
     drop(settings);
     drop(store);
     
-    let (message_tx, message_rx) = tokio::sync::mpsc::channel::<Message>(10);
+    let (message_tx, message_rx) = tokio::sync::mpsc::channel::<MessageToClient>(10);
 
     let (from_websocket_tx, from_websocket_rx) = tokio::sync::mpsc::channel::<Message>(10);
 
@@ -143,10 +142,9 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
 
         async move {
             while let Ok(log) = sub.recv().await {
-                let msg = Message::Text(serde_json::to_string(&MessageToClient::Log(log)).unwrap());
-                message_tx.send(msg).await?;
+                message_tx.send(MessageToClient::Log(log)).await?;
             }
-            Ok(())
+            Result::<(), FlatError>::Ok(())
         }
     };
     let task_status_sender = {
@@ -155,10 +153,8 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
         async move {
             while let Some(Ok(task_status)) = task_status_sub.next().await {
                 let message_status = task_status.map(|x| x.map(|y| y.as_ref().clone()));
-                let msg = Message::Text(
-                    serde_json::to_string(&MessageToClient::Status(message_status)).unwrap(),
-                );
-                message_tx.send(msg).await?;
+
+                message_tx.send(MessageToClient::Status(message_status)).await?;
             }
             Result::<(), FlatError>::Ok(())
         }
@@ -205,20 +201,18 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
 
         async move {
             let filter_wheel = telescope.get_filter_wheel().await?;
+            let _ = filter_wheel.connect().await?;
+
             let filters = filter_wheel.filters().await?;
 
             let mut filters_subscription = filters.subscribe().await;
+
             let mut params = Parameterization::default();
             params.binnings = vec![1, 2, 4];
             while let Some(Ok(filters)) = filters_subscription.next().await {
                 params.filters = filters.get()?.into_iter().map(|x| x.into()).collect();
                 message_tx
-                    .send(Message::Text(
-                        serde_json::to_string(
-                            &twinkle_api::flats::MessageToClient::Parameterization(params.clone()),
-                        )
-                        .unwrap(),
-                    ))
+                    .send(twinkle_api::flats::MessageToClient::Parameterization(params.clone()))
                     .await?;
             }
             Result::<(), FlatError>::Ok(())
@@ -228,16 +222,40 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
 
     socket.set_sender(from_websocket_tx);
     
-    if let Err(e) = tokio::select! {
-        v = param_sender => v,
-        v = websocket_receiver => v,
-        v = task_status_sender => v,
-        v = log_sender => v,
-        v = async move { socket.handle_websocket_stream(ReceiverStream::new(message_rx)).await; Ok(())} => v,
-    } {
-        tracing::error!("Got error processing flats websocket: {:?}", e);
+    let websocket_handler_future = async move {
+        socket.handle_websocket_stream(ReceiverStream::new(message_rx)).await; Result::<(), FlatError>::Ok(())
+    };
+
+    tokio::select! {
+        v = param_sender => {
+            if let Err(e) = v {
+                 tracing::error!("Error in param_sender: {:?}", e);
+            }
+        },
+        v = websocket_receiver => {
+            if let Err(e) = v {
+                 tracing::error!("Error in websocket_receiver: {:?}", e);
+            }
+        },
+
+        v = task_status_sender => {
+            if let Err(e) = v {
+                 tracing::error!("Error in task_status_sender: {:?}", e);
+            }
+        },
+
+        v = log_sender => {
+            if let Err(e) = v {
+                 tracing::error!("Error in log_sender: {:?}", e);
+            }
+        },
+
+        v = websocket_handler_future => {
+            if let Err(e) = v {
+                 tracing::error!("Error in websocket_handler_future: {:?}", e);
+            }
+        },
+
     }
 }
 
-#[cfg(test)]
-mod test {}
