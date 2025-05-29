@@ -223,7 +223,7 @@ pub struct GuideStep {
     #[serde(alias = "RALimited")]
     pub ra_limited: Option<bool>,
     #[serde(alias = "DecLimited")]
-    pub dec_limited: Option<f64>,
+    pub dec_limited: Option<bool>,
     #[serde(alias = "ErrorCode")]
     pub error_code: Option<i32>,
 }
