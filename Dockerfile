@@ -30,7 +30,7 @@ COPY . /app
 USER root
 
 # Build server
-RUN cargo build --release --bin server
+RUN cd twinkle_server && cargo build --release --bin server
 # Build frontend
 RUN cd egui-frontend && trunk build --release
 
@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN mkdir /app
-COPY --from=twinkle-build /app/target/release/server /app/server
+COPY --from=twinkle-build /app/twinkle_server/target/release/server /app/server
 COPY --from=twinkle-build /app/egui-frontend/dist /app/assets
 USER ${USER}
 WORKDIR /app
