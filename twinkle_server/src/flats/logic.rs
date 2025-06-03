@@ -7,13 +7,14 @@ use twinkle_api::{
     fits::AsFits,
     flats::{Config, FlatRun, LightSource},
 };
-use twinkle_client::OnDropFutureExt;
 
 use crate::{
     flats::FlatError,
     telescope::{
         camera::{self, CaptureFormat, TransferFormat},
-        filter_wheel, flat_panel, Connectable, Telescope,
+        filter_wheel,
+        flat_panel::Light,
+        Connectable, Telescope,
     },
 };
 pub async fn start(
@@ -21,18 +22,7 @@ pub async fn start(
     config: Config,
     state: Arc<Notify<FlatRun>>,
 ) -> Result<(), FlatError> {
-    let flat_panel = telescope.get_flat_panel().await?;
-
-    let light = flat_panel.light().await?;
-    light.set(true)?;
-
-    inner_start(telescope, config, state)
-        .on_drop(|| {
-            if let Err(e) = light.set(false) {
-                tracing::error!("Unable to to turn off flatpanel: {:?}", e);
-            }
-        })
-        .await?;
+    inner_start(telescope, config, state).await?;
 
     Ok(())
 }
@@ -42,6 +32,17 @@ struct CaptureState<'a> {
     min: f64,
     max: f64,
     config: &'a Config,
+    flat_panel: Option<Light>,
+}
+
+impl<'a> Drop for CaptureState<'a> {
+    fn drop(&mut self) {
+        if let Some(flat_panel) = &self.flat_panel {
+            if let Err(e) = flat_panel.set(false) {
+                tracing::error!("Unable to turn flat panel off: {:?}", e);
+            }
+        }
+    }
 }
 
 impl<'a> CaptureState<'a> {
@@ -49,14 +50,18 @@ impl<'a> CaptureState<'a> {
         Ok(match &config.light_source {
             LightSource::FlatPanel(_) => {
                 let flat_panel = telescope.get_flat_panel().await?;
+                let _ = flat_panel.connect().await?;
                 let fp_brightness = flat_panel.brightness().await?;
                 let fp_level = fp_brightness.get().await?;
+                let light = flat_panel.light().await?;
+                light.set(true)?;
 
                 CaptureState {
                     free: f64::from(fp_level.value),
                     min: fp_level.min,
                     max: fp_level.max,
                     config,
+                    flat_panel: Some(light),
                 }
             }
             LightSource::Sky {
@@ -67,6 +72,7 @@ impl<'a> CaptureState<'a> {
                 min: min_exposure.as_secs_f64(),
                 max: max_exposure.as_secs_f64(),
                 config,
+                flat_panel: None,
             },
         })
     }
@@ -129,17 +135,11 @@ pub async fn inner_start(
     config: Config,
     state: Arc<Notify<FlatRun>>,
 ) -> Result<(), FlatError> {
-    let flat_panel = telescope.get_flat_panel().await?;
-    let _ = flat_panel.connect().await?;
-
     let filter_wheel = telescope.get_filter_wheel().await?;
     let _ = filter_wheel.connect().await?;
 
     let camera = telescope.get_primary_camera().await?;
     let _ = filter_wheel.connect().await?;
-
-    let fp_config = flat_panel::Config { is_on: true.into() };
-    let _ = fp_config.set(&flat_panel).await?;
 
     let total = config.total_images() as f32;
     let mut completed = 0.;

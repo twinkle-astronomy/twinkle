@@ -1,12 +1,11 @@
-
-use indi::{
-    client::active_device::ActiveDevice, Number, Text
-};
+use indi::{client::active_device::ActiveDevice, Number, Text};
 
 use super::{
     parameter_with_config::{
-        get_parameter_value, ActiveParameterWithConfig, NumberParameter, OneOfMany, SingleValueParamConfig
-    }, Connectable, DeviceError, DeviceSelectionError
+        get_parameter_value, ActiveParameterWithConfig, NumberParameter, OneOfMany,
+        SingleValueParamConfig,
+    },
+    Connectable, DeviceError, DeviceSelectionError,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,10 +33,8 @@ struct FlatPanelConfig {
     light: OneOfMany<LightState>,
 }
 
-
 #[derive(derive_more::Deref)]
 pub struct Light(ActiveParameterWithConfig<OneOfMany<LightState>>);
-
 
 impl FlatPanel {
     async fn get_driver_name(device: &ActiveDevice) -> Result<Text, super::DeviceSelectionError> {
@@ -56,7 +53,12 @@ impl FlatPanel {
                 ),
                 light: OneOfMany::new(
                     "FLAT_LIGHT_CONTROL",
-                    [("FLAT_LIGHT_ON", LightState::On), ("FLAT_LIGHT_OFF", LightState::Off)].into_iter().collect()
+                    [
+                        ("FLAT_LIGHT_ON", LightState::On),
+                        ("FLAT_LIGHT_OFF", LightState::Off),
+                    ]
+                    .into_iter()
+                    .collect(),
                 ),
             }),
             "Deep Sky Dad FP" => Ok(FlatPanelConfig {
@@ -66,7 +68,12 @@ impl FlatPanel {
                 ),
                 light: OneOfMany::new(
                     "FLAT_LIGHT_CONTROL",
-                    [("FLAT_LIGHT_ON", LightState::On), ("FLAT_LIGHT_OFF", LightState::Off)].into_iter().collect()
+                    [
+                        ("FLAT_LIGHT_ON", LightState::On),
+                        ("FLAT_LIGHT_OFF", LightState::Off),
+                    ]
+                    .into_iter()
+                    .collect(),
                 ),
             }),
             _ => Err(DeviceSelectionError::DeviceMismatch),
@@ -80,42 +87,33 @@ impl FlatPanel {
         Ok(FlatPanel { device, config })
     }
     pub async fn brightness(&self) -> Result<NumberParameter, DeviceError> {
-        Ok(ActiveParameterWithConfig::new(
-            &self.device,
-            self.config.brightness.clone(),
+        Ok(
+            ActiveParameterWithConfig::new(&self.device, self.config.brightness.clone())
+                .await?
+                .into(),
         )
-        .await?
-        .into())
     }
 
     pub async fn light(&self) -> Result<Light, DeviceError> {
-        let apwc = ActiveParameterWithConfig::new(
-            &self.device, self.config.light.clone()).await?;
+        let apwc = ActiveParameterWithConfig::new(&self.device, self.config.light.clone()).await?;
         Ok(Light(apwc))
     }
 }
-
 
 impl Connectable for FlatPanel {
     async fn connect(
         &self,
     ) -> Result<
-        impl futures::Stream<Item = Result<twinkle_client::notify::ArcCounter<indi::Parameter>, tokio_stream::wrappers::errors::BroadcastStreamRecvError>>,
+        impl futures::Stream<
+            Item = Result<
+                twinkle_client::notify::ArcCounter<indi::Parameter>,
+                tokio_stream::wrappers::errors::BroadcastStreamRecvError,
+            >,
+        >,
         indi::client::ChangeError<()>,
     > {
-        self.device.change("CONNECTION", vec![("CONNECT", true)]).await
+        self.device
+            .change("CONNECTION", vec![("CONNECT", true)])
+            .await
     }
 }
-
-pub struct Config {
-    pub is_on: bool,
-}
-
-impl Config {
-    pub async fn set(&self, flat_panel: &FlatPanel) -> Result<(), DeviceError> {
-        let light = flat_panel.light().await?;
-        let _ = light.change(self.is_on).await?;
-        Ok(())
-    }
-}
-
