@@ -14,11 +14,15 @@ use std::time::Duration;
 use tokio_tungstenite_wasm::Message;
 use twinkle_api::flats::MessageToServer;
 
-
-
-#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::AsRef, derive_more::AsMut, derive_more::From, Debug)]
+#[derive(
+    derive_more::Deref,
+    derive_more::DerefMut,
+    derive_more::AsRef,
+    derive_more::AsMut,
+    derive_more::From,
+    Debug,
+)]
 pub struct Config(twinkle_api::flats::Config);
-
 
 impl egui::Widget for &mut Config {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
@@ -59,13 +63,34 @@ impl egui::Widget for &mut Config {
                 ui.label("Offset");
                 ui.add(egui::DragValue::new(&mut self.offset).range(0..=500));
                 ui.end_row();
+
+                ui.radio_value(
+                    &mut self.light_source,
+                    twinkle_api::flats::LightSource::FlatPanel(Duration::from_secs(3)),
+                    "Flat Panel",
+                );
+                ui.radio_value(
+                    &mut self.light_source,
+                    twinkle_api::flats::LightSource::Sky {
+                        min_exposure: Duration::from_secs(1),
+                        max_exposure: Duration::from_secs(10),
+                    },
+                    "Sky",
+                );
             })
             .response
     }
 }
 
-
-#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::AsRef, derive_more::AsMut, derive_more::From, derive_more::Into, Debug)]
+#[derive(
+    derive_more::Deref,
+    derive_more::DerefMut,
+    derive_more::AsRef,
+    derive_more::AsMut,
+    derive_more::From,
+    derive_more::Into,
+    Debug,
+)]
 pub struct FlatRun(twinkle_api::flats::FlatRun);
 
 impl egui::Widget for &FlatRun {
@@ -87,12 +112,13 @@ impl FlatWidget {
                 count: 30,
                 filters: vec![].into_iter().collect(),
                 adu_target: u16::MAX / 2,
-                adu_margin: u16::MAX,
+                adu_margin: 5000,
                 binnings: vec![(1, false), (2, true)].into_iter().collect(),
                 gain: 120.,
                 offset: 10.,
-                exposure: Duration::from_secs(3),
-            }.into(),
+                light_source: twinkle_api::flats::LightSource::FlatPanel(Duration::from_secs(3)),
+            }
+            .into(),
             status: twinkle_client::task::Status::Completed,
             sender,
             messages: Default::default(),
@@ -113,7 +139,8 @@ impl Widget for &mut FlatWidget {
             } else {
                 if ui.button("Start").clicked() {
                     self.sender
-                        .try_send(MessageToServer::Start(self.config.clone())).ok();
+                        .try_send(MessageToServer::Start(self.config.clone()))
+                        .ok();
                 }
             }
             ui.separator();
@@ -138,7 +165,6 @@ fn get_websocket_url() -> String {
     format!("{}flats", get_websocket_base())
 }
 
-
 async fn task(
     state: Arc<AgentLock<FlatWidget>>,
     mut rx: tokio::sync::mpsc::Receiver<MessageToServer>,
@@ -155,7 +181,8 @@ async fn task(
         loop {
             match ws_read.next().await {
                 Some(Ok(Message::Text(msg))) => {
-                    let msg: twinkle_api::flats::MessageToClient = serde_json::from_str(msg.as_str()).unwrap();
+                    let msg: twinkle_api::flats::MessageToClient =
+                        serde_json::from_str(msg.as_str()).unwrap();
 
                     match msg {
                         twinkle_api::flats::MessageToClient::Parameterization(parameterization) => {
@@ -176,7 +203,7 @@ async fn task(
                         twinkle_api::flats::MessageToClient::Log(msg) => {
                             state.write().messages.push(msg);
                         }
-                    }                   
+                    }
                 }
                 _ => {
                     break;
@@ -203,10 +230,9 @@ async fn task(
     };
 }
 
-
 #[derive(Default)]
 pub struct FlatManager {
-    agent: Agent<FlatWidget>
+    agent: Agent<FlatWidget>,
 }
 impl FlatManager {
     pub fn windows(&mut self, ui: &mut egui::Ui) {
@@ -234,7 +260,10 @@ impl egui::Widget for &mut FlatManager {
             false => {
                 if ui.selectable_label(false, "Flats").clicked() {
                     let (tx, rx) = tokio::sync::mpsc::channel(10);
-                    self.agent.spawn(ui.ctx().clone(), FlatWidget::new(tx), |state| task(state, rx));
+                    self.agent
+                        .spawn(ui.ctx().clone(), FlatWidget::new(tx), |state| {
+                            task(state, rx)
+                        });
                 }
             }
         })

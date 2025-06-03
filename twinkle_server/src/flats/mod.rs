@@ -13,7 +13,10 @@ use axum::{
 use futures::StreamExt;
 use once_cell::sync::Lazy;
 
-use indi::{client::{active_device::SendError, ChangeError}, serialization::Command};
+use indi::{
+    client::{active_device::SendError, ChangeError},
+    serialization::Command,
+};
 use logic::start;
 use tokio_stream::wrappers::ReceiverStream;
 use twinkle_api::flats::*;
@@ -21,7 +24,9 @@ use twinkle_client::task::Abortable;
 use twinkle_client::task::Joinable;
 
 use crate::{
-    telescope::{Connectable, DeviceError, Telescope, TelescopeError}, websocket_handler::WebsocketHandler, AppState
+    telescope::{Connectable, DeviceError, Telescope, TelescopeError},
+    websocket_handler::WebsocketHandler,
+    AppState,
 };
 // Global broadcast channel for trace events
 pub static TRACE_CHANNEL: Lazy<tokio::sync::broadcast::Sender<String>> = Lazy::new(|| {
@@ -45,6 +50,7 @@ pub enum FlatError {
     UnexpectedMessage,
     RecvError(tokio::sync::broadcast::error::RecvError),
     IoError(std::io::Error),
+    BadAdu,
 }
 
 impl From<SendError<Command>> for FlatError {
@@ -121,7 +127,7 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
     let store = state.store.read().await;
     let task_status = store.flats.clone();
     let settings = store.settings.read().await;
-    
+
     let telescope = Arc::new(
         Telescope::new(
             settings.indi_server_addr.clone(),
@@ -131,7 +137,7 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
     );
     drop(settings);
     drop(store);
-    
+
     let (message_tx, message_rx) = tokio::sync::mpsc::channel::<MessageToClient>(10);
 
     let (from_websocket_tx, from_websocket_rx) = tokio::sync::mpsc::channel::<Message>(10);
@@ -154,7 +160,9 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
             while let Some(Ok(task_status)) = task_status_sub.next().await {
                 let message_status = task_status.map(|x| x.map(|y| y.as_ref().clone()));
 
-                message_tx.send(MessageToClient::Status(message_status)).await?;
+                message_tx
+                    .send(MessageToClient::Status(message_status))
+                    .await?;
             }
             Result::<(), FlatError>::Ok(())
         }
@@ -212,7 +220,9 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
             while let Some(Ok(filters)) = filters_subscription.next().await {
                 params.filters = filters.get()?.into_iter().map(|x| x.into()).collect();
                 message_tx
-                    .send(twinkle_api::flats::MessageToClient::Parameterization(params.clone()))
+                    .send(twinkle_api::flats::MessageToClient::Parameterization(
+                        params.clone(),
+                    ))
                     .await?;
             }
             Result::<(), FlatError>::Ok(())
@@ -221,9 +231,12 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
     drop(task_status);
 
     socket.set_sender(from_websocket_tx);
-    
+
     let websocket_handler_future = async move {
-        socket.handle_websocket_stream(ReceiverStream::new(message_rx)).await; Result::<(), FlatError>::Ok(())
+        socket
+            .handle_websocket_stream(ReceiverStream::new(message_rx))
+            .await;
+        Result::<(), FlatError>::Ok(())
     };
 
     tokio::select! {
@@ -258,4 +271,3 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
 
     }
 }
-
