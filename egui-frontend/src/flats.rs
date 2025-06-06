@@ -1,11 +1,12 @@
 use crate::agent::Agent;
 use crate::agent::AgentLock;
 use crate::agent::Widget;
+use crate::get_http_base;
 use crate::get_websocket_base;
 use egui::Window;
 use egui::{ScrollArea, TextStyle};
-use futures::SinkExt;
 use futures::StreamExt;
+use twinkle_client::task::spawn;
 use twinkle_client::task::Abortable;
 use twinkle_client::task::IsRunning;
 
@@ -101,12 +102,12 @@ impl egui::Widget for &FlatRun {
 pub struct FlatWidget {
     config: Config,
     status: twinkle_client::task::Status<twinkle_api::flats::FlatRun>,
-    sender: tokio::sync::mpsc::Sender<MessageToServer>,
+    
     messages: Vec<String>,
 }
 
 impl FlatWidget {
-    fn new(sender: tokio::sync::mpsc::Sender<MessageToServer>) -> Self {
+    fn new() -> Self {
         FlatWidget {
             config: twinkle_api::flats::Config {
                 count: 30,
@@ -120,7 +121,6 @@ impl FlatWidget {
             }
             .into(),
             status: twinkle_client::task::Status::Completed,
-            sender,
             messages: Default::default(),
         }
     }
@@ -133,14 +133,21 @@ impl Widget for &mut FlatWidget {
             ui.separator();
             if let twinkle_client::task::Status::Running(status) = &self.status {
                 if ui.button("Stop").clicked() {
-                    self.sender.try_send(MessageToServer::Stop).ok();
+                    let params = MessageToServer::Stop;
+                    spawn((), |_| async move {
+                        let _ = reqwest::Client::new().post(post_url()).json(&params).send().await;
+                    })
+                    .abort_on_drop(false);
                 }
                 ui.add(&FlatRun(status.clone()));
             } else {
                 if ui.button("Start").clicked() {
-                    self.sender
-                        .try_send(MessageToServer::Start(self.config.clone()))
-                        .ok();
+
+                    let params = MessageToServer::Start(self.config.clone());
+                    spawn((), |_| async move {
+                        let _ = reqwest::Client::new().post(post_url()).json(&params).send().await;
+                    })
+                    .abort_on_drop(false);
                 }
             }
             ui.separator();
@@ -165,9 +172,13 @@ fn get_websocket_url() -> String {
     format!("{}flats", get_websocket_base())
 }
 
+fn post_url() -> String {
+    format!("{}flats", get_http_base())
+}
+
 async fn task(
     state: Arc<AgentLock<FlatWidget>>,
-    mut rx: tokio::sync::mpsc::Receiver<MessageToServer>,
+    // mut rx: tokio::sync::mpsc::Receiver<MessageToServer>,
 ) {
     let websocket = match tokio_tungstenite_wasm::connect(get_websocket_url()).await {
         Ok(websocket) => websocket,
@@ -176,7 +187,7 @@ async fn task(
             return;
         }
     };
-    let (mut ws_write, mut ws_read) = websocket.split();
+    let (_ws_write, mut ws_read) = websocket.split();
     let reader = async move {
         loop {
             match ws_read.next().await {
@@ -212,20 +223,20 @@ async fn task(
         }
     };
 
-    let writer = async move {
-        while let Some(msg) = rx.recv().await {
-            if let Err(e) = ws_write
-                .send(Message::Text(serde_json::to_string(&msg).unwrap()))
-                .await
-            {
-                tracing::error!("Unable to send message to server: {:?}", e);
-                break;
-            }
-        }
-    };
+    // let writer = async move {
+    //     while let Some(msg) = rx.recv().await {
+    //         if let Err(e) = ws_write
+    //             .send(Message::Text(serde_json::to_string(&msg).unwrap()))
+    //             .await
+    //         {
+    //             tracing::error!("Unable to send message to server: {:?}", e);
+    //             break;
+    //         }
+    //     }
+    // };
 
     tokio::select! {
-        _ = writer => {}
+        // _ = writer => {}
         _ = reader => {}
     };
 }
@@ -259,10 +270,9 @@ impl egui::Widget for &mut FlatManager {
             }
             false => {
                 if ui.selectable_label(false, "Flats").clicked() {
-                    let (tx, rx) = tokio::sync::mpsc::channel(10);
                     self.agent
-                        .spawn(ui.ctx().clone(), FlatWidget::new(tx), |state| {
-                            task(state, rx)
+                        .spawn(ui.ctx().clone(), FlatWidget::new(), |state| {
+                            task(state)
                         });
                 }
             }

@@ -18,7 +18,7 @@ use crate::{
     },
 };
 pub async fn start(
-    telescope: Arc<Telescope>,
+    telescope: Telescope,
     config: Config,
     state: Arc<Notify<FlatRun>>,
 ) -> Result<(), FlatError> {
@@ -131,7 +131,7 @@ impl<'a> CaptureState<'a> {
     }
 }
 pub async fn inner_start(
-    telescope: Arc<Telescope>,
+    telescope: Telescope,
     config: Config,
     state: Arc<Notify<FlatRun>>,
 ) -> Result<(), FlatError> {

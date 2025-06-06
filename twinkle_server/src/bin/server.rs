@@ -36,7 +36,6 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         .merge(twinkle_server::flats::routes())
-        .merge(twinkle_server::counts::routes())
         .merge(twinkle_server::indi::routes())
         .merge(twinkle_server::settings::routes())
         .merge(twinkle_server::capture::routes())

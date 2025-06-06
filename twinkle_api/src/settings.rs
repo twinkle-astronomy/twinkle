@@ -1,6 +1,24 @@
 use serde::{Deserialize, Serialize};
 
 
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+enum MessageToServer {
+    ChangeSettings(Settings),
+    Connect,
+    Disconnect,
+}
+
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+enum MessageToClient {
+    SettingsChanged(Settings),
+    Connected,
+    Disconnected,
+}
+
 #[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelescopeConfig {

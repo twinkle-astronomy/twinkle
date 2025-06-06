@@ -5,8 +5,10 @@ use diesel::SqliteConnection;
 use diesel_async::sync_connection_wrapper::SyncConnectionWrapper;
 use indi::IndiConnectionData;
 use tokio::sync::RwLock;
-use twinkle_client::{agent::Agent, notify::Notify, task::AsyncTask};
+use twinkle_client::{agent::Agent, notify::Notify};
 use uuid::Uuid;
+
+use crate::telescope::Telescope;
 
 pub mod db;
 mod schema;
@@ -14,7 +16,6 @@ pub mod sqlite_mapping;
 
 pub mod telescope;
 
-pub mod counts;
 pub mod flats;
 pub mod indi;
 pub mod settings;
@@ -40,11 +41,11 @@ impl AppState {
 
 struct StateData {
     connections: HashMap<Uuid, Arc<RwLock<IndiConnectionData>>>,
-    runs: Arc<Notify<HashMap<Uuid, AsyncTask<(), Arc<Notify<twinkle_api::Count>>>>>>,
     flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>,
     settings: Arc<Notify<twinkle_api::settings::Settings>>,
     capture: Agent<twinkle_api::capture::CaptureProgress>,
     db: SyncConnectionWrapper<SqliteConnection>,
+    telescope: Arc<RwLock<Telescope>>,
 }
 
 impl StateData {
@@ -58,14 +59,15 @@ impl StateData {
 
         let mut db = db::establish_connection(filename).await?;
 
-        let settings = StateData::load_settings(&mut db).await.ok();
+        let settings = StateData::load_settings(&mut db).await.ok().unwrap_or_default();
+        let telescope_config = settings.telescope_config.clone();
         Ok(StateData {
             connections: Default::default(),
-            runs: Default::default(),
             capture: Default::default(),
             flats: Default::default(),
-            settings: Arc::new(Notify::new(settings.unwrap_or_default())),
+            settings: Arc::new(Notify::new(settings)),
             db,
+            telescope: Arc::new(RwLock::new(Telescope::new(telescope_config)))
         })
     }
 }

@@ -1,14 +1,11 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{
-        ws::{Message, WebSocketUpgrade},
-        State,
-    },
+    extract::{ws::WebSocketUpgrade, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::get,
-    Router,
+    routing::{get, post},
+    Json, Router,
 };
 use futures::StreamExt;
 use once_cell::sync::Lazy;
@@ -24,6 +21,7 @@ use twinkle_client::task::Abortable;
 use twinkle_client::task::Joinable;
 
 use crate::{
+    schema::settings::indi_server_addr,
     telescope::{Connectable, DeviceError, Telescope, TelescopeError},
     websocket_handler::WebsocketHandler,
     AppState,
@@ -109,7 +107,40 @@ impl From<fitsrs::error::Error> for FlatError {
 }
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/flats", get(create_connection))
+    Router::new()
+        .route("/flats", get(create_connection))
+        .route("/flats", post(post_flats))
+}
+
+#[tracing::instrument(skip(state, capture))]
+pub async fn post_flats(
+    State(state): State<AppState>,
+    Json(capture): Json<MessageToServer>,
+) -> impl IntoResponse {
+    let store = state.store.read().await;
+    let settings = store.settings.read().await;
+    let task_status = store.flats.clone();
+    let server_addr = "settings.indi_server_addr.clone()".to_string();
+    let telescope_config = settings.telescope_config.clone();
+    match capture {
+        twinkle_api::flats::MessageToServer::Start(config) => {
+            let mut lock = task_status.write().await;
+            lock.abort();
+            let _ = lock.join().await;
+            lock.spawn(FlatRun { progress: 0. }, |state| async move {
+                let mut telescope = Telescope::new(telescope_config);
+                telescope.connect(server_addr).await;
+                if let Err(e) = start(telescope, config, state).await {
+                    tracing::error!("Error getting flats: {:?}", e);
+                }
+            });
+        }
+        twinkle_api::flats::MessageToServer::Stop => {
+            task_status.write().await.abort();
+        }
+    }
+
+    "OK"
 }
 
 #[tracing::instrument(skip_all)]
@@ -123,24 +154,18 @@ async fn create_connection(
 }
 
 #[tracing::instrument(skip_all)]
-async fn handle_connection(mut socket: WebsocketHandler, State(state): State<AppState>) {
+async fn handle_connection(socket: WebsocketHandler, State(state): State<AppState>) {
     let store = state.store.read().await;
     let task_status = store.flats.clone();
     let settings = store.settings.read().await;
 
-    let telescope = Arc::new(
-        Telescope::new(
-            settings.indi_server_addr.clone(),
-            settings.telescope_config.clone(),
-        )
-        .await,
-    );
+    let mut telescope = Telescope::new(settings.telescope_config.clone());
+    telescope.connect(settings.indi_server_addr.clone()).await;
+
     drop(settings);
     drop(store);
 
     let (message_tx, message_rx) = tokio::sync::mpsc::channel::<MessageToClient>(10);
-
-    let (from_websocket_tx, from_websocket_rx) = tokio::sync::mpsc::channel::<Message>(10);
 
     let log_sender = {
         let mut sub = TRACE_CHANNEL.subscribe();
@@ -168,44 +193,8 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
         }
     };
 
-    let websocket_receiver = {
-        let task_status = task_status.clone();
-        let telescope = telescope.clone();
-        let mut from_websocket_rx = ReceiverStream::new(from_websocket_rx);
-        async move {
-            while let Some(msg) = from_websocket_rx.next().await {
-                match msg {
-                    Message::Text(msg) => {
-                        match serde_json::from_str::<twinkle_api::flats::MessageToServer>(
-                            msg.as_str(),
-                        )? {
-                            twinkle_api::flats::MessageToServer::Start(config) => {
-                                let mut lock = task_status.write().await;
-                                lock.abort();
-                                let _ = lock.join().await;
-                                lock.spawn(FlatRun { progress: 0. }, |state| {
-                                    let telescope = telescope.clone();
-                                    async move {
-                                        if let Err(e) = start(telescope, config, state).await {
-                                            tracing::error!("Error getting flats: {:?}", e);
-                                        }
-                                    }
-                                });
-                            }
-                            twinkle_api::flats::MessageToServer::Stop => {
-                                task_status.write().await.abort();
-                            }
-                        }
-                    }
-                    _ => Err(FlatError::UnexpectedMessage)?,
-                }
-            }
-            Result::<(), FlatError>::Ok(())
-        }
-    };
-
     let param_sender = {
-        let telescope = telescope.clone();
+        // let telescope = telescope.clone();
 
         async move {
             let filter_wheel = telescope.get_filter_wheel().await?;
@@ -230,7 +219,7 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
     };
     drop(task_status);
 
-    socket.set_sender(from_websocket_tx);
+    // socket.set_sender(from_websocket_tx);
 
     let websocket_handler_future = async move {
         socket
@@ -245,11 +234,11 @@ async fn handle_connection(mut socket: WebsocketHandler, State(state): State<App
                  tracing::error!("Error in param_sender: {:?}", e);
             }
         },
-        v = websocket_receiver => {
-            if let Err(e) = v {
-                 tracing::error!("Error in websocket_receiver: {:?}", e);
-            }
-        },
+        // v = websocket_receiver => {
+        //     if let Err(e) = v {
+        //          tracing::error!("Error in websocket_receiver: {:?}", e);
+        //     }
+        // },
 
         v = task_status_sender => {
             if let Err(e) = v {

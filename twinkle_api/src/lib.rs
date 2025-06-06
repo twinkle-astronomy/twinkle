@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 pub mod analysis;
 pub mod capture;
@@ -8,19 +7,6 @@ pub mod indi;
 pub mod flats;
 pub mod settings;
 
-#[derive(Serialize, Deserialize, Default)]
-pub struct Count {
-    pub  count: usize,
-}
-#[derive(Serialize, Deserialize)]
-pub struct StreamCountRequestParams {
-    pub id: Uuid,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct CreateCountResponse {
-    pub id: Uuid,
-}
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone, Eq)]

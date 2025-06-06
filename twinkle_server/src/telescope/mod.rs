@@ -5,20 +5,22 @@ use filter_wheel::FilterWheel;
 use flat_panel::FlatPanel;
 use indi::{
     client::{
-        active_device::{ActiveDevice, SendError}, ChangeError, Client, ClientTask
+        active_device::{ActiveDevice, SendError},
+        ChangeError, Client,
     },
-    serialization::Command,
-    Parameter, TypeError,
+    serialization::{self, Command, GetProperties},
+    Parameter, TypeError, INDI_PROTOCOL_VERSION,
 };
 use tokio::net::TcpStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
 use twinkle_api::settings::{Settings, TelescopeConfig};
+use twinkle_client::notify::Notify;
 use twinkle_client::{
+    agent::Agent,
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},
 };
-use twinkle_client::notify::Notify;
 
 pub mod camera;
 pub mod filter_wheel;
@@ -154,53 +156,81 @@ pub struct Telescope {
     pub client: Client,
     pub image_client: Client,
 
-    pub client_task: ClientTask<()>,
-    pub image_client_task: ClientTask<()>,
+    pub agent: Agent<()>,
 }
 
 impl Telescope {
-    pub async fn new_from_settings(settings: &Arc<Notify<Settings>>) -> Telescope {
-        let settings = settings.read().await;
-        Telescope::new(
-            settings.indi_server_addr.clone(),
-            settings.telescope_config.clone(),
-        ).await
-    }
-    pub async fn new(
-        addr: impl tokio::net::ToSocketAddrs + Clone + Display + Send + 'static,
-        config: TelescopeConfig,
-    ) -> Telescope {
-        let (client_task, client) = indi::client::new(
-            TcpStream::connect(addr.clone())
-                .await
-                .expect(format!("Unable to connect to {}", addr).as_str()),
-            None,
-            None,
-        );
-
-        let (image_client_task, image_client) = indi::client::new(
-        TcpStream::connect(addr.clone())
-            .await
-            .expect(format!("Unable to connect to {}", addr).as_str()),
-
-            Some(&config.primary_camera.clone()),
-            None,
-        );
-
+    pub fn new(config: TelescopeConfig) -> Telescope {
+        let client = indi::client::Client::new(None);
+        let image_client = indi::client::Client::new(None);
+        let agent = Agent::default();
         Telescope {
             config,
             client,
             image_client,
-            client_task,
-            image_client_task,
+            agent,
         }
+    }
+
+    pub async fn connect_from_settings(&mut self, settings: &Arc<Notify<Settings>>) {
+        let settings = settings.read().await;
+        self.connect(settings.indi_server_addr.clone()).await;
+    }
+
+    pub async fn connect(
+        &mut self,
+        addr: impl tokio::net::ToSocketAddrs + Clone + Display + Send + 'static,
+    ) {
+        self.agent.abort();
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        self.client.reset(Some(tx)).await;
+        let client_task = indi::client::start(
+            self.client.get_devices().clone(),
+            rx,
+            TcpStream::connect(addr.clone())
+                .await
+                .expect(format!("Unable to connect to {}", addr).as_str()),
+        );
+        self.client
+            .send(serialization::Command::GetProperties(GetProperties {
+                version: INDI_PROTOCOL_VERSION.to_string(),
+                device: None,
+                name: None,
+            }))
+            .unwrap();
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        self.image_client.reset(Some(tx)).await;
+        let image_client_task = indi::client::start(
+            self.image_client.get_devices().clone(),
+            rx,
+            TcpStream::connect(addr.clone())
+                .await
+                .expect(format!("Unable to connect to {}", addr).as_str()),
+        );
+        self.client
+            .send(serialization::Command::GetProperties(GetProperties {
+                version: INDI_PROTOCOL_VERSION.to_string(),
+                device: Some(self.config.primary_camera.clone()),
+                name: None,
+            }))
+            .unwrap();
+
+        self.agent.spawn((), |_| async move {
+            tokio::select! {
+                _ = client_task => {},
+                _ = image_client_task => {},
+            }
+        });
     }
 
     pub async fn get_primary_camera(&self) -> Result<Camera, TelescopeError<()>> {
         Ok(Camera::new(
             Self::get_device(&self.client, &self.config.primary_camera).await?,
-            Self::get_device(&self.image_client, &self.config.primary_camera).await?
-        ).await?)
+            Self::get_device(&self.image_client, &self.config.primary_camera).await?,
+        )
+        .await?)
     }
 
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
@@ -220,16 +250,10 @@ impl Telescope {
     }
 
     pub async fn join(&mut self) {
-        tokio::select!(
-            _ = self.client_task.join()=> self.image_client_task.abort(),
-            _ = self.image_client_task.join() => self.client_task.abort()
-        )
+        let _ = self.agent.join().await;
     }
 
-    async fn get_device(
-        client: &Client,
-        name: &str,
-    ) -> Result<ActiveDevice, TelescopeError<()>> {
+    async fn get_device(client: &Client, name: &str) -> Result<ActiveDevice, TelescopeError<()>> {
         Ok(client.get_device(name).await?)
     }
 }

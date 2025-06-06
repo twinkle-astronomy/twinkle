@@ -1,5 +1,4 @@
 use std::time::Duration;
-use std::sync::Arc;
 
 use axum::http::StatusCode;
 use axum::{
@@ -39,7 +38,8 @@ pub async fn set_capture(
             store
                 .capture
                 .spawn(CaptureProgress { progress: 0. }, move |state| async move {
-                    let telescope = Arc::new(Telescope::new_from_settings(&settings).await);
+                    let mut telescope = Telescope::new(settings.read().await.telescope_config.clone());
+                    telescope.connect_from_settings(&settings).await;
                     let camera = telescope.get_primary_camera().await.unwrap();
                     let exposure = camera.exposure().await.unwrap();
 
@@ -81,7 +81,8 @@ async fn get_capture(
 ) -> Result<impl IntoResponse, StatusCode> {
     let store = state.store.read().await;
     let capture = store.capture.subscribe().await;
-    let telescope = Arc::new(Telescope::new_from_settings(&store.settings).await);
+    let mut telescope = Telescope::new(store.settings.read().await.telescope_config.clone());
+    telescope.connect_from_settings(&store.settings).await;
 
     drop(store);
     Ok(ws.on_upgrade(move |socket| async move {

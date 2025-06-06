@@ -430,9 +430,8 @@ mod test {
     #[tokio::test]
     #[traced_test]
     async fn test_expose() {
-        let telescope = Arc::new(
+        let mut telescope = 
             Telescope::new(
-                "indi:7624",
                 TelescopeConfig {
                     mount: String::from("Telescope Simulator"),
                     primary_camera: String::from("CCD Simulator"),
@@ -440,9 +439,8 @@ mod test {
                     filter_wheel: String::from("Filter Simulator"),
                     flat_panel: String::from("Light Panel Simulator"),
                 },
-            )
-            .await,
-        );
+            );
+        telescope.connect("indi:7624").await;
 
         let camera = telescope.get_primary_camera().await.unwrap();
         for _ in 0..5 {

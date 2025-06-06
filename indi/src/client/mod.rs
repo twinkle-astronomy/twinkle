@@ -10,19 +10,13 @@ use crate::{
     device,
     serialization::device::{Device, DeviceUpdate},
 };
-use derive_more::{Deref, DerefMut, From};
 use std::{fmt::Debug, future::Future};
 use tokio::sync::{
     mpsc::{error::SendError, UnboundedReceiver},
     oneshot,
 };
-use tokio_stream::StreamExt;
 use tracing::{error, Instrument};
-use twinkle_client::{
-    self,
-    task::{spawn_with_state, AsyncTask},
-    MaybeSend,
-};
+use twinkle_client::{self, MaybeSend};
 
 use std::{
     collections::HashMap,
@@ -98,105 +92,22 @@ impl<E, T> From<PoisonError<T>> for ChangeError<E> {
     }
 }
 
-#[derive(From, Deref, DerefMut)]
-pub struct ClientTask<S: std::marker::Sync>(AsyncTask<(), S>);
-
-/// Create a new Client object that will stay in sync with the INDI server
-/// on the other end of `connection`.
-///
-/// # Arguments
-/// * `connection` - An object implementing `ClientConnection` (such as TcpStream) that will be used
-///   to communicate with an INDI server.
-/// * `device` - An optional name for a specific device to track.  If a value is provided only parameters
-///   from that device will be available from `get_device()`.
-/// * `parameter` - An optional name for the given `device`'s parameter to track.
-///
-
-pub fn new<T: AsyncClientConnection>(
-    connection: T,
-    device: Option<&str>,
-    parameter: Option<&str>,
-) -> (ClientTask<()>, Client) {
-    let (feedback, commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
-    let client = Client {
-        devices: Default::default(),
-        connected: Arc::new(Notify::new(false)),
-        feedback: Some(feedback),
-    };
-    let (writer, reader) = connection.to_indi();
-    (
-        start_with_streams(&client, commands, writer, reader, device, parameter),
-        client,
-    )
-}
-
-pub fn new_with_streams(
-    writer: impl AsyncWriteConnection + MaybeSend + 'static,
-    reader: impl AsyncReadConnection + MaybeSend + 'static,
-    device: Option<&str>,
-    parameter: Option<&str>,
-) -> (ClientTask<()>, Client) {
-    let (feedback, incoming_commands) = tokio::sync::mpsc::unbounded_channel::<Command>();
-    let client = Client {
-        devices: Default::default(),
-        connected: Arc::new(Notify::new(false)),
-        feedback: Some(feedback),
-    };
-    (
-        start_with_streams(
-            &client,
-            incoming_commands,
-            writer,
-            reader,
-            device,
-            parameter,
-        ),
-        client,
-    )
-}
-
-pub fn start<T: AsyncClientConnection>(
-    client: Client,
+pub async fn start<T: AsyncClientConnection>(
+    client: MemoryDeviceStore,
     incoming_commands: UnboundedReceiver<Command>,
     connection: T,
-    device: Option<&str>,
-    parameter: Option<&str>,
-) -> ClientTask<()> {
+) {
     let (writer, reader) = connection.to_indi();
-    start_with_streams(
-        &client,
-        incoming_commands,
-        writer,
-        reader,
-        device,
-        parameter,
-    )
+    start_with_streams(client, incoming_commands, writer, reader).await
 }
 
-pub fn start_with_streams(
-    client: &Client,
+pub async fn start_with_streams(
+    client: MemoryDeviceStore,
     mut incoming_commands: UnboundedReceiver<Command>,
     mut writer: impl AsyncWriteConnection + MaybeSend + 'static,
     mut reader: impl AsyncReadConnection + MaybeSend + 'static,
-    device: Option<&str>,
-    parameter: Option<&str>,
-) -> ClientTask<()> {
-    let connected = client.connected.clone();
-    let feedback = client.feedback.as_ref().unwrap().clone();
-
-    let writer_device = device.map(|x| String::from(x));
-    let writer_parameter = parameter.map(|x| String::from(x));
-    let writer_connected = connected.clone();
-
+) {
     let (reader_finished_tx, reader_finished_rx) = oneshot::channel::<()>();
-
-    feedback
-        .send(serialization::Command::GetProperties(GetProperties {
-            version: INDI_PROTOCOL_VERSION.to_string(),
-            device: writer_device,
-            name: writer_parameter,
-        }))
-        .unwrap();
 
     let writer_future = async move {
         let sender = async {
@@ -218,12 +129,9 @@ pub fn start_with_streams(
             error!("Error shutting down writer: {:?}", e);
         }
         let _ = reader_finished_rx.await;
-        {
-            *writer_connected.write().await = false;
-        }
     }
     .instrument(tracing::info_span!("indi_writer"));
-    let devices = client.devices.clone();
+    let devices = client.clone();
     let thread_devices = devices.clone();
     let reader_future = async move {
         loop {
@@ -248,19 +156,16 @@ pub fn start_with_streams(
     }
     .instrument(tracing::info_span!("indi_reader"));
 
-    let task = spawn_with_state((), |_| async {
-        tokio::select! {
-            _ = writer_future => tracing::info!("writer_future finisehd"),
-            _ = reader_future => tracing::info!("reader_future finisehd"),
-        }
-    });
-    task.into()
+    tokio::select! {
+        _ = writer_future => tracing::info!("writer_future finisehd"),
+        _ = reader_future => tracing::info!("reader_future finisehd"),
+    }
 }
 
 /// Struct used to keep track of a the devices and their properties.
+#[derive(Clone)]
 pub struct Client {
     devices: MemoryDeviceStore,
-    connected: Arc<Notify<bool>>,
     feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>,
 }
 
@@ -274,9 +179,14 @@ impl Client {
     pub fn new(feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>) -> Self {
         Client {
             devices: Default::default(),
-            connected: Arc::new(Notify::new(true)),
             feedback,
         }
+    }
+
+    pub async fn reset(&mut self, feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>) {
+        let mut lock = self.devices.write().await;
+        lock.clear();
+        self.feedback = feedback;
     }
     /// Async method that will wait up to 1 second for the device named `name` to be defined
     ///  by the INDI server.  The returned `ActiveDevice` (if present) will be associated with
@@ -336,27 +246,6 @@ impl Client {
     /// Returns the a read-only lock on client's MemoryDeviceStore.
     pub fn get_devices(&self) -> &MemoryDeviceStore {
         &self.devices
-    }
-
-    pub fn get_connected(&self) -> Arc<Notify<bool>> {
-        self.connected.clone()
-    }
-
-    pub fn join(&self) -> impl Future<Output = ()> {
-        let connected = self.get_connected();
-        async move {
-            let mut connected = connected.subscribe().await;
-            loop {
-                match connected.next().await {
-                    Some(Ok(connected)) => {
-                        if !*connected {
-                            break;
-                        }
-                    }
-                    None | Some(Err(_)) => break,
-                }
-            }
-        }
     }
 
     pub fn shutdown(&mut self) {
