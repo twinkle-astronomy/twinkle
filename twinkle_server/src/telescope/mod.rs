@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc, time::Duration};
 
 use camera::Camera;
 use filter_wheel::FilterWheel;
@@ -11,16 +11,16 @@ use indi::{
     serialization::{self, Command, GetProperties},
     Parameter, TypeError, INDI_PROTOCOL_VERSION,
 };
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, time::sleep};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
 use twinkle_api::settings::{Settings, TelescopeConfig};
-use twinkle_client::notify::Notify;
 use twinkle_client::{
     agent::Agent,
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},
 };
+use twinkle_client::{notify::Notify, task::IsRunning};
 
 pub mod camera;
 pub mod filter_wheel;
@@ -209,7 +209,7 @@ impl Telescope {
                 .await
                 .expect(format!("Unable to connect to {}", addr).as_str()),
         );
-        self.client
+        self.image_client
             .send(serialization::Command::GetProperties(GetProperties {
                 version: INDI_PROTOCOL_VERSION.to_string(),
                 device: Some(self.config.primary_camera.clone()),
@@ -226,21 +226,24 @@ impl Telescope {
     }
 
     pub async fn get_primary_camera(&self) -> Result<Camera, TelescopeError<()>> {
-        Ok(Camera::new(
-            Self::get_device(&self.client, &self.config.primary_camera).await?,
-            Self::get_device(&self.image_client, &self.config.primary_camera).await?,
-        )
-        .await?)
+        let device = Self::get_device(&self.client, &self.config.primary_camera).await?;
+        let _ = device.connect().await.unwrap();
+        let ccd_device = Self::get_device(&self.image_client, &self.config.primary_camera).await?;
+        Ok(Camera::new(device, ccd_device).await?)
     }
 
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
-        Ok(Self::get_device(&self.client, &self.config.filter_wheel)
+        let device: FilterWheel = Self::get_device(&self.client, &self.config.filter_wheel)
             .await?
-            .into())
+            .into();
+        let _ = device.connect().await.unwrap();
+        Ok(device)
     }
 
     pub async fn get_focuser(&self) -> Result<ActiveDevice, TelescopeError<()>> {
-        Self::get_device(&self.client, &self.config.focuser).await
+        let device = Self::get_device(&self.client, &self.config.focuser).await?;
+        let _ = device.connect().await.unwrap();
+        Ok(device)
     }
 
     pub async fn get_flat_panel(&self) -> Result<FlatPanel, TelescopeError<()>> {
@@ -253,6 +256,7 @@ impl Telescope {
         let _ = self.agent.join().await;
     }
 
+// real    0m23.929s 8mb
     async fn get_device(client: &Client, name: &str) -> Result<ActiveDevice, TelescopeError<()>> {
         Ok(client.get_device(name).await?)
     }

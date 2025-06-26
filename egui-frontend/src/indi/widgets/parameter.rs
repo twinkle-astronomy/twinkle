@@ -4,7 +4,8 @@ use egui::{Response, Ui, Widget};
 use futures::executor::block_on;
 use indi::{
     client::active_device,
-    serialization::{OneNumber, OneText}, SwitchState,
+    serialization::{OneNumber, OneText},
+    SwitchState,
 };
 use itertools::Itertools;
 
@@ -131,7 +132,12 @@ impl<'a> Widget for ParameterWidget<'a, indi::NumberVector> {
 impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.horizontal(|ui| {
-            for (value_name, value) in &self.parameter.values {
+            for (value_name, value) in self
+                .parameter
+                .values
+                .iter()
+                .sorted_by(|l, r| l.0.partial_cmp(r.0).unwrap_or(Ordering::Equal))
+            {
                 let label = if let Some(label) = &value.label {
                     label.clone()
                 } else {
@@ -146,7 +152,10 @@ impl<'a> Widget for ParameterWidget<'a, indi::SwitchVector> {
                                 .parameter(&self.parameter.name)
                                 .await
                                 .and_then(|param| {
-                                    Ok(param.set(vec![(value_name.as_str(), value.value == SwitchState::Off)]))
+                                    Ok(param.set(vec![(
+                                        value_name.as_str(),
+                                        value.value == SwitchState::Off,
+                                    )]))
                                 })
                                 .ok();
                         }

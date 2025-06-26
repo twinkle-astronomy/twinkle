@@ -209,7 +209,6 @@ impl Camera {
     ) -> Result<Self, super::DeviceSelectionError> {
         let driver_name = Self::get_driver_name(&device).await?;
         let config = Self::get_config(&driver_name)?;
-
         let ccd = Camera::image(&ccd_device, config.image.clone()).await?;
 
         ccd.enable_blob(indi::BlobEnable::Also).await?;
@@ -347,20 +346,27 @@ impl Camera {
                         break;
                     }
                 }
-
-                match image_changes.next().await {
-                    Some(Ok(image)) => {
-                        tracing::info!("Got image");
-                        Ok(image.get()?)
+                loop {
+                    match image_changes.next().await {
+                        Some(Ok(image)) => {
+                            tracing::debug!("Got image");
+                            let image = image.get()?;
+                            if let None = image.value {
+                                tracing::debug!("Image is none, waiting for next image");
+                                continue;
+                            }
+                            break Ok(image)
+                        }
+                        Some(Err(e)) => {
+                            tracing::info!("Error getting image: {:?}", e);
+                            break Err(DeviceError::Missing)
+                        }
+                        None => {
+                            tracing::info!("Missing image");
+                            break Err(DeviceError::Missing)
+                        }
                     }
-                    Some(Err(e)) => {
-                        tracing::info!("Error getting image: {:?}", e);
-                        Err(DeviceError::Missing)
-                    }
-                    None => {
-                        tracing::info!("Missing image");
-                        Err(DeviceError::Missing)
-                    }
+    
                 }
             },
         )
@@ -420,7 +426,7 @@ impl Connectable for Camera {
 
 #[cfg(test)]
 mod test {
-    use std::{sync::Arc, time::Duration};
+    use std::time::Duration;
 
     use tokio::time::Instant;
     use tracing_test::traced_test;

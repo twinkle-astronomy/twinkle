@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use axum::{
     extract::{ws::WebSocketUpgrade, State},
@@ -21,7 +20,6 @@ use twinkle_client::task::Abortable;
 use twinkle_client::task::Joinable;
 
 use crate::{
-    schema::settings::indi_server_addr,
     telescope::{Connectable, DeviceError, Telescope, TelescopeError},
     websocket_handler::WebsocketHandler,
     AppState,

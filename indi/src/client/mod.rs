@@ -10,7 +10,7 @@ use crate::{
     device,
     serialization::device::{Device, DeviceUpdate},
 };
-use std::{fmt::Debug, future::Future};
+use std::fmt::Debug;
 use tokio::sync::{
     mpsc::{error::SendError, UnboundedReceiver},
     oneshot,
@@ -25,7 +25,7 @@ use std::{
 };
 
 use crate::{
-    serialization, Command, DeError, GetProperties, TypeError, UpdateError, INDI_PROTOCOL_VERSION,
+    serialization, Command, DeError, TypeError, UpdateError,
 };
 pub use twinkle_client::notify::{self, wait_fn, Notify};
 
@@ -102,7 +102,7 @@ pub async fn start<T: AsyncClientConnection>(
 }
 
 pub async fn start_with_streams(
-    client: MemoryDeviceStore,
+    devices: MemoryDeviceStore,
     mut incoming_commands: UnboundedReceiver<Command>,
     mut writer: impl AsyncWriteConnection + MaybeSend + 'static,
     mut reader: impl AsyncReadConnection + MaybeSend + 'static,
@@ -131,7 +131,6 @@ pub async fn start_with_streams(
         let _ = reader_finished_rx.await;
     }
     .instrument(tracing::info_span!("indi_writer"));
-    let devices = client.clone();
     let thread_devices = devices.clone();
     let reader_future = async move {
         loop {
