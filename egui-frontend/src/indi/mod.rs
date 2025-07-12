@@ -48,9 +48,14 @@ impl IndiManager {
 impl egui::Widget for &mut IndiManager {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.vertical(|ui| {
-            if ui.button("Connect").clicked() {
+            ui.label("Indi");
+            if ui.button("Devices").clicked() {
                 self.agents
-                    .insert(Uuid::new_v4(), crate::indi::agent::new(ui.ctx().clone(), self.glow.clone()));
+                    .insert(Uuid::new_v4(), crate::indi::agent::new(false, ui.ctx().clone(), self.glow.clone()));
+            }
+            if ui.button("Images").clicked() {
+                self.agents
+                    .insert(Uuid::new_v4(), crate::indi::agent::new(true, ui.ctx().clone(), self.glow.clone()));
             }
         })
         .response

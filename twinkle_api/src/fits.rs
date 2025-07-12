@@ -67,7 +67,6 @@ pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
             }
         }
     }
-
     result
 }
 

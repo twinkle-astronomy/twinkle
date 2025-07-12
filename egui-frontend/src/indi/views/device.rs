@@ -4,7 +4,7 @@ use futures::executor::block_on;
 use indi::client::active_device::ActiveDevice;
 use std::collections::HashMap;
 
-use crate::fits::image_view::ImageView;
+use crate::{fits::image_view::ImageView, indi::agent::DeviceEntry};
 
 use super::tab;
 
@@ -13,6 +13,12 @@ pub struct Device {
     group: tab::TabView,
     parameters: HashMap<String, indi::Parameter>,
     blobs: HashMap<String, ImageView>,
+}
+
+impl DeviceEntry for Device {
+    fn show(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        egui::Widget::ui(self, ui)
+    }
 }
 
 impl egui::Widget for &mut Device {
@@ -50,14 +56,5 @@ impl Device {
             parameters: Default::default(),
             blobs: Default::default(),
         }
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn get_or_create_render(
-        &mut self,
-        name: String,
-        gl: &glow::Context,
-    ) -> &mut ImageView {
-        self.blobs.entry(name).or_insert_with(|| ImageView::new(gl))
     }
 }

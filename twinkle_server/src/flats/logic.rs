@@ -11,7 +11,7 @@ use twinkle_api::{
 use crate::{
     flats::FlatError,
     telescope::{
-        camera::{self, CaptureFormat, TransferFormat},
+        camera::{self, CaptureFormat, ImageType, TransferFormat},
         filter_wheel,
         flat_panel::Light,
         Connectable, Telescope,
@@ -130,16 +130,16 @@ impl<'a> CaptureState<'a> {
         self.free = new_free.max(self.min).min(self.max);
     }
 }
-pub async fn inner_start(
+
+async fn inner_start(
     telescope: Telescope,
     config: Config,
     state: Arc<Notify<FlatRun>>,
 ) -> Result<(), FlatError> {
     let filter_wheel = telescope.get_filter_wheel().await?;
-    let _ = filter_wheel.connect().await?;
 
     let camera = telescope.get_primary_camera().await?;
-    let _ = filter_wheel.connect().await?;
+    let _ = camera.image_type().await?.change(ImageType::Flat).await?;
 
     let total = config.total_images() as f32;
     let mut completed = 0.;
