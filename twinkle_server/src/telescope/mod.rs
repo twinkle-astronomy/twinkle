@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, ops::Deref};
 
 use camera::Camera;
 use filter_wheel::FilterWheel;
@@ -11,7 +11,7 @@ use indi::{
     serialization::{self, Command, GetProperties},
     Parameter, TypeError, INDI_PROTOCOL_VERSION,
 };
-use tokio::{net::TcpStream, time::sleep};
+use tokio::net::TcpStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
 use twinkle_api::settings::{Settings, TelescopeConfig};
@@ -20,7 +20,6 @@ use twinkle_client::{
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},
 };
-use twinkle_client::{notify::Notify, task::IsRunning};
 
 pub mod camera;
 pub mod filter_wheel;
@@ -172,8 +171,8 @@ impl Telescope {
         }
     }
 
-    pub async fn connect_from_settings(&mut self, settings: &Arc<Notify<Settings>>) {
-        let settings = settings.read().await;
+    pub async fn connect_from_settings(&mut self, settings: impl Deref<Target=Settings>) {
+        let settings = settings.deref();
         self.connect(settings.indi_server_addr.clone()).await;
     }
 
@@ -248,6 +247,7 @@ impl Telescope {
 
     pub async fn get_flat_panel(&self) -> Result<FlatPanel, TelescopeError<()>> {
         let device = Self::get_device(&self.client, &self.config.flat_panel).await?;
+        let _ = device.connect().await.unwrap();
         let flat_panel = flat_panel::FlatPanel::new(device).await?;
         Ok(flat_panel)
     }
@@ -256,7 +256,6 @@ impl Telescope {
         let _ = self.agent.join().await;
     }
 
-// real    0m23.929s 8mb
     async fn get_device(client: &Client, name: &str) -> Result<ActiveDevice, TelescopeError<()>> {
         Ok(client.get_device(name).await?)
     }

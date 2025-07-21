@@ -1,4 +1,4 @@
-FROM rust:1.86-bookworm AS dev
+FROM rust:1.88-bookworm AS dev
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-dev \

@@ -31,7 +31,7 @@ pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
     unsafe {
         // Since 32768 doesn't fit in i16, we'll use the minimum value (-32768)
         // and adjust our calculations accordingly
-        let min_i16 = i16x8_splat(std::mem::transmute(bzero));
+        let min_i16 = i16x8_splat(u16::cast_signed(bzero));
         let result_ptr = result.as_mut_ptr();
 
         // Create a buffer for our shuffle mask
@@ -67,7 +67,6 @@ pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
             }
         }
     }
-
     result
 }
 

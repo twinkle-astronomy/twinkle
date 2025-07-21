@@ -13,7 +13,7 @@ pub mod views;
 pub mod widgets;
 
 pub struct IndiManager {
-    agents: BTreeMap<Uuid, Agent<State>>,
+    agents: BTreeMap<Uuid, (String, Agent<State>)>,
     glow: Option<std::sync::Arc<glow::Context>>,
 }
 
@@ -26,10 +26,10 @@ impl IndiManager {
     }
 
     pub fn windows(&mut self, ui: &mut egui::Ui) {
-        self.agents.retain(|id, agent| {
+        self.agents.retain(|id, (title, agent)| {
             if agent.running() {
                 let mut open = true;
-                Window::new("Indi")
+                Window::new(title.as_str())
                     .open(&mut open)
                     .id(id.to_string().into())
                     .resizable(true)
@@ -48,9 +48,14 @@ impl IndiManager {
 impl egui::Widget for &mut IndiManager {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.vertical(|ui| {
-            if ui.button("Connect").clicked() {
+            ui.label("Indi");
+            if ui.button("Devices").clicked() {
                 self.agents
-                    .insert(Uuid::new_v4(), crate::indi::agent::new(ui.ctx().clone(), self.glow.clone()));
+                    .insert(Uuid::new_v4(), ("Indi - devices".to_string(), crate::indi::agent::new(false, ui.ctx().clone(), self.glow.clone())));
+            }
+            if ui.button("Images").clicked() {
+                self.agents
+                    .insert(Uuid::new_v4(), ("Indi - images".to_string(), crate::indi::agent::new(true, ui.ctx().clone(), self.glow.clone())));
             }
         })
         .response

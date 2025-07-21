@@ -118,7 +118,7 @@ pub async fn post_flats(
     let store = state.store.read().await;
     let settings = store.settings.read().await;
     let task_status = store.flats.clone();
-    let server_addr = "settings.indi_server_addr.clone()".to_string();
+    let server_addr = settings.indi_server_addr.clone();
     let telescope_config = settings.telescope_config.clone();
     match capture {
         twinkle_api::flats::MessageToServer::Start(config) => {
@@ -137,7 +137,6 @@ pub async fn post_flats(
             task_status.write().await.abort();
         }
     }
-
     "OK"
 }
 
@@ -217,8 +216,6 @@ async fn handle_connection(socket: WebsocketHandler, State(state): State<AppStat
     };
     drop(task_status);
 
-    // socket.set_sender(from_websocket_tx);
-
     let websocket_handler_future = async move {
         socket
             .handle_websocket_stream(ReceiverStream::new(message_rx))
@@ -232,11 +229,6 @@ async fn handle_connection(socket: WebsocketHandler, State(state): State<AppStat
                  tracing::error!("Error in param_sender: {:?}", e);
             }
         },
-        // v = websocket_receiver => {
-        //     if let Err(e) = v {
-        //          tracing::error!("Error in websocket_receiver: {:?}", e);
-        //     }
-        // },
 
         v = task_status_sender => {
             if let Err(e) = v {

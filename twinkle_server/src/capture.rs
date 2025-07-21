@@ -39,7 +39,7 @@ pub async fn set_capture(
                 .capture
                 .spawn(CaptureProgress { progress: 0. }, move |state| async move {
                     let mut telescope = Telescope::new(settings.read().await.telescope_config.clone());
-                    telescope.connect_from_settings(&settings).await;
+                    telescope.connect_from_settings(settings.read().await).await;
                     let camera = telescope.get_primary_camera().await.unwrap();
                     let exposure = camera.exposure().await.unwrap();
 
@@ -82,7 +82,7 @@ async fn get_capture(
     let store = state.store.read().await;
     let capture = store.capture.subscribe().await;
     let mut telescope = Telescope::new(store.settings.read().await.telescope_config.clone());
-    telescope.connect_from_settings(&store.settings).await;
+    telescope.connect_from_settings(store.settings.read().await).await;
 
     drop(store);
     Ok(ws.on_upgrade(move |socket| async move {
