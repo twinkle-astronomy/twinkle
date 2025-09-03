@@ -12,32 +12,41 @@ fn App() -> Element {
 
     rsx! {
         div {
-            style: "text-align: center; padding: 20px; font-family: Arial, sans-serif;",
-            h1 { "Hello from Dioxus!" }
-            h2 { "Counter: {count}" }
-            
+            class: "min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center p-8",
             div {
-                style: "margin: 20px;",
-                button {
-                    style: "margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer;",
-                    onclick: move |_| count += 1,
-                    "Increment"
+                class: "bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 w-full max-w-md",
+                h1 { 
+                    class: "text-4xl font-bold text-center text-gray-800 dark:text-white mb-2",
+                    "Hello from Dioxus!" 
                 }
-                button {
-                    style: "margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer;",
-                    onclick: move |_| count -= 1,
-                    "Decrement"
+                h2 { 
+                    class: "text-2xl font-semibold text-center text-gray-600 dark:text-gray-300 mb-8",
+                    "Counter: {count}" 
                 }
-                button {
-                    style: "margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer;",
-                    onclick: move |_| count.set(0),
-                    "Reset"
+                
+                div {
+                    class: "flex flex-col sm:flex-row gap-4 justify-center mb-8",
+                    button {
+                        class: "bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 cursor-pointer",
+                        onclick: move |_| count += 1,
+                        "Increment"
+                    }
+                    button {
+                        class: "bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 cursor-pointer",
+                        onclick: move |_| count -= 1,
+                        "Decrement"
+                    }
+                    button {
+                        class: "bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 cursor-pointer",
+                        onclick: move |_| count.set(0),
+                        "Reset"
+                    }
                 }
-            }
-            
-            p {
-                style: "margin-top: 30px; color: #666;",
-                "This is a simple Dioxus web application with a counter."
+                
+                p {
+                    class: "text-center text-gray-600 dark:text-gray-400 text-sm",
+                    "This is a simple Dioxus web application with a counter."
+                }
             }
         }
     }
