@@ -1,0 +1,17 @@
+[package]
+name = "dioxus-frontend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "dioxus-frontend"
+path = "src/main.rs"
+
+[dependencies]
+dioxus = { version = "0.6", features = ["web"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
