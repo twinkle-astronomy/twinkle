@@ -391,8 +391,10 @@ dependencies = [
  "base64",
  "dioxus",
  "fitsrs",
+ "js-sys",
  "ndarray",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 

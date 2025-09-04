@@ -3,7 +3,9 @@ use wasm_bindgen::prelude::*;
 use ndarray::ArrayD;
 
 pub mod image_display;
-use image_display::ImageDisplay;
+
+pub mod webgl_renderer;
+use webgl_renderer::WebGlImage;
 
 pub mod fits;
 
@@ -82,7 +84,7 @@ fn App() -> Element {
                                 class: "mt-6",
                                 match sample_image.read().as_ref() {
                                     Some(Ok(image_data)) => rsx! {
-                                        ImageDisplay {
+                                        WebGlImage {
                                             image_data: image_data.clone(),
                                             width: 400,
                                             height: 300,
@@ -105,7 +107,7 @@ fn App() -> Element {
                             }
                             p {
                                 class: "text-center text-gray-600 dark:text-gray-400 text-sm mt-4",
-                                "Real 16-bit astronomical image loaded from FITS file (vdB 152)"
+                                "Real 16-bit astronomical image (vdB 152) - WebGL accelerated rendering"
                             }
                         }
                     }
@@ -180,27 +182,26 @@ fn downsample_image(image: &ArrayD<u16>, factor: usize) -> Result<ArrayD<u16>, B
     Ok(ArrayD::from_shape_vec(vec![new_height, new_width], downsampled_data)?)
 }
 
-fn create_fallback_image(width: usize, height: usize) -> ArrayD<u16> {
+fn create_test_pattern_image(width: usize, height: usize) -> ArrayD<u16> {
     let mut data = Vec::new();
     
     for y in 0..height {
         for x in 0..width {
-            // Create a gradient pattern with some noise
-            let gradient_x = (x as f64 / width as f64 * 65535.0) as u16;
-            let gradient_y = (y as f64 / height as f64 * 65535.0) as u16;
+            let value = if (x / 50 + y / 50) % 2 == 0 {
+                // Checkerboard pattern with gradient
+                let gradient = (x as f64 / width as f64 * 32767.0) as u16;
+                gradient + 16384 // Add offset so it's visible
+            } else {
+                // Circular gradient in alternate squares
+                let center_x = width as f64 / 2.0;
+                let center_y = height as f64 / 2.0;
+                let distance = ((x as f64 - center_x).powi(2) + (y as f64 - center_y).powi(2)).sqrt();
+                let max_distance = (center_x.powi(2) + center_y.powi(2)).sqrt();
+                let circle_value = ((1.0 - (distance / max_distance).min(1.0)) * 32767.0) as u16;
+                circle_value + 8192 // Add offset
+            };
             
-            // Combine gradients and add some pattern
-            let value = ((gradient_x as u32 + gradient_y as u32) / 2) as u16;
-            
-            // Add a circular pattern
-            let center_x = width as f64 / 2.0;
-            let center_y = height as f64 / 2.0;
-            let distance = ((x as f64 - center_x).powi(2) + (y as f64 - center_y).powi(2)).sqrt();
-            let max_distance = (center_x.powi(2) + center_y.powi(2)).sqrt();
-            let circle_factor = (1.0 - (distance / max_distance).min(1.0)) * 0.3;
-            
-            let final_value = (value as f64 * (0.7 + circle_factor)) as u16;
-            data.push(final_value);
+            data.push(value);
         }
     }
     
