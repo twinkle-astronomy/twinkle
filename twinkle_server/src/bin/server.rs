@@ -14,25 +14,32 @@ use twinkle_server::{flats, tracing_broadcast, AppState};
 async fn main() {
     // initialize tracing
     let fmt = tracing_subscriber::fmt::layer()
-    // .with_filter(LevelFilter::DEBUG)
+        // .with_filter(LevelFilter::DEBUG)
         .with_span_events(
             tracing_subscriber::fmt::format::FmtSpan::NEW
                 | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
-        ).with_filter(LevelFilter::DEBUG);
+        )
+        .with_filter(LevelFilter::DEBUG);
 
     tracing_subscriber::Registry::default()
         .with(fmt)
-        .with(tracing_broadcast::TracingBroadcast::new("twinkle_server::flats", flats::TRACE_CHANNEL.clone()))
+        .with(tracing_broadcast::TracingBroadcast::new(
+            "twinkle_server::flats",
+            flats::TRACE_CHANNEL.clone(),
+        ))
         .init();
     let state = AppState::new().await.expect("Loading AppState");
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::DELETE])
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::DELETE,
+        ])
         .allow_headers(Any)
         .expose_headers(Any);
 
-        
     // build our application with a route
     let app = Router::new()
         .merge(twinkle_server::flats::routes())

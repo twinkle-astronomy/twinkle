@@ -124,18 +124,18 @@ pub async fn sleep(duration: Duration) {
     let _ = timeout(duration, pending::<()>()).await;
 }
 
-
 #[cfg(test)]
 mod test {
     use std::time::Duration;
 
     #[tokio::test]
     async fn test_timeout() {
-
         assert!(super::timeout(Duration::from_millis(10), async move {
             loop {
                 tokio::task::yield_now().await;
             }
-        }).await.is_err())
+        })
+        .await
+        .is_err())
     }
 }

@@ -1,14 +1,12 @@
-use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::{
-    extract::{
-        State, WebSocketUpgrade,
-    },
+    extract::{State, WebSocketUpgrade},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use futures::StreamExt;
+use std::sync::Arc;
 
 use twinkle_api::settings::Settings;
 use twinkle_client::notify::Notify;

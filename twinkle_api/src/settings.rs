@@ -1,26 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-
-
-#[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone, PartialEq)]
-enum MessageToServer {
-    ChangeSettings(Settings),
-    Connect,
-    Disconnect,
-}
-
-
-#[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone, PartialEq)]
-enum MessageToClient {
-    SettingsChanged(Settings),
-    Connected,
-    Disconnected,
-}
-
-#[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TelescopeConfig {
     pub mount: String,
     pub primary_camera: String,
@@ -29,9 +9,7 @@ pub struct TelescopeConfig {
     pub flat_panel: String,
 }
 
-
-#[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
     pub indi_server_addr: String,
     pub telescope_config: TelescopeConfig,

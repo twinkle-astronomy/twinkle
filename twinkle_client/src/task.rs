@@ -1,7 +1,8 @@
 use std::{
     future::{self, Future},
     ops::{Deref, DerefMut},
-    sync::Arc, time::Duration,
+    sync::Arc,
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,7 @@ pub enum TaskStatusError {
 impl From<BroadcastStreamRecvError> for TaskStatusError {
     fn from(value: BroadcastStreamRecvError) -> Self {
         match value {
-            BroadcastStreamRecvError::Lagged(n) => TaskStatusError::Lagged(n)
+            BroadcastStreamRecvError::Lagged(n) => TaskStatusError::Lagged(n),
         }
     }
 }
@@ -55,7 +56,7 @@ pub trait Task<S> {
     type AsyncLock: AsyncLockable<Status<S>>;
 
     fn status(&self) -> &Arc<Self::AsyncLock>;
-    async fn running_status(&self)  -> Result<NotifyArc<Status<S>>, TaskStatusError>;
+    async fn running_status(&self) -> Result<NotifyArc<Status<S>>, TaskStatusError>;
 }
 
 #[derive(Debug)]
@@ -75,8 +76,10 @@ pub enum Status<S> {
 }
 
 impl<S> Status<S> {
-    pub fn map<F, U>(self, f: F) -> Status<U> 
-    where F: FnOnce(S) -> U {
+    pub fn map<F, U>(self, f: F) -> Status<U>
+    where
+        F: FnOnce(S) -> U,
+    {
         match self {
             Status::Pending => Status::Pending,
             Status::Running(v) => Status::Running(f(v)),
@@ -85,7 +88,6 @@ impl<S> Status<S> {
         }
     }
 }
-
 
 impl<S> Status<S> {
     pub async fn with_state<'a, V, R, F>(&'a self, func: F) -> Result<V, Error>
@@ -145,10 +147,10 @@ impl<T, S> Default for AsyncTask<T, S> {
     }
 }
 
-impl<T, S: 'static > AsyncTask<T, S> {
+impl<T, S: 'static> AsyncTask<T, S> {
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         let status = Arc::get_mut(&mut self.status).unwrap();
-        status.set_timeout(timeout);        
+        status.set_timeout(timeout);
         self
     }
 }
@@ -174,11 +176,13 @@ impl<T: MaybeSend + 'static, S: MaybeSend + Sync + 'static> AsyncTask<T, S> {
                     *lock = Status::Running(state);
                     lock.notify();
                     if let Err(e) = lock.not_cloned(status.get_timeout()).await {
-                        tracing::error!("Timeout waiting for writeable lock when starting task: {:?}", e);
+                        tracing::error!(
+                            "Timeout waiting for writeable lock when starting task: {:?}",
+                            e
+                        );
                     }
-                    
                 };
-                
+
                 let abort = async move {
                     if let None = abort_rx.recv().await {
                         future::pending::<()>().await;
@@ -200,7 +204,9 @@ impl<T: MaybeSend + 'static, S: MaybeSend + Sync + 'static> AsyncTask<T, S> {
                         }
                      },
                 };
-                {*status.write().await = result};
+                {
+                    *status.write().await = result
+                };
             }
         });
     }
@@ -237,7 +243,7 @@ impl<T, S: Send + Sync + 'static> Task<S> for AsyncTask<T, S> {
     fn status(&self) -> &Arc<Self::AsyncLock> {
         &self.status
     }
-    
+
     async fn running_status(&self) -> Result<NotifyArc<Status<S>>, TaskStatusError> {
         let mut sub = self.status.subscribe().await;
         while let Some(next) = sub.next().await {
@@ -325,7 +331,7 @@ mod test {
         });
         assert_eq!(task.join().await.unwrap(), 11);
         assert_eq!(*task.status().read().await.deref(), Status::Completed);
-        
+
         task.spawn(12, |num| {
             let num = *num;
             async move {
@@ -336,7 +342,5 @@ mod test {
         assert_eq!(task.join().await.unwrap(), 13);
         assert_eq!(*task.status().read().await.deref(), Status::Completed);
         drop(task);
-
-
     }
 }

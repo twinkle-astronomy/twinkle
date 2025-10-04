@@ -1,6 +1,5 @@
 use crate::telescope::parameter_with_config::{ActiveParameterWithConfig, OneOfMany};
 
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CaptureFormat {
     Raw8,

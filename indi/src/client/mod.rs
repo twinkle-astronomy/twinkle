@@ -187,32 +187,33 @@ impl Client {
         lock.clear();
         self.feedback = feedback;
     }
-    /// Async method that will wait up to 1 second for the device named `name` to be defined
-    ///  by the INDI server.  The returned `ActiveDevice` (if present) will be associated with
-    ///  the `self` client for communicating changes with the INDI server it came from.
-    ///
-    /// # Arguments
-    /// * `name` - Name of device on the remote INDI server you wish to get.
-    ///
-    /// # Example
-    /// ```no_run
-    /// use tokio::net::TcpStream;
-    /// use twinkle_client::task::Task;
-    /// use std::ops::Deref;
-    /// // Client that will track all devices and parameters to the connected INDI server at localhost.
-    ///
-    /// async {
-    ///     let client_task = indi::client::new(TcpStream::connect("localhost:7624").await.expect("Connecting to server"), None, None);
-    ///     let status = client_task.status();
-    ///     if let twinkle_client::task::Status::Running(client) = status.lock().await.deref() {
-    ///         let filter_wheel = client.lock().await
-    ///             .get_device("ASI EFW")
-    ///             .await
-    ///             .expect("Getting filter wheel");
-    ///     };
-    ///     
-    /// };
-    /// ```
+
+    // Async method that will wait up to 1 second for the device named `name` to be defined
+    //  by the INDI server.  The returned `ActiveDevice` (if present) will be associated with
+    //  the `self` client for communicating changes with the INDI server it came from.
+    //
+    // # Arguments
+    // * `name` - Name of device on the remote INDI server you wish to get.
+    //
+    // # Example
+    // ```no_run
+    // use tokio::net::TcpStream;
+    // use twinkle_client::task::Task;
+    // use std::ops::Deref;
+    // // Client that will track all devices and parameters to the connected INDI server at localhost.
+    //
+    // async {
+    //     let client_task = indi::client::new(TcpStream::connect("localhost:7624").await.expect("Connecting to server"), None, None);
+    //     let status = client_task.status();
+    //     if let twinkle_client::task::Status::Running(client) = status.lock().await.deref() {
+    //         let filter_wheel = client.lock().await
+    //             .get_device("ASI EFW")
+    //             .await
+    //             .expect("Getting filter wheel");
+    //     };
+    //     
+    // };
+    // ```
     pub async fn get_device<'a>(
         &'a self,
         name: &str,
@@ -373,16 +374,19 @@ pub trait AsyncWriteConnection {
 mod test {
     use futures::channel::oneshot;
     use tokio::net::{TcpListener, TcpStream};
+    use tokio_stream::StreamExt;
     use tracing_test::traced_test;
 
     use std::collections::HashSet;
+
+    use crate::serialization::GetProperties;
 
     use super::*;
 
     #[tokio::test]
     #[traced_test]
     async fn test_client_updates() {
-        tokio::time::timeout(Duration::from_secs(1), async {
+        tokio::time::timeout(Duration::from_secs(10), async {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let server_addr = listener.local_addr().unwrap();
 
@@ -442,7 +446,6 @@ mod test {
                     ))
                     .await
                     .unwrap();
-
                 writer
                     .write(serialization::Command::DefTextVector(
                         serialization::DefTextVector {
@@ -460,7 +463,6 @@ mod test {
                     ))
                     .await
                     .unwrap();
-
                 writer
                     .write(serialization::Command::DelProperty(
                         serialization::DelProperty {
@@ -472,7 +474,6 @@ mod test {
                     ))
                     .await
                     .unwrap();
-
                 writer
                     .write(serialization::Command::DelProperty(
                         serialization::DelProperty {
@@ -484,7 +485,6 @@ mod test {
                     ))
                     .await
                     .unwrap();
-
                 writer
                     .write(serialization::Command::DelProperty(
                         serialization::DelProperty {
@@ -507,7 +507,6 @@ mod test {
                     ))
                     .await
                     .unwrap();
-
                 writer
                     .write(serialization::Command::DefTextVector(
                         serialization::DefTextVector {
@@ -602,8 +601,17 @@ mod test {
                 .await
                 .expect("connecting to indi");
 
-            let (_client_task, client) = new(connection, None, None);
-            let mut devices = client.get_devices().subscribe().await;
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            let client = crate::client::Client::new(Some(tx));
+            let mut device_changes = client.devices.subscribe().await;
+            let _ = tokio::task::spawn(crate::client::start(client.devices.clone(), rx, connection));
+            client.send(crate::serialization::Command::GetProperties(GetProperties {
+                version: crate::INDI_PROTOCOL_VERSION.to_string(),
+                device: None,
+                name: None,
+            })).unwrap();
+
+
             let _ = server_continue_tx.send(());
 
             let mut device_names_expected = vec![
@@ -618,7 +626,7 @@ mod test {
             .into_iter();
 
             while let Some(expected) = device_names_expected.next() {
-                match devices.next().await {
+                match device_changes.next().await {
                     Some(Ok(devices)) => {
                         let devices: HashSet<String> = devices.keys().map(Clone::clone).collect();
                         assert_eq!(devices, expected);

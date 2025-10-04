@@ -26,7 +26,6 @@ pub enum Status<S> {
     Complete(S),
 }
 
-
 pub struct ArcCounter<T> {
     value: Option<std::sync::Arc<T>>,
     clones: Arc<AtomicU64>,
@@ -112,8 +111,6 @@ impl<T: Clone> ArcCounter<T> {
 }
 
 impl<T> ArcCounter<T> {
-
-
     async fn not_cloned(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
         crate::timeout(timeout, async {
             self.not_cloned_inner().await;
@@ -286,7 +283,7 @@ impl<T: 'static> Notify<T> {
     ///     assert_eq!(*notify.write().await, 43);
     /// };
     /// ```
-    pub async fn write(&self) -> NotifyMutexGuard<T> {
+    pub async fn write(&'_ self) -> NotifyMutexGuard<'_, T> {
         let mut notify_guard = NotifyMutexGuard {
             guard: self.subject.write().await,
             to_notify: &self.to_notify,
@@ -299,7 +296,7 @@ impl<T: 'static> Notify<T> {
     }
 
     #[deprecated(note = "please use `write` instead")]
-    pub async fn lock(&self) -> NotifyMutexGuard<T> {
+    pub async fn lock(&'_ self) -> NotifyMutexGuard<'_, T> {
         let mut notify_guard = NotifyMutexGuard {
             guard: self.subject.write().await,
             to_notify: &self.to_notify,
@@ -323,7 +320,7 @@ impl<T: 'static> Notify<T> {
     ///     assert_eq!(*notify.read().await, 42);
     /// };
     /// ```
-    pub async fn read(&self) -> NotifyMutexGuardRead<T> {
+    pub async fn read(&'_ self) -> NotifyMutexGuardRead<'_, T> {
         NotifyMutexGuardRead {
             guard: self.subject.read().await,
         }
@@ -594,7 +591,15 @@ mod test {
     use std::sync::{Arc, Mutex as StdMutex};
     use std::time::Duration;
 
-    #[derive(derive_more::Deref, derive_more::DerefMut, derive_more::AsRef, derive_more::AsMut, derive_more::From, derive_more::Display, Debug)]
+    #[derive(
+        derive_more::Deref,
+        derive_more::DerefMut,
+        derive_more::AsRef,
+        derive_more::AsMut,
+        derive_more::From,
+        derive_more::Display,
+        Debug,
+    )]
     struct NoClone<T>(T);
 
     impl<T> Clone for NoClone<T> {
@@ -730,7 +735,8 @@ mod test {
                 } else {
                     Ok(Status::Pending)
                 }
-            }).await
+            })
+            .await
         });
         for i in 0..=9 {
             let mut lock = notify.write().await;
@@ -751,14 +757,18 @@ mod test {
         let mut subscription = notify.subscribe().await;
         // let mut thread_subscription = subscription.clone();
         let fut = async move {
-            wait_fn::<(), (), NotifyArc<u32>, _, _>(&mut subscription, Duration::from_secs(10), |x| {
-                // Will never be true
-                if *x == 10 {
-                    return Ok(Status::Complete(()));
-                } else {
-                    return Ok(Status::Pending);
-                }
-            })
+            wait_fn::<(), (), NotifyArc<u32>, _, _>(
+                &mut subscription,
+                Duration::from_secs(10),
+                |x| {
+                    // Will never be true
+                    if *x == 10 {
+                        return Ok(Status::Complete(()));
+                    } else {
+                        return Ok(Status::Pending);
+                    }
+                },
+            )
             .await
         };
         let j = tokio::spawn(fut);
@@ -828,19 +838,17 @@ mod test {
         notify.set_timeout(Duration::MAX);
         let mut sub = notify.subscribe().await;
         let mut task = task::AsyncTask::default();
-        task.spawn((), |_| {
-            async move {
-                for i in 0..1000 {
-                    tracing::info!("Updating to {}", i);
-                    {
-                        let mut lock = timeout(Duration::from_millis(11), notify.write())
-                            .await
-                            .unwrap();
-                        *lock = i;
-                        drop(lock);
-                    }
-                    sleep(Duration::from_millis(20)).await;
+        task.spawn((), |_| async move {
+            for i in 0..1000 {
+                tracing::info!("Updating to {}", i);
+                {
+                    let mut lock = timeout(Duration::from_millis(11), notify.write())
+                        .await
+                        .unwrap();
+                    *lock = i;
+                    drop(lock);
                 }
+                sleep(Duration::from_millis(20)).await;
             }
         });
 

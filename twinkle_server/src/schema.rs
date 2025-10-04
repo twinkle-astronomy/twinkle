@@ -25,7 +25,4 @@ diesel::table! {
 
 diesel::joinable!(settings -> telescope_configs (telescope_config_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    settings,
-    telescope_configs,
-);
+diesel::allow_tables_to_appear_in_same_query!(settings, telescope_configs,);

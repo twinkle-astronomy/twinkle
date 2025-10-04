@@ -1,11 +1,12 @@
 use twinkle_api::settings::{Settings, TelescopeConfig};
 
-use diesel_async::RunQueryDsl;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use diesel::{
-    prelude::AsChangeset, sqlite::SqliteConnection, Connection, ConnectionError, ExpressionMethods, Insertable, QueryDsl, Queryable, Selectable, SelectableHelper
+    prelude::AsChangeset, sqlite::SqliteConnection, Connection, ConnectionError, ExpressionMethods,
+    Insertable, QueryDsl, Queryable, Selectable, SelectableHelper,
 };
+use diesel_async::RunQueryDsl;
 use diesel_async::{sync_connection_wrapper::SyncConnectionWrapper, AsyncConnection};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use crate::{schema::*, StateData};
 
@@ -19,7 +20,7 @@ pub async fn establish_connection(
 #[derive(Debug)]
 pub enum MigrationError {
     ConnectionError(ConnectionError),
-    RunError(Box<(dyn std::error::Error + std::marker::Send + Sync + 'static)>),
+    RunError(Box<dyn std::error::Error + std::marker::Send + Sync + 'static>),
 }
 
 impl From<ConnectionError> for MigrationError {
@@ -28,15 +29,14 @@ impl From<ConnectionError> for MigrationError {
     }
 }
 
-impl From<Box<(dyn std::error::Error + std::marker::Send + Sync + 'static)>> for MigrationError {
-    fn from(value: Box<(dyn std::error::Error + std::marker::Send + Sync + 'static)>) -> Self {
+impl From<Box<dyn std::error::Error + std::marker::Send + Sync + 'static>> for MigrationError {
+    fn from(value: Box<dyn std::error::Error + std::marker::Send + Sync + 'static>) -> Self {
         MigrationError::RunError(value)
     }
 }
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
 pub fn run_migrations(database_url: &str) -> Result<(), MigrationError> {
-
     let mut conn = SqliteConnection::establish(database_url)?;
     conn.run_pending_migrations(MIGRATIONS)?;
     Ok(())
@@ -66,7 +66,7 @@ impl StateData {
     // Save or update settings
     pub async fn save_settings(
         &mut self,
-        
+
         settings: &Settings,
     ) -> Result<(), diesel::result::Error> {
         AsyncConnection::transaction(&mut self.db, |conn| {
@@ -126,7 +126,6 @@ impl StateData {
         .await
     }
 
-
     // Load settings
     pub async fn load_settings(
         conn: &mut SyncConnectionWrapper<SqliteConnection>,
@@ -154,7 +153,6 @@ impl StateData {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use diesel::dsl::count;
@@ -168,7 +166,9 @@ mod test {
         tokio::fs::remove_file(filename).await.ok();
         run_migrations(&filename).unwrap();
 
-        let mut state = StateData::new(format!("sqlite://{}", filename).as_str()).await.unwrap();
+        let mut state = StateData::new(format!("sqlite://{}", filename).as_str())
+            .await
+            .unwrap();
 
         // Empty db
         let settings = StateData::load_settings(&mut state.db).await;
@@ -205,7 +205,5 @@ mod test {
                 .await
                 .unwrap()
         );
-
     }
-
 }

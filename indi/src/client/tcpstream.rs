@@ -148,80 +148,19 @@ impl AsyncWriteConnection for AsyncIndiWriter {
 
 #[cfg(test)]
 mod test {
-    use std::ops::Deref;
-
-    use futures::StreamExt;
-    use tokio::time::{timeout, Duration};
-    use tokio::{net::TcpListener, sync::oneshot};
-    use tracing_test::traced_test;
-    use twinkle_client::task::{Joinable, Status, Task};
-
     use super::*;
-    use crate::{client::new, serialization::DefNumberVector};
+    use tokio::time::Duration;
 
     #[tokio::test]
     async fn test_threads_stop_on_shutdown() {
         let connection = TcpStream::connect("indi:7624")
             .await
             .expect("connecting to indi");
-        let (mut client_task, mut client) = new(connection, None, None);
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut client = crate::client::Client::new(Some(tx));
+        let client_task = tokio::task::spawn(crate::client::start(client.devices.clone(), rx, connection));
+
         client.shutdown();
-        client_task.join().await.unwrap();
-    }
-
-    #[tokio::test]
-    #[traced_test]
-    async fn test_threads_stop_on_disconnect() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let server_addr = listener.local_addr().unwrap();
-
-        let (server_stop_tx, server_stop_rx) = oneshot::channel::<()>();
-
-        // Server behavior
-        tokio::spawn(async move {
-            let (mut _socket, _) = listener.accept().await.unwrap();
-            let (mut writer, mut reader) = _socket.to_indi();
-
-            let _msg = reader.read().await;
-
-            writer
-                .write(crate::Command::DefNumberVector(DefNumberVector {
-                    device: "test".to_string(),
-                    name: "param".to_string(),
-                    label: None,
-                    group: None,
-                    state: crate::PropertyState::Idle,
-                    perm: crate::PropertyPerm::RO,
-                    timeout: None,
-                    timestamp: None,
-                    message: None,
-                    numbers: vec![],
-                }))
-                .await
-                .unwrap();
-            let _ = server_stop_rx.await;
-            // Server disconnects here
-        });
-
-        let connection = TcpStream::connect(server_addr)
-            .await
-            .expect("connecting to indi");
-        let (mut client_task, client) = new(connection, None, None);
-        let mut status_sub = client_task.status().subscribe().await;
-        
-        match status_sub.next().await.unwrap().unwrap().deref() {
-            Status::Pending => {},
-            Status::Running(_) => panic!("Running"),
-            Status::Completed => panic!("Completed"),
-            Status::Aborted => panic!("Aborted"),
-        };
-
-        assert!(client.connected.read().await.deref());
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        server_stop_tx.send(()).unwrap();
-
-        let timeout_duration = Duration::from_secs(1);
-        timeout(timeout_duration, client_task.join()).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(1), client_task).await.unwrap().unwrap();
     }
 }

@@ -3,6 +3,7 @@
         "twinkle_server/Cargo.toml",
         "egui-frontend/Cargo.toml",
         "phd2/Cargo.toml",
+        "indi/Cargo.toml",
     ],
     "rust-analyzer.procMacro.enable": true,
     "rust-analyzer.cargo.buildScripts.enable": true

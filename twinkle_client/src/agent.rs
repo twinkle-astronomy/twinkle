@@ -19,7 +19,7 @@ pub struct Agent<S> {
 impl<S> Default for Agent<S> {
     fn default() -> Self {
         Agent {
-            task: AsyncTask::default()
+            task: AsyncTask::default(),
         }
     }
 }
@@ -73,16 +73,15 @@ impl<S: Send + Sync + 'static> Agent<S> {
     ) {
         let mut notify = Notify::new(state);
         notify.set_timeout(timeout);
-        self.task.spawn(
-            Arc::new(notify),
-            |state| func(state.clone()),
-        );
+        self.task
+            .spawn(Arc::new(notify), |state| func(state.clone()));
     }
-    
+
     pub async fn subscribe(
         &self,
-    ) -> impl Stream<Item = Result<crate::task::Status<Result<NotifyArc<S>, TaskStatusError>>, TaskStatusError>>
-    {
+    ) -> impl Stream<
+        Item = Result<crate::task::Status<Result<NotifyArc<S>, TaskStatusError>>, TaskStatusError>,
+    > {
         futures::stream::unfold(
             (
                 self.task.status().subscribe().await,
@@ -146,7 +145,11 @@ mod test {
 
     use tracing_test::traced_test;
 
-    use crate::{notify::{self, wait_fn}, task::{Abortable, Joinable, Status}, OnDropFutureExt};
+    use crate::{
+        notify::{self, wait_fn},
+        task::{Abortable, Joinable, Status},
+        OnDropFutureExt,
+    };
 
     use super::*;
 
@@ -155,10 +158,10 @@ mod test {
     async fn test_state_drop() {
         let value = Arc::new(0);
         let mut agent = Agent::<Arc<usize>>::default();
-        
+
         let status = agent.status().read().await;
         match status.deref() {
-            Status::Pending => {},
+            Status::Pending => {}
             _ => panic!("unexpected status"),
         }
         drop(status);
@@ -170,30 +173,39 @@ mod test {
             async move {
                 pending::<()>().await;
                 dbg!(v);
-            }.on_drop(|| tracing::info!("dropped"))
+            }
+            .on_drop(|| tracing::info!("dropped"))
         });
 
         let mut status_sub = agent.status().subscribe().await;
-        wait_fn(&mut status_sub, Duration::from_secs(1), |status| {
-            match status.deref() {
+        wait_fn(
+            &mut status_sub,
+            Duration::from_secs(1),
+            |status| match status.deref() {
                 Status::Running(_) => Result::<_, ()>::Ok(notify::Status::Complete(())),
                 _ => Ok(notify::Status::Pending),
-            }
-        }).await.unwrap();
+            },
+        )
+        .await
+        .unwrap();
         let status = agent.status().read().await;
         match status.deref() {
-            Status::Running(_) => {},
+            Status::Running(_) => {}
             _ => panic!("unexpected status"),
         }
         drop(status);
 
         agent.abort();
-        wait_fn(&mut status_sub, Duration::from_secs(1), |status| {
-            match status.deref() {
+        wait_fn(
+            &mut status_sub,
+            Duration::from_secs(1),
+            |status| match status.deref() {
                 Status::Aborted => Result::<_, ()>::Ok(notify::Status::Complete(())),
                 _ => Ok(notify::Status::Pending),
-            }
-        }).await.unwrap();
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(Arc::strong_count(&value), 1);
     }
 
@@ -212,8 +224,14 @@ mod test {
 
                     subscribers.push(tokio::task::spawn(async move {
                         assert_eq!(Some(Ok(Status::Pending)), agent_sub.next().await);
-                        assert_eq!(Some(Ok(Status::Running(Ok(10.into())))), agent_sub.next().await);
-                        assert_eq!(Some(Ok(Status::Running(Ok(11.into())))), agent_sub.next().await);
+                        assert_eq!(
+                            Some(Ok(Status::Running(Ok(10.into())))),
+                            agent_sub.next().await
+                        );
+                        assert_eq!(
+                            Some(Ok(Status::Running(Ok(11.into())))),
+                            agent_sub.next().await
+                        );
                         assert_eq!(Some(Ok(Status::Completed)), agent_sub.next().await);
                         assert_eq!(None, agent_sub.next().await);
                     }));

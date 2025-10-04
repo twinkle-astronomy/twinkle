@@ -29,7 +29,7 @@ pub struct Parameterization {
     pub binnings: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize,PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum LightSource {
     FlatPanel(Duration),
     Sky {

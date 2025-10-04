@@ -11,8 +11,8 @@ use twinkle_client::notify::NotifyArc;
 
 use super::{
     parameter_with_config::{
-        ActiveParameterWithConfig, FromParam, IntoValue, NumberParameter,
-        ParameterWithConfig, SingleValueParamConfig,
+        ActiveParameterWithConfig, FromParam, IntoValue, NumberParameter, ParameterWithConfig,
+        SingleValueParamConfig,
     },
     DeviceError,
 };
@@ -49,10 +49,17 @@ impl super::Connectable for FilterWheel {
     async fn connect(
         &self,
     ) -> Result<
-        impl futures::Stream<Item = Result<twinkle_client::notify::ArcCounter<indi::Parameter>, tokio_stream::wrappers::errors::BroadcastStreamRecvError>>,
+        impl futures::Stream<
+            Item = Result<
+                twinkle_client::notify::ArcCounter<indi::Parameter>,
+                tokio_stream::wrappers::errors::BroadcastStreamRecvError,
+            >,
+        >,
         indi::client::ChangeError<()>,
     > {
-        self.device.change("CONNECTION", vec![("CONNECT", true)]).await
+        self.device
+            .change("CONNECTION", vec![("CONNECT", true)])
+            .await
     }
 }
 
@@ -62,13 +69,13 @@ impl From<ActiveDevice> for FilterWheel {
             device: value,
             config: FilterWheelConfig {
                 filter_slot: SingleValueParamConfig::new("FILTER_SLOT", "FILTER_SLOT_VALUE"),
-                filter_list: FilterListParamConfig { parameter: "FILTER_NAME" }
+                filter_list: FilterListParamConfig {
+                    parameter: "FILTER_NAME",
+                },
             },
         }
     }
 }
-
-
 
 pub struct Config {
     pub filter: TelescopeFilter,
@@ -151,9 +158,12 @@ impl FromParam for FilterListParamConfig {
                 Filter {
                     name: name.value.clone(),
                     position: slot,
-                }.into()
+                }
+                .into()
             })
-            .sorted_by(|lhs: &TelescopeFilter, rhs: &TelescopeFilter| lhs.position.cmp(&rhs.position))
+            .sorted_by(|lhs: &TelescopeFilter, rhs: &TelescopeFilter| {
+                lhs.position.cmp(&rhs.position)
+            })
             .collect();
         Ok(values)
     }

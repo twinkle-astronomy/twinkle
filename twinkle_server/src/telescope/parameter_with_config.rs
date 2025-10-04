@@ -261,8 +261,7 @@ where
     }
     pub fn changes(
         &self,
-    ) -> impl Stream<Item = Result<ParameterWithConfig<T>, BroadcastStreamRecvError>> + use<T>
-    {
+    ) -> impl Stream<Item = Result<ParameterWithConfig<T>, BroadcastStreamRecvError>> + use<T> {
         let config = self.config.clone();
         self.parameter.changes().map(move |parameter| {
             Ok(ParameterWithConfig {

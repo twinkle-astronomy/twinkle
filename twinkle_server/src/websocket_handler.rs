@@ -4,31 +4,34 @@ use twinkle_api::ToWebsocketMessage;
 
 pub struct WebsocketHandler {
     socket: WebSocket,
-    sender: Option<tokio::sync::mpsc::Sender<Message>>
+    sender: Option<tokio::sync::mpsc::Sender<Message>>,
 }
 
 impl From<WebSocket> for WebsocketHandler {
     fn from(value: WebSocket) -> Self {
-        WebsocketHandler { socket: value, sender: None }
+        WebsocketHandler {
+            socket: value,
+            sender: None,
+        }
     }
 }
 
-
 impl WebsocketHandler {
-    pub fn set_sender(&mut self, sender: tokio::sync::mpsc::Sender<Message>) ->Option<tokio::sync::mpsc::Sender<Message>> {
+    pub fn set_sender(
+        &mut self,
+        sender: tokio::sync::mpsc::Sender<Message>,
+    ) -> Option<tokio::sync::mpsc::Sender<Message>> {
         self.sender.replace(sender)
     }
 
-    pub async fn handle_websocket_stream<S, T>(
-        mut self,
-        mut stream: S,
-    ) where 
-    S: Stream<Item = T> + Unpin,
-    T: ToWebsocketMessage,
+    pub async fn handle_websocket_stream<S, T>(mut self, mut stream: S)
+    where
+        S: Stream<Item = T> + Unpin,
+        T: ToWebsocketMessage,
     {
         let (ws_send, mut ws_recv) = tokio::sync::broadcast::channel(1024);
         let (mut w, mut r) = self.socket.split();
-    
+
         let reader_future = {
             let ws_send = ws_send.clone();
             let sender = self.sender.take();
@@ -66,10 +69,10 @@ impl WebsocketHandler {
                 }
             }
         };
-    
+
         let writer_future = {
             async move {
-                loop  {
+                loop {
                     let msg = ws_recv.recv().await;
                     match msg {
                         Ok(msg) => {
@@ -77,7 +80,7 @@ impl WebsocketHandler {
                                 Message::Close(_) => true,
                                 _ => false,
                             };
-            
+
                             if let Err(e) = w.send(msg).await {
                                 tracing::error!("Got error sending websocket message: {:?}", e);
                                 break;
@@ -85,17 +88,17 @@ impl WebsocketHandler {
                             if is_close {
                                 break;
                             }
-                        },
+                        }
                         Err(e) => {
                             tracing::error!("Error streaming items: {:?}", e);
-                        },
+                        }
                     }
                 }
 
                 w.close().await.ok();
             }
         };
-    
+
         let stream_future = {
             let ws_send = ws_send.clone();
             async move {
@@ -105,26 +108,25 @@ impl WebsocketHandler {
                         break;
                     }
                 }
-    
+
                 // Send close message to close the websocket cleanly
                 ws_send
                     .send(Message::Close(Some(CloseFrame {
                         code: axum::extract::ws::close_code::NORMAL,
                         reason: "End of data".into(),
-                    })))                    
+                    })))
                     .ok();
-    
+
                 // Wait forever to allow connection management futures
                 // to complete their work.
                 std::future::pending::<()>().await;
             }
         };
-    
+
         tokio::select! {
             _ = reader_future => {}
             _ = writer_future => {}
             _ = stream_future => {}
         }
     }
-    
 }

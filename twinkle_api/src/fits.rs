@@ -5,11 +5,11 @@ use fitsrs::Fits;
 use ndarray::{ArrayD, IxDyn};
 
 pub trait AsFits {
-    fn as_fits(&self ) -> FitsImage;
+    fn as_fits(&'_ self) -> FitsImage<'_>;
 }
 
 impl AsFits for Vec<u8> {
-    fn as_fits(&self ) -> FitsImage {
+    fn as_fits(&'_ self) -> FitsImage<'_> {
         FitsImage::new(self.as_slice())
     }
 }

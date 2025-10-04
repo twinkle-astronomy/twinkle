@@ -10,18 +10,20 @@ use cooler::CoolerParameter;
 use futures::Stream;
 use image_type::ImageTypeParameter;
 use indi::{
-    client::{active_device::ActiveDevice, ChangeError}, Blob, Number, Parameter, PropertyState, Switch, Text
+    client::{active_device::ActiveDevice, ChangeError},
+    Blob, Number, Parameter, PropertyState, Switch, Text,
 };
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use transfer_format::TransferFormatParameter;
-use twinkle_client::{notify::ArcCounter, OnDropFutureExt};
 use twinkle_client::timeout;
+use twinkle_client::{notify::ArcCounter, OnDropFutureExt};
 
 use super::{
     parameter_with_config::{
         get_parameter_value, ActiveParameterWithConfig, BlobParameter, NumberParameter, OneOfMany,
         SingleValueParamConfig, SwitchParameter,
-    }, Connectable, DeviceError, DeviceSelectionError
+    },
+    Connectable, DeviceError, DeviceSelectionError,
 };
 
 mod transfer_format;
@@ -355,18 +357,17 @@ impl Camera {
                                 tracing::debug!("Image is none, waiting for next image");
                                 continue;
                             }
-                            break Ok(image)
+                            break Ok(image);
                         }
                         Some(Err(e)) => {
                             tracing::info!("Error getting image: {:?}", e);
-                            break Err(DeviceError::Missing)
+                            break Err(DeviceError::Missing);
                         }
                         None => {
                             tracing::info!("Missing image");
-                            break Err(DeviceError::Missing)
+                            break Err(DeviceError::Missing);
                         }
                     }
-    
                 }
             },
         )
@@ -412,7 +413,6 @@ impl Camera {
     }
 }
 
-
 impl Connectable for Camera {
     async fn connect(
         &self,
@@ -420,7 +420,9 @@ impl Connectable for Camera {
         impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
         ChangeError<()>,
     > {
-        self.device.change("CONNECTION", vec![("CONNECT", true)]).await
+        self.device
+            .change("CONNECTION", vec![("CONNECT", true)])
+            .await
     }
 }
 
@@ -436,16 +438,13 @@ mod test {
     #[tokio::test]
     #[traced_test]
     async fn test_expose() {
-        let mut telescope = 
-            Telescope::new(
-                TelescopeConfig {
-                    mount: String::from("Telescope Simulator"),
-                    primary_camera: String::from("CCD Simulator"),
-                    focuser: String::from("Focuser Simulator"),
-                    filter_wheel: String::from("Filter Simulator"),
-                    flat_panel: String::from("Light Panel Simulator"),
-                },
-            );
+        let mut telescope = Telescope::new(TelescopeConfig {
+            mount: String::from("Telescope Simulator"),
+            primary_camera: String::from("CCD Simulator"),
+            focuser: String::from("Focuser Simulator"),
+            filter_wheel: String::from("Filter Simulator"),
+            flat_panel: String::from("Light Panel Simulator"),
+        });
         telescope.connect("indi:7624").await;
 
         let camera = telescope.get_primary_camera().await.unwrap();

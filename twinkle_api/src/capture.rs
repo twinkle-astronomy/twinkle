@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use twinkle_client::{notify::NotifyArc, task::{Status, TaskStatusError}};
+use twinkle_client::{
+    notify::NotifyArc,
+    task::{Status, TaskStatusError},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum CaptureRequest {

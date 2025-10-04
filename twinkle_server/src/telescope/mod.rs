@@ -171,7 +171,7 @@ impl Telescope {
         }
     }
 
-    pub async fn connect_from_settings(&mut self, settings: impl Deref<Target=Settings>) {
+    pub async fn connect_from_settings(&mut self, settings: impl Deref<Target = Settings>) {
         let settings = settings.deref();
         self.connect(settings.indi_server_addr.clone()).await;
     }

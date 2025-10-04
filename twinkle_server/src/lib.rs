@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use twinkle_client::{agent::Agent, notify::Notify};
 use uuid::Uuid;
 
-use crate::telescope::Telescope;
+// use crate::telescope::Telescope;
 
 pub mod db;
 mod schema;
@@ -16,11 +16,11 @@ pub mod sqlite_mapping;
 
 pub mod telescope;
 
+pub mod capture;
 pub mod flats;
 pub mod indi;
 pub mod settings;
 pub mod tracing_broadcast;
-pub mod capture;
 
 pub mod websocket_handler;
 
@@ -45,7 +45,7 @@ struct StateData {
     settings: Arc<Notify<twinkle_api::settings::Settings>>,
     capture: Agent<twinkle_api::capture::CaptureProgress>,
     db: SyncConnectionWrapper<SqliteConnection>,
-    telescope: Arc<RwLock<Telescope>>,
+    // telescope: Arc<RwLock<Telescope>>,
 }
 
 impl StateData {
@@ -59,15 +59,18 @@ impl StateData {
 
         let mut db = db::establish_connection(filename).await?;
 
-        let settings = StateData::load_settings(&mut db).await.ok().unwrap_or_default();
-        let telescope_config = settings.telescope_config.clone();
+        let settings = StateData::load_settings(&mut db)
+            .await
+            .ok()
+            .unwrap_or_default();
+        // let telescope_config = settings.telescope_config.clone();
         Ok(StateData {
             connections: Default::default(),
             capture: Default::default(),
             flats: Default::default(),
             settings: Arc::new(Notify::new(settings)),
             db,
-            telescope: Arc::new(RwLock::new(Telescope::new(telescope_config)))
+            // telescope: Arc::new(RwLock::new(Telescope::new(telescope_config))),
         })
     }
 }
