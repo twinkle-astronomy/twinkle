@@ -111,20 +111,21 @@ impl ActiveDevice {
     /// * `param_name` - The name of the parameter you wish to change.  If the parameter does not exist,
     ///                  This method will wait up to 1 second for it to exist before timing out.
     /// * `values` - The target values of the named parameter.  This argument must be of a type that
-    // /              can be compared to the named parameter, and converted into an INDI command if nessesary.
-    // /              See [crate::TryEq] and [crate::ToCommand] for type conversions.  If the given values do not
-    // /              match the parameter types nothing be communicated to the server and aa [ChangeError::TypeMismatch]
-    // /              will be returned.
-    // / # Example
-    // / ```no_run
-    // / use indi::*;
-    // / use indi::client::active_device::ActiveDevice;
-    // / async fn change_usage_example(filter_wheel: ActiveDevice) {
-    // /     filter_wheel.change(
-    // /         "FILTER_SLOT",
-    // /         vec![("FILTER_SLOT_VALUE", 5.0)],
-    // /     ).await.expect("Changing filter");
-    // / }
+    ///              can be compared to the named parameter, and converted into an INDI command if nessesary.
+    ///              See [crate::TryEq] and [crate::ToCommand] for type conversions.  If the given values do not
+    ///              match the parameter types nothing be communicated to the server and aa [ChangeError::TypeMismatch]
+    ///              will be returned.
+    /// # Example
+    /// ```no_run
+    /// use indi::*;
+    /// use indi::client::active_device::ActiveDevice;
+    /// use indi::serialization::Sexagesimal;
+    /// async fn change_usage_example(filter_wheel: ActiveDevice) {
+    ///     filter_wheel.change(
+    ///         "FILTER_SLOT",
+    ///         vec![("FILTER_SLOT_VALUE", Sexagesimal::from(5.0))],
+    ///     ).await.expect("Changing filter");
+    /// }
     /// ```
     pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand>(
         &'a self,

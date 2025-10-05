@@ -41,66 +41,116 @@
 //! }
 //! ```
 //!
-// ! ### Using the Client interface
-// ! The simple usage above has its uses, but if you want to track and modify the state of devices at an INDI server it is recommended to use
-// ! the [client interface](crate::client::Client).  The client allows you to get [devices](crate::client::device::ActiveDevice),
-// ! be [notified](crate::client::notify) of changes to those devices, and request [changes](crate::client::device::ActiveDevice::change).
-// ! #### Example
-// ! ```no_run
-// ! use std::time::Duration;
-// ! use tokio::net::TcpStream;
-// ! use twinkle_client::task::Task;
-// ! use twinkle_client::task::Status;
-// ! use std::ops::Deref;
-// !
-// ! #[tokio::main]
-// ! async fn main() {
-// !     // Create a client with a connection to localhost listening for all device properties.
-// !     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-// !     let client = crate::client::Client::new(Some(tx));
-// !     let connection = TcpStream::connect("127.0.0.1:7624").await.unwrap();
-// !     let _client_task: tokio::task::JoinHandle<()> = tokio::task::spawn(crate::client::start(client.get_devices().clone(), rx, connection));
-// !
-// !     // Get an specific camera device
-// !     let camera = client
-// !         .get_device("ZWO CCD ASI294MM Pro")
-// !         .await
-// !         .expect("Getting camera device");
-// !
-// !     // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
-// !     let _ = camera
-// !         .change("CONNECTION", vec![("CONNECT", true)])
-// !         .await
-// !         .expect("Connecting to camera");
-// !
-// !     // Enabling blob transport for the camera.
-// !     camera
-// !         .enable_blob(Some("CCD1"), crate::BlobEnable::Also)
-// !         .await
-// !         .expect("Enabling image retrieval");
-// !
-// !     // Subscribing to changes to the CCD parameter so we can get the next Blob
-// !     let ccd = camera.get_parameter("CCD1").await.expect("Getting ccd parameter");
-// !     let mut ccd_sub = ccd.changes();
-// !
-// !     // Configuring a varienty of the camera's properties at the same time.
-// !     let _ = tokio::try_join!(
-// !         camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
-// !         camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
-// !         camera.change("CCD_CONTROLS", vec![("Offset", Sexagesimal::from(10.0)), ("Gain", Sexagesimal::from(240.0))]),
-// !         camera.change("CCD_BINNING", vec![("HOR_BIN", Sexagesimal::from(2.0)), ("VER_BIN", Sexagesimal::from(2.0))]),
-// !         camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
-// !         )
-// !         .expect("Configuring camera");
-// !
-// !     // Set exposure
-// !     let _ = camera.parameter("CCD_EXPOSURE").await.unwrap().change(vec![("CCD_EXPOSURE_VALUE", Sexagesimal::from(5.0))]).await.expect("Setting the exposure");
-// !
-// !     // Get the image
-// !     if let Parameter::BlobVector(blob) =  ccd_sub.next().await.unwrap().unwrap().as_ref() {
-// !         let _image = blob.values.get("CCD1").unwrap();
-// !     }
-// ! }
+//! ### Using the Client interface
+//! The simple usage above has its uses, but if you want to track and modify the state of devices at an INDI server it is recommended to use
+//! the [client interface](crate::client::Client).  The client allows you to get [devices](crate::client::active_device::ActiveDevice),
+//! be [notified](crate::client::notify) of changes to those devices, and request [changes](crate::client::active_device::ActiveDevice::change).
+//! #### Example
+//! ```no_run
+//! use std::time::Duration;
+//! use tokio::net::TcpStream;
+//! use twinkle_client::task::Task;
+//! use twinkle_client::task::Status;
+//! use std::ops::Deref;
+//! use indi::serialization::Sexagesimal;
+//! use tokio_stream::StreamExt;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     // Create a client with a connection to localhost listening for all device properties.
+//!     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+//!     let client = indi::client::Client::new(Some(tx));
+//!     let connection = TcpStream::connect("127.0.0.1:7624").await.unwrap();
+//!     let _client_task: tokio::task::JoinHandle<()> = tokio::task::spawn(indi::client::start(client.get_devices().clone(), rx, connection));
+//!
+//!     // Get an specific camera device
+//!     let camera = client
+//!         .get_device("ZWO CCD ASI294MM Pro")
+//!         .await
+//!         .expect("Getting camera device");
+//!
+//!     // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
+//!     let _ = camera
+//!         .change("CONNECTION", vec![("CONNECT", true)])
+//!         .await
+//!         .expect("Connecting to camera");
+//!
+//!     // Enabling blob transport for the camera.
+//!     camera
+//!         .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
+//!         .await
+//!         .expect("Enabling image retrieval");
+//!
+//!     // Subscribing to changes to the CCD parameter so we can get the next Blob
+//!     let ccd = camera.get_parameter("CCD1").await.expect("Getting ccd parameter");
+//!     let mut ccd_sub = ccd.changes();
+//!
+//!     // Configuring a varienty of the camera's properties at the same time.
+//!     let _ = tokio::try_join!(
+//!         camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
+//!         camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
+//!         camera.change("CCD_CONTROLS", vec![("Offset", Sexagesimal::from(10.0)), ("Gain", Sexagesimal::from(240.0))]),
+//!         camera.change("CCD_BINNING", vec![("HOR_BIN", Sexagesimal::from(2.0)), ("VER_BIN", Sexagesimal::from(2.0))]),
+//!         camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
+//!         )
+//!         .expect("Configuring camera");
+//!
+//!     // Set exposure
+//!     let _ = camera.parameter("CCD_EXPOSURE").await.unwrap().change(vec![("CCD_EXPOSURE_VALUE", Sexagesimal::from(5.0))]).await.expect("Setting the exposure");
+//!
+//!     // Get the image
+//!     if let indi::Parameter::BlobVector(blob) =  ccd_sub.next().await.unwrap().unwrap().as_ref() {
+//!         let _image = blob.values.get("CCD1").unwrap();
+//!     }
+//! }
+//! ```
+//!
+//! ### Using the Telescope interface
+//! The client interface is fine if you want generic controll of indi devices, but isn't aware of things like "Camera"s, and only maintains one connection
+//! per client.  This can be a problem when streaming images, as no device updates can be received while an image is in transit.  To solve these problems
+//! you can use the [telescope] module.  It manages separate image and control connections and has type representing various device types.
+//! #### Example
+//! ```no_run
+//!use indi::telescope::Telescope;
+//!use indi::telescope::settings::Settings;
+//!use tokio::net::TcpStream;
+//!use std::time::Duration;
+//!
+//!#[tokio::main]
+//!async fn main() {
+//!    let settings = Settings::default();
+//!
+//!    // Create a Telescope connected to localhost.
+//!    let mut telescope = Telescope::new(settings.telescope_config.clone());
+//!    telescope.connect_from_settings::<TcpStream>(&settings).await;
+//!
+//!    // Get an specific camera device
+//!    let camera = telescope.get_primary_camera().await.expect("Getting camera");
+//!
+//!    // Make sure the camera is connected
+//!    let _ = camera.connect().await.expect("Connecting to camera");
+//!
+//!    let capture_format_param = camera.capture_format().await.expect("Getting capture format");
+//!    let transfer_format_param = camera.transfer_format().await.expect("Getting transfer format");
+//!    let gain_param = camera.gain().await.expect("getting gain");
+//!    let binning_param = camera.binning().await.expect("getting binning");
+//!    let image_type_param = camera.image_type().await.expect("Getting image type");
+//!
+//!    // Configuring a variety of the camera's properties at the same time.
+//!    tokio::try_join!(
+//!        capture_format_param.change(indi::telescope::camera::CaptureFormat::Raw16),
+//!        transfer_format_param.change(indi::telescope::camera::TransferFormat::Fits),
+//!        gain_param.change(120.0),
+//!        binning_param.change(indi::telescope::camera::Binning {hor: 2, ver: 2}),
+//!        image_type_param.change(indi::telescope::camera::ImageType::Light),
+//!    ).expect("Configuring the camera");
+//!
+//!    // Capture an immage
+//!    let _blob = camera.capture_image(Duration::from_secs(500)).await.expect("Capturing an image");
+//!}
+//!```
+
+
 pub use tokio;
 
 use quick_xml::events::attributes::AttrError;

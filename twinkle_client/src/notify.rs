@@ -263,7 +263,7 @@ impl<T: Default> Default for Notify<T> {
 }
 
 impl<T: 'static> Notify<T> {
-    /// Returns a [`NotifyMutexGuard<T>`](crate::twinkle_client::notify::NotifyMutexGuard) that allows you to read
+    /// Returns a [`NotifyMutexGuard<T>`](crate::notify::NotifyMutexGuard) that allows you to read
     /// (via the [Deref] trait) and write (via the [DerefMut] trait)
     /// the value stored in the `Notify<T>`.  The lock is exclusive,
     /// and only one lock will be held at a time. Use this method to find the current
@@ -308,7 +308,7 @@ impl<T: 'static> Notify<T> {
         notify_guard
     }
 
-    /// Returns a [`NotifyMutexGuardRead<T>`](crate::twinkle_client::notify::NotifyMutexGuardRead) that allows you to read
+    /// Returns a [`NotifyMutexGuardRead<T>`](crate::notify::NotifyMutexGuardRead) that allows you to read
     /// (via the [Deref] trait) the value stored in the `Notify<T>`.  The lock is read exclusive.  Any number of read locks
     /// may be held at once, but only one write lock.   Use this method to find the current value.
     ///
