@@ -2214,7 +2214,7 @@ dependencies = [
 
 [[package]]
 name = "indi"
-version = "5.0.1"
+version = "5.1.0"
 dependencies = [
  "axum",
  "axum-extra",
@@ -4294,7 +4294,7 @@ dependencies = [
 
 [[package]]
 name = "twinkle_client"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "derive_more",
  "futures",
