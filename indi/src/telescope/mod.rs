@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use crate::client::{AsyncClientConnection, Connectable};
 use crate::{
     client::{
         active_device::{ActiveDevice, SendError},
@@ -7,19 +8,17 @@ use crate::{
     },
     serialization::{self, Command, GetProperties},
     telescope::settings::{Settings, TelescopeConfig},
-    Parameter, TypeError, INDI_PROTOCOL_VERSION,
+    TypeError, INDI_PROTOCOL_VERSION,
 };
 use camera::Camera;
 use filter_wheel::FilterWheel;
 use flat_panel::FlatPanel;
-// use tokio::net::TcpStream;
-use crate::client::AsyncClientConnection;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
-use tokio_stream::Stream;
 use twinkle_client::{
     agent::Agent,
-    notify::{self, ArcCounter},
+    notify,
     task::{Abortable, Joinable, TaskStatusError},
+    MaybeSend,
 };
 pub mod camera;
 pub mod filter;
@@ -160,25 +159,6 @@ pub struct Telescope {
 
     pub agent: Agent<()>,
 }
-pub trait Connectable
-where
-    Self: Sized,
-{
-    type Error: std::fmt::Debug;
-    fn connect(addr: String)
-        -> impl std::future::Future<Output = Result<Self, Self::Error>> + Send;
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::net::TcpStream;
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Connectable for TcpStream {
-    type Error = std::io::Error;
-    async fn connect(addr: String) -> Result<Self, Self::Error> {
-        Self::connect(addr).await
-    }
-}
 
 impl Telescope {
     pub fn new(config: TelescopeConfig) -> Telescope {
@@ -194,7 +174,7 @@ impl Telescope {
     }
 
     pub async fn connect_from_settings<
-        T: Connectable + AsyncClientConnection + 'static + std::marker::Send,
+        T: Connectable + AsyncClientConnection + 'static + MaybeSend,
     >(
         &mut self,
         settings: impl Deref<Target = Settings>,
@@ -203,7 +183,7 @@ impl Telescope {
         self.connect::<T>(settings.indi_server_addr.clone()).await;
     }
 
-    pub async fn connect<T: Connectable + AsyncClientConnection + 'static + std::marker::Send>(
+    pub async fn connect<T: Connectable + AsyncClientConnection + 'static + MaybeSend>(
         &mut self,
         addr: String,
     ) {
@@ -283,28 +263,6 @@ impl Telescope {
 
     async fn get_device(client: &Client, name: &str) -> Result<ActiveDevice, TelescopeError<()>> {
         Ok(client.get_device(name).await?)
-    }
-}
-
-// pub trait Connectable {
-//     fn connect(
-//         &self,
-//     ) -> impl std::future::Future<
-//         Output = Result<
-//             impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
-//             ChangeError<()>,
-//         >,
-//     > + Send;
-// }
-
-impl ActiveDevice {
-    async fn connect(
-        &self,
-    ) -> Result<
-        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
-        ChangeError<()>,
-    > {
-        self.change("CONNECTION", vec![("CONNECT", true)]).await
     }
 }
 

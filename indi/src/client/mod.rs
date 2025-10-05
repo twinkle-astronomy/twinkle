@@ -344,11 +344,24 @@ async fn create(
     }
 }
 
-pub trait AsyncClientConnection {
+pub trait AsyncClientConnection
+where
+    Self: Sized,
+{
     type Reader: AsyncReadConnection + Unpin + MaybeSend + 'static;
     type Writer: AsyncWriteConnection + Unpin + MaybeSend + 'static;
 
     fn to_indi(self) -> (Self::Writer, Self::Reader);
+}
+
+pub trait Connectable
+where
+    Self: Sized,
+{
+    type ConnectionError: std::fmt::Debug;
+    fn connect(
+        addr: String,
+    ) -> impl std::future::Future<Output = Result<Self, Self::ConnectionError>> + MaybeSend;
 }
 
 pub trait AsyncReadConnection {

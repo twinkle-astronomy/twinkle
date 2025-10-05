@@ -50,6 +50,15 @@ impl ActiveDevice {
     pub fn get_name(&self) -> &String {
         &self.name
     }
+
+    pub async fn connect(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+        ChangeError<()>,
+    > {
+        self.change("CONNECTION", vec![("CONNECT", true)]).await
+    }
 }
 
 impl Deref for ActiveDevice {

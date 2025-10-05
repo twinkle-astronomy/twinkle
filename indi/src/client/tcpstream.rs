@@ -8,7 +8,7 @@ use tokio::{
 };
 use tracing::error;
 
-use crate::Command;
+use crate::{client::Connectable, Command};
 use tokio::io::BufReader;
 
 use super::{AsyncClientConnection, AsyncReadConnection, AsyncWriteConnection};
@@ -22,6 +22,12 @@ impl AsyncClientConnection for TcpStream {
         let reader = NsReader::from_reader(BufReader::new(reader));
 
         (AsyncIndiWriter { writer }, AsyncIndiReader::new(reader))
+    }
+}
+impl Connectable for TcpStream {
+    type ConnectionError = std::io::Error;
+    async fn connect(addr: String) -> Result<Self, Self::ConnectionError> {
+        Self::connect(addr).await
     }
 }
 

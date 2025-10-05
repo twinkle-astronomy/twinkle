@@ -2,12 +2,15 @@ use futures::{
     stream::{SplitSink, SplitStream},
     Sink, Stream, StreamExt,
 };
+use twinkle_client::MaybeSend;
 
 use crate::{
-    client::{sink::SinkStringWrapper, stream::StringCommandStream, AsyncClientConnection},
+    client::{
+        sink::SinkStringWrapper, stream::StringCommandStream, AsyncClientConnection, Connectable,
+    },
     serialization, DeError,
 };
-use std::pin::Pin;
+use std::{future::Future, pin::Pin};
 use tokio_tungstenite_wasm::{Error, Message, WebSocketStream};
 
 impl AsyncClientConnection for tokio_tungstenite_wasm::WebSocketStream {
@@ -26,6 +29,17 @@ impl AsyncClientConnection for tokio_tungstenite_wasm::WebSocketStream {
         )
     }
 }
+
+impl Connectable for tokio_tungstenite_wasm::WebSocketStream {
+    type ConnectionError = tokio_tungstenite_wasm::Error;
+
+    fn connect(
+        addr: String,
+    ) -> impl Future<Output = Result<Self, Self::ConnectionError>> + MaybeSend {
+        tokio_tungstenite_wasm::connect(addr)
+    }
+}
+
 pub struct WebSocketCommandReader<S: Stream<Item = Result<Message, Error>>> {
     reader: S,
 }

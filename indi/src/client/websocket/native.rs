@@ -1,7 +1,9 @@
 use std::pin::Pin;
 
 use crate::{
-    client::{sink::SinkStringWrapper, stream::StringCommandStream, AsyncClientConnection},
+    client::{
+        sink::SinkStringWrapper, stream::StringCommandStream, AsyncClientConnection, Connectable,
+    },
     serialization::{self, DeError},
 };
 use axum::extract::ws::WebSocket;
@@ -9,9 +11,12 @@ use futures::{
     stream::{SplitSink, SplitStream},
     Sink, Stream, StreamExt,
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 
-use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 impl AsyncClientConnection for WebSocket {
     type Writer =
@@ -187,6 +192,20 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> AsyncClientConnection
             WebSocketStreamCommandWriter { writer }.into(),
             WebSocketStreamCommandReader { reader }.into(),
         )
+    }
+}
+
+impl Connectable for WebSocketStream<MaybeTlsStream<TcpStream>> {
+    type ConnectionError = tokio_tungstenite::tungstenite::Error;
+
+    fn connect(
+        addr: String,
+    ) -> impl std::future::Future<Output = Result<Self, Self::ConnectionError>> + twinkle_client::MaybeSend
+    {
+        async {
+            let (stream, _) = tokio_tungstenite::connect_async(addr).await?;
+            Ok(stream)
+        }
     }
 }
 
