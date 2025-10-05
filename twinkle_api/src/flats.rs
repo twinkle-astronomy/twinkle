@@ -3,8 +3,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use twinkle_client::task::TaskStatusError;
 
-use crate::Filter;
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConnectionParams {
     pub server_addr: String,
@@ -25,7 +23,7 @@ pub enum MessageToServer {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct Parameterization {
-    pub filters: Vec<Filter>,
+    pub filters: Vec<String>,
     pub binnings: Vec<u8>,
 }
 
@@ -41,7 +39,7 @@ pub enum LightSource {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub count: usize,
-    pub filters: Vec<(Filter, bool)>,
+    pub filters: Vec<(String, bool)>,
     pub adu_target: u16,
     pub adu_margin: u16,
     pub binnings: Vec<(u8, bool)>,

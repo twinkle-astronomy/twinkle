@@ -1,4 +1,4 @@
-use twinkle_api::settings::{Settings, TelescopeConfig};
+use indi::telescope::settings::{Settings, TelescopeConfig};
 
 use diesel::{
     prelude::AsChangeset, sqlite::SqliteConnection, Connection, ConnectionError, ExpressionMethods,

@@ -24,9 +24,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    serialization, Command, DeError, TypeError, UpdateError,
-};
+use crate::{serialization, Command, DeError, TypeError, UpdateError};
 pub use twinkle_client::notify::{self, wait_fn, Notify};
 
 #[derive(Debug)]
@@ -188,32 +186,32 @@ impl Client {
         self.feedback = feedback;
     }
 
-    // Async method that will wait up to 1 second for the device named `name` to be defined
-    //  by the INDI server.  The returned `ActiveDevice` (if present) will be associated with
-    //  the `self` client for communicating changes with the INDI server it came from.
-    //
-    // # Arguments
-    // * `name` - Name of device on the remote INDI server you wish to get.
-    //
-    // # Example
-    // ```no_run
-    // use tokio::net::TcpStream;
-    // use twinkle_client::task::Task;
-    // use std::ops::Deref;
-    // // Client that will track all devices and parameters to the connected INDI server at localhost.
-    //
-    // async {
-    //     let client_task = indi::client::new(TcpStream::connect("localhost:7624").await.expect("Connecting to server"), None, None);
-    //     let status = client_task.status();
-    //     if let twinkle_client::task::Status::Running(client) = status.lock().await.deref() {
-    //         let filter_wheel = client.lock().await
-    //             .get_device("ASI EFW")
-    //             .await
-    //             .expect("Getting filter wheel");
-    //     };
-    //     
-    // };
-    // ```
+    /// Async method that will wait up to 1 second for the device named `name` to be defined
+    ///  by the INDI server.  The returned `ActiveDevice` (if present) will be associated with
+    ///  the `self` client for communicating changes with the INDI server it came from.
+    ///
+    /// # Arguments
+    /// * `name` - Name of device on the remote INDI server you wish to get.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use tokio::net::TcpStream;
+    /// use twinkle_client::task::Task;
+    /// use std::ops::Deref;
+    /// use indi::client;
+    ///
+    /// async {
+    ///     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    ///     let connection = TcpStream::connect("localhost:7624").await.expect("Connecting to server");
+    ///     let client = indi::client::Client::new(Some(tx));
+    ///     let client_task: tokio::task::JoinHandle<()> = tokio::task::spawn(indi::client::start(client.get_devices().clone(), rx, connection));
+    ///     let filter_wheel = client
+    ///         .get_device("ASI EFW")
+    ///         .await
+    ///         .expect("Getting filter wheel");
+    ///     
+    /// };
+    /// ```
     pub async fn get_device<'a>(
         &'a self,
         name: &str,
@@ -604,13 +602,17 @@ mod test {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
             let client = crate::client::Client::new(Some(tx));
             let mut device_changes = client.devices.subscribe().await;
-            let _ = tokio::task::spawn(crate::client::start(client.devices.clone(), rx, connection));
-            client.send(crate::serialization::Command::GetProperties(GetProperties {
-                version: crate::INDI_PROTOCOL_VERSION.to_string(),
-                device: None,
-                name: None,
-            })).unwrap();
-
+            let _ =
+                tokio::task::spawn(crate::client::start(client.devices.clone(), rx, connection));
+            client
+                .send(crate::serialization::Command::GetProperties(
+                    GetProperties {
+                        version: crate::INDI_PROTOCOL_VERSION.to_string(),
+                        device: None,
+                        name: None,
+                    },
+                ))
+                .unwrap();
 
             let _ = server_continue_tx.send(());
 

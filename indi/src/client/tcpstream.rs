@@ -158,9 +158,13 @@ mod test {
             .expect("connecting to indi");
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let mut client = crate::client::Client::new(Some(tx));
-        let client_task = tokio::task::spawn(crate::client::start(client.devices.clone(), rx, connection));
+        let client_task: tokio::task::JoinHandle<()> =
+            tokio::task::spawn(crate::client::start(client.devices.clone(), rx, connection));
 
         client.shutdown();
-        tokio::time::timeout(Duration::from_secs(1), client_task).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(1), client_task)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

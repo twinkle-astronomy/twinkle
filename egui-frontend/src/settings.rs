@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use egui::Window;
 use futures::{SinkExt, StreamExt};
 use tokio_tungstenite_wasm::Message;
-use twinkle_api::settings::Settings;
+use indi::telescope::settings::Settings;
 use twinkle_client::{
     sleep,
     task::{spawn, Abortable, IsRunning},

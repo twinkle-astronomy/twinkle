@@ -4,8 +4,8 @@ use crate::serialization::Command;
 use crate::{FromParamValue, Parameter, PropertyState, ToCommand, TryEq, TypeError};
 use std::collections::HashMap;
 use std::{ops::Deref, sync::Arc, time::Duration};
-use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use tokio_stream::Stream;
+use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use twinkle_client::notify::{self, wait_fn, ArcCounter, Notify};
 
 #[derive(Clone)]
@@ -21,10 +21,9 @@ pub trait IntoValue {
     fn into_value(self) -> Self::Value;
 }
 
-
 pub trait FromParameter: Sized {
     type Error;
-    fn from_parameter<T: Deref<Target=Parameter>>(param: &T) -> Result<Self, Self::Error>;
+    fn from_parameter<T: Deref<Target = Parameter>>(param: &T) -> Result<Self, Self::Error>;
 }
 
 impl ActiveParameter {
@@ -33,9 +32,13 @@ impl ActiveParameter {
         device: active_device::ActiveDevice,
         parameter: Arc<Notify<Parameter>>,
     ) -> ActiveParameter {
-        ActiveParameter { device, parameter, name }
+        ActiveParameter {
+            device,
+            parameter,
+            name,
+        }
     }
-    
+
     pub async fn get<T>(&self, value_name: &str) -> Result<T, TypeError>
     where
         HashMap<String, T>: FromParamValue,
@@ -45,18 +48,16 @@ impl ActiveParameter {
         let values = lock.get_values::<HashMap<String, T>>()?;
         match values.get(value_name) {
             Some(value) => Ok(value.clone()),
-            None => Err(TypeError::TypeMismatch)
+            None => Err(TypeError::TypeMismatch),
         }
     }
 
-    pub fn set<'a,T>(
-        &'a self,
-        values: T,
-    ) -> Result<(), SendError<Command>>
+    pub fn set<'a, T>(&'a self, values: T) -> Result<(), SendError<Command>>
     where
-        T: ToCommand
+        T: ToCommand,
     {
-        self.device.send(values.to_command(self.device.get_name().clone(), self.name.clone()))
+        self.device
+            .send(values.to_command(self.device.get_name().clone(), self.name.clone()))
     }
 
     pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand>(
@@ -71,7 +72,6 @@ impl ActiveParameter {
         let (mut subscription, timeout) = {
             let mut subscription = self.subscribe().await;
             let timeout = {
-                
                 let param = subscription.next().await.unwrap().unwrap();
                 if !values.try_eq(&param)? {
                     let c = values
@@ -79,7 +79,11 @@ impl ActiveParameter {
                         .to_command(device_name, param.get_name().clone());
                     self.device.send(c)?;
                 } else {
-                    tracing::debug!("Skipping due to equality: {}.{}", &device_name, &param.get_name());
+                    tracing::debug!(
+                        "Skipping due to equality: {}.{}",
+                        &device_name,
+                        &param.get_name()
+                    );
                     return Ok(subscription);
                 }
 
@@ -97,7 +101,7 @@ impl ActiveParameter {
                     return Err(ChangeError::PropertyError);
                 }
                 if *next.get_state() == PropertyState::Busy {
-                    return Ok(notify::Status::Pending)
+                    return Ok(notify::Status::Pending);
                 }
                 if values.try_eq(&next)? {
                     Ok(notify::Status::Complete(next.clone()))
@@ -114,7 +118,6 @@ impl ActiveParameter {
     pub fn get_device(&self) -> &ActiveDevice {
         &self.device
     }
-
 }
 
 impl Deref for ActiveParameter {

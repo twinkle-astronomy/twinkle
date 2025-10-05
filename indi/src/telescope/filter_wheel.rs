@@ -1,13 +1,16 @@
 use std::{collections::HashMap, ops::Deref};
 
-use indi::{
-    client::active_device::ActiveDevice,
+use crate::{
+    client::{active_device::ActiveDevice, ChangeError},
     serialization::{OneText, Sexagesimal},
+    telescope::filter::Filter,
     Number, Parameter, Text,
 };
+use derive_more::Debug;
+use futures::Stream;
 use itertools::Itertools;
-use twinkle_api::Filter;
-use twinkle_client::notify::NotifyArc;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use twinkle_client::notify::{ArcCounter, NotifyArc};
 
 use super::{
     parameter_with_config::{
@@ -16,6 +19,18 @@ use super::{
     },
     DeviceError,
 };
+
+#[derive(Debug)]
+pub enum FlatError {
+    DeviceError(DeviceError),
+    FilterNotFound(String),
+}
+
+impl From<DeviceError> for FlatError {
+    fn from(value: DeviceError) -> Self {
+        FlatError::DeviceError(value)
+    }
+}
 
 pub struct FilterWheel {
     device: ActiveDevice,
@@ -36,6 +51,15 @@ impl FilterWheel {
         )
     }
 
+    pub async fn get_filter(&self, name: &str) -> Result<TelescopeFilter, FlatError> {
+        let filters = self.filters().await?.get().await?;
+        filters
+            .into_iter()
+            .filter(|x| x.name == name)
+            .next()
+            .ok_or(FlatError::FilterNotFound(name.to_string()))
+    }
+
     pub async fn filter_slot(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.filter_slot.clone())
@@ -43,19 +67,12 @@ impl FilterWheel {
                 .into(),
         )
     }
-}
 
-impl super::Connectable for FilterWheel {
-    async fn connect(
+    pub async fn connect(
         &self,
     ) -> Result<
-        impl futures::Stream<
-            Item = Result<
-                twinkle_client::notify::ArcCounter<indi::Parameter>,
-                tokio_stream::wrappers::errors::BroadcastStreamRecvError,
-            >,
-        >,
-        indi::client::ChangeError<()>,
+        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+        ChangeError<()>,
     > {
         self.device
             .change("CONNECTION", vec![("CONNECT", true)])

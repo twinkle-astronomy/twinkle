@@ -418,7 +418,7 @@ pub struct Sexagesimal {
 impl Sexagesimal {
     fn normalize(&mut self) {
         if let Some(second) = self.second {
-            if second >= 60.0  || second < 0.0{
+            if second >= 60.0 || second < 0.0 {
                 unimplemented!()
             }
         }

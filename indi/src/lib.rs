@@ -7,15 +7,6 @@
 //! The purpose of this crate is to provide a convinent way to interact with devices
 //! using the INDI protocol.  Details on the protocol can be found [here](http://docs.indilib.org/protocol/INDI.pdf).
 //!
-//! ## Quickstart
-//! ### Prerequisites
-//! To compile this crate, you must first have the libcfitsio library installed.  For debian based linux distros this can be satisfied by running:
-//! ```shell
-//! $ sudo apt install libcfitsio-dev
-//! ```
-//!
-//! Once that's complete, using you should be able to use cargo to install the crate.
-//!
 //! ### Simple usage.
 //!
 //! The simpliest way to use this crate is to open a [TcpStream](std::net::TcpStream) and read/write INDI [commands](crate::serialization::Command).
@@ -65,49 +56,50 @@
 // ! #[tokio::main]
 // ! async fn main() {
 // !     // Create a client with a connection to localhost listening for all device properties.
-// !     let client_task = indi::client::new(
-// !         TcpStream::connect("127.0.0.1:7624").await.expect("Connecting to INDI server"),
-// !         None,
-// !         None);
-// !     let status = client_task.status();
-// !     if let Status::Running(client) = status.lock().await.deref() {
-// !         // Get an specific camera device
-// !         let camera = client.lock().await
-// !             .get_device("ZWO CCD ASI294MM Pro")
-// !             .await
-// !             .expect("Getting camera device");
-// !    
-// !         // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
-// !         camera
-// !             .change("CONNECTION", vec![("CONNECT", true)])
-// !             .await
-// !             .expect("Connecting to camera");
-// !    
-// !         // Enabling blob transport for the camera.  
-// !         camera
-// !             .enable_blob(Some("CCD1"), indi::BlobEnable::Also)
-// !             .await
-// !             .expect("Enabling image retrieval");
-// !    
-// !         // Configuring a varienty of the camera's properties at the same time.
-// !         tokio::try_join!(
-// !             camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
-// !             camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
-// !             camera.change("CCD_CONTROLS", vec![("Offset", 10.0), ("Gain", 240.0)]),
-// !             camera.change("FITS_HEADER", vec![("FITS_OBJECT", "")]),
-// !             camera.change("CCD_BINNING", vec![("HOR_BIN", 2.0), ("VER_BIN", 2.0)]),
-// !             camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
-// !             )
-// !             .expect("Configuring camera");
-// !         #[cfg(feature = "fitsio")]
-// !         {
-// !             // Capture a 5 second exposure from the camera
-// !             let fits = camera.capture_image(Duration::from_secs(5)).await.expect("Capturing image");
-// !    
-// !             // Save the fits file to disk.
-// !             fits.save("flat.fits").expect("Saving image");
-// !         }
-// !     };
+// !     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+// !     let client = crate::client::Client::new(Some(tx));
+// !     let connection = TcpStream::connect("127.0.0.1:7624").await.unwrap();
+// !     let _client_task: tokio::task::JoinHandle<()> = tokio::task::spawn(crate::client::start(client.get_devices().clone(), rx, connection));
+// !
+// !     // Get an specific camera device
+// !     let camera = client
+// !         .get_device("ZWO CCD ASI294MM Pro")
+// !         .await
+// !         .expect("Getting camera device");
+// !
+// !     // Setting the 'CONNECTION' parameter to `on` to ensure the indi device is connected.
+// !     let _ = camera
+// !         .change("CONNECTION", vec![("CONNECT", true)])
+// !         .await
+// !         .expect("Connecting to camera");
+// !
+// !     // Enabling blob transport for the camera.
+// !     camera
+// !         .enable_blob(Some("CCD1"), crate::BlobEnable::Also)
+// !         .await
+// !         .expect("Enabling image retrieval");
+// !
+// !     // Subscribing to changes to the CCD parameter so we can get the next Blob
+// !     let ccd = camera.get_parameter("CCD1").await.expect("Getting ccd parameter");
+// !     let mut ccd_sub = ccd.changes();
+// !
+// !     // Configuring a varienty of the camera's properties at the same time.
+// !     let _ = tokio::try_join!(
+// !         camera.change("CCD_CAPTURE_FORMAT", vec![("ASI_IMG_RAW16", true)]),
+// !         camera.change("CCD_TRANSFER_FORMAT", vec![("FORMAT_FITS", true)]),
+// !         camera.change("CCD_CONTROLS", vec![("Offset", Sexagesimal::from(10.0)), ("Gain", Sexagesimal::from(240.0))]),
+// !         camera.change("CCD_BINNING", vec![("HOR_BIN", Sexagesimal::from(2.0)), ("VER_BIN", Sexagesimal::from(2.0))]),
+// !         camera.change("CCD_FRAME_TYPE", vec![("FRAME_FLAT", true)]),
+// !         )
+// !         .expect("Configuring camera");
+// !
+// !     // Set exposure
+// !     let _ = camera.parameter("CCD_EXPOSURE").await.unwrap().change(vec![("CCD_EXPOSURE_VALUE", Sexagesimal::from(5.0))]).await.expect("Setting the exposure");
+// !
+// !     // Get the image
+// !     if let Parameter::BlobVector(blob) =  ccd_sub.next().await.unwrap().unwrap().as_ref() {
+// !         let _image = blob.values.get("CCD1").unwrap();
+// !     }
 // ! }
 pub use tokio;
 
@@ -134,6 +126,7 @@ pub mod serialization;
 use serialization::*;
 
 pub mod client;
+pub mod telescope;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum PropertyState {
@@ -315,7 +308,6 @@ pub struct TextVector {
     pub values: HashMap<String, Text>,
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Blob {
     pub label: Option<String>,
@@ -386,7 +378,7 @@ impl Parameter {
     pub fn get_label_display(&self) -> &String {
         match self.get_label() {
             Some(label) => label,
-            None => self.get_name()
+            None => self.get_name(),
         }
     }
     pub fn get_state(&self) -> &PropertyState {
@@ -460,7 +452,6 @@ impl TryEq<Parameter> for Vec<(&str, Sexagesimal)> {
         }))
     }
 }
-
 
 impl TryEq<Parameter> for Vec<OneNumber> {
     fn try_eq(&self, other: &Parameter) -> Result<bool, TypeError> {

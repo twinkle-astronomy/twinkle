@@ -1,29 +1,32 @@
-use std::{fmt::Display, ops::Deref};
+use std::ops::Deref;
 
-use camera::Camera;
-use filter_wheel::FilterWheel;
-use flat_panel::FlatPanel;
-use indi::{
+use crate::{
     client::{
         active_device::{ActiveDevice, SendError},
         ChangeError, Client,
     },
     serialization::{self, Command, GetProperties},
+    telescope::settings::{Settings, TelescopeConfig},
     Parameter, TypeError, INDI_PROTOCOL_VERSION,
 };
-use tokio::net::TcpStream;
+use camera::Camera;
+use filter_wheel::FilterWheel;
+use flat_panel::FlatPanel;
+// use tokio::net::TcpStream;
+use crate::client::AsyncClientConnection;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::Stream;
-use twinkle_api::settings::{Settings, TelescopeConfig};
 use twinkle_client::{
     agent::Agent,
     notify::{self, ArcCounter},
     task::{Abortable, Joinable, TaskStatusError},
 };
-
 pub mod camera;
+pub mod filter;
 pub mod filter_wheel;
 pub mod flat_panel;
+pub mod settings;
+
 mod parameter_with_config;
 
 #[derive(Debug)]
@@ -157,11 +160,30 @@ pub struct Telescope {
 
     pub agent: Agent<()>,
 }
+pub trait Connectable
+where
+    Self: Sized,
+{
+    type Error: std::fmt::Debug;
+    fn connect(addr: String)
+        -> impl std::future::Future<Output = Result<Self, Self::Error>> + Send;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::net::TcpStream;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Connectable for TcpStream {
+    type Error = std::io::Error;
+    async fn connect(addr: String) -> Result<Self, Self::Error> {
+        Self::connect(addr).await
+    }
+}
 
 impl Telescope {
     pub fn new(config: TelescopeConfig) -> Telescope {
-        let client = indi::client::Client::new(None);
-        let image_client = indi::client::Client::new(None);
+        let client = crate::client::Client::new(None);
+        let image_client = crate::client::Client::new(None);
         let agent = Agent::default();
         Telescope {
             config,
@@ -171,23 +193,28 @@ impl Telescope {
         }
     }
 
-    pub async fn connect_from_settings(&mut self, settings: impl Deref<Target = Settings>) {
+    pub async fn connect_from_settings<
+        T: Connectable + AsyncClientConnection + 'static + std::marker::Send,
+    >(
+        &mut self,
+        settings: impl Deref<Target = Settings>,
+    ) {
         let settings = settings.deref();
-        self.connect(settings.indi_server_addr.clone()).await;
+        self.connect::<T>(settings.indi_server_addr.clone()).await;
     }
 
-    pub async fn connect(
+    pub async fn connect<T: Connectable + AsyncClientConnection + 'static + std::marker::Send>(
         &mut self,
-        addr: impl tokio::net::ToSocketAddrs + Clone + Display + Send + 'static,
+        addr: String,
     ) {
         self.agent.abort();
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         self.client.reset(Some(tx)).await;
-        let client_task = indi::client::start(
+        let client_task = crate::client::start(
             self.client.get_devices().clone(),
             rx,
-            TcpStream::connect(addr.clone())
+            T::connect(addr.clone())
                 .await
                 .expect(format!("Unable to connect to {}", addr).as_str()),
         );
@@ -201,10 +228,10 @@ impl Telescope {
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         self.image_client.reset(Some(tx)).await;
-        let image_client_task = indi::client::start(
+        let image_client_task = crate::client::start(
             self.image_client.get_devices().clone(),
             rx,
-            TcpStream::connect(addr.clone())
+            T::connect(addr.clone())
                 .await
                 .expect(format!("Unable to connect to {}", addr).as_str()),
         );
@@ -232,11 +259,9 @@ impl Telescope {
     }
 
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
-        let device: FilterWheel = Self::get_device(&self.client, &self.config.filter_wheel)
-            .await?
-            .into();
+        let device = Self::get_device(&self.client, &self.config.filter_wheel).await?;
         let _ = device.connect().await.unwrap();
-        Ok(device)
+        Ok(device.into())
     }
 
     pub async fn get_focuser(&self) -> Result<ActiveDevice, TelescopeError<()>> {
@@ -261,18 +286,18 @@ impl Telescope {
     }
 }
 
-pub trait Connectable {
-    fn connect(
-        &self,
-    ) -> impl std::future::Future<
-        Output = Result<
-            impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
-            ChangeError<()>,
-        >,
-    > + Send;
-}
+// pub trait Connectable {
+//     fn connect(
+//         &self,
+//     ) -> impl std::future::Future<
+//         Output = Result<
+//             impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+//             ChangeError<()>,
+//         >,
+//     > + Send;
+// }
 
-impl Connectable for ActiveDevice {
+impl ActiveDevice {
     async fn connect(
         &self,
     ) -> Result<

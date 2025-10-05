@@ -1,6 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, ops::Deref};
 
-use indi::{
+use crate::{
     client::{
         active_device::{ActiveDevice, SendError},
         active_parameter::ActiveParameter,

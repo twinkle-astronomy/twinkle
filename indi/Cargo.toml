@@ -31,6 +31,7 @@ wasm-bindgen-futures = {version="0.4", optional=true}
 tokio-tungstenite-wasm = {version="0.4", optional=true}
 fitsrs = "0.3.2"
 derive_more = { version = "2.0.1", features = ["full"] }
+itertools = "0.14.0"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

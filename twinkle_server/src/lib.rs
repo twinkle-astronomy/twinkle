@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use ::indi::telescope::settings::Settings;
 use db::{run_migrations, MigrationError};
 use diesel::SqliteConnection;
 use diesel_async::sync_connection_wrapper::SyncConnectionWrapper;
@@ -8,13 +9,9 @@ use tokio::sync::RwLock;
 use twinkle_client::{agent::Agent, notify::Notify};
 use uuid::Uuid;
 
-// use crate::telescope::Telescope;
-
 pub mod db;
 mod schema;
 pub mod sqlite_mapping;
-
-pub mod telescope;
 
 pub mod capture;
 pub mod flats;
@@ -42,7 +39,7 @@ impl AppState {
 struct StateData {
     connections: HashMap<Uuid, Arc<RwLock<IndiConnectionData>>>,
     flats: Arc<Notify<Agent<twinkle_api::flats::FlatRun>>>,
-    settings: Arc<Notify<twinkle_api::settings::Settings>>,
+    settings: Arc<Notify<Settings>>,
     capture: Agent<twinkle_api::capture::CaptureProgress>,
     db: SyncConnectionWrapper<SqliteConnection>,
     // telescope: Arc<RwLock<Telescope>>,

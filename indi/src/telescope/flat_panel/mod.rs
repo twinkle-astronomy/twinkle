@@ -1,11 +1,18 @@
-use indi::{client::active_device::ActiveDevice, Number, Text};
+use futures::Stream;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use twinkle_client::notify::ArcCounter;
+
+use crate::{
+    client::{active_device::ActiveDevice, ChangeError},
+    Number, Parameter, Text,
+};
 
 use super::{
     parameter_with_config::{
         get_parameter_value, ActiveParameterWithConfig, NumberParameter, OneOfMany,
         SingleValueParamConfig,
     },
-    Connectable, DeviceError, DeviceSelectionError,
+    DeviceError, DeviceSelectionError,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -37,6 +44,17 @@ struct FlatPanelConfig {
 pub struct Light(ActiveParameterWithConfig<OneOfMany<LightState>>);
 
 impl FlatPanel {
+    pub async fn connect(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+        ChangeError<()>,
+    > {
+        self.device
+            .change("CONNECTION", vec![("CONNECT", true)])
+            .await
+    }
+
     async fn get_driver_name(device: &ActiveDevice) -> Result<Text, super::DeviceSelectionError> {
         if let Some(driver_name) = get_parameter_value(device, "DRIVER_INFO", "DRIVER_NAME").await {
             return Ok(driver_name);
@@ -97,23 +115,5 @@ impl FlatPanel {
     pub async fn light(&self) -> Result<Light, DeviceError> {
         let apwc = ActiveParameterWithConfig::new(&self.device, self.config.light.clone()).await?;
         Ok(Light(apwc))
-    }
-}
-
-impl Connectable for FlatPanel {
-    async fn connect(
-        &self,
-    ) -> Result<
-        impl futures::Stream<
-            Item = Result<
-                twinkle_client::notify::ArcCounter<indi::Parameter>,
-                tokio_stream::wrappers::errors::BroadcastStreamRecvError,
-            >,
-        >,
-        indi::client::ChangeError<()>,
-    > {
-        self.device
-            .change("CONNECTION", vec![("CONNECT", true)])
-            .await
     }
 }

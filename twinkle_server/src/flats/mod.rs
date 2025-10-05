@@ -11,6 +11,7 @@ use once_cell::sync::Lazy;
 use indi::{
     client::{active_device::SendError, ChangeError},
     serialization::Command,
+    telescope::{DeviceError, Telescope, TelescopeError},
 };
 use logic::start;
 use tokio_stream::wrappers::ReceiverStream;
@@ -19,7 +20,7 @@ use twinkle_client::task::Abortable;
 use twinkle_client::task::Joinable;
 
 use crate::{
-    telescope::{Connectable, DeviceError, Telescope, TelescopeError},
+    // telescope::{Connectable, DeviceError, Telescope, TelescopeError},
     websocket_handler::WebsocketHandler,
     AppState,
 };
@@ -45,6 +46,7 @@ pub enum FlatError {
     UnexpectedMessage,
     RecvError(tokio::sync::broadcast::error::RecvError),
     IoError(std::io::Error),
+    FlatError(indi::telescope::filter_wheel::FlatError),
     BadAdu,
 }
 
@@ -103,6 +105,12 @@ impl From<fitsrs::error::Error> for FlatError {
     }
 }
 
+impl From<indi::telescope::filter_wheel::FlatError> for FlatError {
+    fn from(value: indi::telescope::filter_wheel::FlatError) -> Self {
+        FlatError::FlatError(value)
+    }
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/flats", get(create_connection))
@@ -126,7 +134,9 @@ pub async fn post_flats(
             let _ = lock.join().await;
             lock.spawn(FlatRun { progress: 0. }, |state| async move {
                 let mut telescope = Telescope::new(telescope_config);
-                telescope.connect(server_addr).await;
+                telescope
+                    .connect::<tokio::net::TcpStream>(server_addr)
+                    .await;
                 if let Err(e) = start(telescope, config, state).await {
                     tracing::error!("Error getting flats: {:?}", e);
                 }
@@ -156,7 +166,9 @@ async fn handle_connection(socket: WebsocketHandler, State(state): State<AppStat
     let settings = store.settings.read().await;
 
     let mut telescope = Telescope::new(settings.telescope_config.clone());
-    telescope.connect(settings.indi_server_addr.clone()).await;
+    telescope
+        .connect::<tokio::net::TcpStream>(settings.indi_server_addr.clone())
+        .await;
 
     drop(settings);
     drop(store);
@@ -203,7 +215,7 @@ async fn handle_connection(socket: WebsocketHandler, State(state): State<AppStat
             let mut params = Parameterization::default();
             params.binnings = vec![1, 2, 4];
             while let Some(Ok(filters)) = filters_subscription.next().await {
-                params.filters = filters.get()?.into_iter().map(|x| x.into()).collect();
+                params.filters = filters.get()?.into_iter().map(|x| x.name.clone()).collect();
                 message_tx
                     .send(twinkle_api::flats::MessageToClient::Parameterization(
                         params.clone(),

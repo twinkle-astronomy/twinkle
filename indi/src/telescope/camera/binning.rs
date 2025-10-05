@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref};
 
-use indi::{serialization::OneNumber, Number, Parameter};
+use crate::{serialization::OneNumber, Number, Parameter};
 use twinkle_client::notify::NotifyArc;
 
 use crate::telescope::parameter_with_config::{

@@ -39,7 +39,7 @@ impl egui::Widget for &mut Config {
                 ui.label("Filter");
 
                 for (filter, selected) in self.filters.iter_mut() {
-                    ui.toggle_value(selected, &filter.name);
+                    ui.toggle_value(selected, filter.as_str());
                 }
                 ui.end_row();
 

@@ -84,7 +84,7 @@ impl Device {
             Command::SetTextVector(command) => this.update_param(command).await,
             Command::NewTextVector(_) => Ok(None),
             Command::DefBlobVector(command) => this.new_param(command).await,
-            Command::SetBlobVector(command) => {this.update_param(command).await},
+            Command::SetBlobVector(command) => this.update_param(command).await,
             Command::DefLightVector(command) => this.new_param(command).await,
             Command::SetLightVector(command) => this.update_param(command).await,
             Command::DelProperty(command) => this.delete_param(command.name).await,
@@ -108,14 +108,15 @@ impl Device {
         if !self.parameters.contains_key(&name) {
             self.names.push(name.clone());
         }
-        
+
         let param = def.to_param();
         match self.parameters.get_mut(&name) {
             Some(entry) => {
                 *entry.write().await = param;
-            },
+            }
             None => {
-                self.parameters.insert(name.clone(), Arc::new(Notify::new(param)));
+                self.parameters
+                    .insert(name.clone(), Arc::new(Notify::new(param)));
             }
         };
 

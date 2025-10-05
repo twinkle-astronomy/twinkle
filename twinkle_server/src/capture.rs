@@ -9,6 +9,7 @@ use axum::{
 };
 use futures::{self, stream, Stream, StreamExt, TryStreamExt};
 use indi::serialization::Sexagesimal;
+use indi::telescope::Telescope;
 use indi::Number;
 use twinkle_api::capture::{
     CaptureProgress, CaptureRequest, ExposureParameterization, MessageToClient,
@@ -16,7 +17,7 @@ use twinkle_api::capture::{
 use twinkle_api::ToWebsocketMessage;
 use twinkle_client::task::{Abortable, TaskStatusError};
 
-use crate::{telescope::Telescope, websocket_handler::WebsocketHandler, AppState};
+use crate::{websocket_handler::WebsocketHandler, AppState};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -40,7 +41,9 @@ pub async fn set_capture(
                 .spawn(CaptureProgress { progress: 0. }, move |state| async move {
                     let mut telescope =
                         Telescope::new(settings.read().await.telescope_config.clone());
-                    telescope.connect_from_settings(settings.read().await).await;
+                    telescope
+                        .connect_from_settings::<tokio::net::TcpStream>(settings.read().await)
+                        .await;
                     let camera = telescope.get_primary_camera().await.unwrap();
                     let exposure = camera.exposure().await.unwrap();
 
@@ -86,7 +89,7 @@ async fn get_capture(
     let capture = store.capture.subscribe().await;
     let mut telescope = Telescope::new(store.settings.read().await.telescope_config.clone());
     telescope
-        .connect_from_settings(store.settings.read().await)
+        .connect_from_settings::<tokio::net::TcpStream>(store.settings.read().await)
         .await;
 
     drop(store);

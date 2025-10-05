@@ -8,7 +8,7 @@ use axum::{
 use futures::StreamExt;
 use std::sync::Arc;
 
-use twinkle_api::settings::Settings;
+use indi::telescope::settings::Settings;
 use twinkle_client::notify::Notify;
 
 use crate::websocket_handler::WebsocketHandler;

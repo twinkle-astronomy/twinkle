@@ -1483,6 +1483,7 @@ dependencies = [
  "encoding",
  "fitsrs",
  "futures 0.3.31",
+ "itertools",
  "log 0.4.27",
  "ndarray 0.15.6",
  "once_cell",

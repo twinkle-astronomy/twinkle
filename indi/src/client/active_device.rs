@@ -1,19 +1,11 @@
-use std::{
-    ops::Deref,
-    sync::Arc,
-    time::Duration,
-};
+use std::{ops::Deref, sync::Arc, time::Duration};
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, Stream};
 
 use twinkle_client::notify::{self, wait_fn, ArcCounter, Notify};
 
-use crate::{
-    device::Device, serialization, Command, EnableBlob, Parameter,
-    ToCommand, TryEq,
-};
+use crate::{device::Device, serialization, Command, EnableBlob, Parameter, ToCommand, TryEq};
 
 use super::{active_parameter::ActiveParameter, ChangeError};
-
 
 #[derive(Debug)]
 pub enum SendError<T> {
@@ -89,7 +81,11 @@ impl ActiveDevice {
         let mut subs = self.device.subscribe().await;
         wait_fn(&mut subs, Duration::from_secs(1), |device| {
             Ok(match device.get_parameters().get(param_name) {
-                Some(param) => notify::Status::Complete(ActiveParameter::new(param_name.to_string(), self.clone(), param.clone())),
+                Some(param) => notify::Status::Complete(ActiveParameter::new(
+                    param_name.to_string(),
+                    self.clone(),
+                    param.clone(),
+                )),
                 None => notify::Status::Pending,
             })
         })
@@ -125,7 +121,10 @@ impl ActiveDevice {
         &'a self,
         param_name: &'a str,
         values: P,
-    ) -> Result<impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>, ChangeError<()>> {
+    ) -> Result<
+        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+        ChangeError<()>,
+    > {
         let param = self.parameter(param_name).await?;
         param.change(values).await
     }
@@ -168,5 +167,4 @@ impl ActiveDevice {
         };
         Ok(())
     }
-
 }

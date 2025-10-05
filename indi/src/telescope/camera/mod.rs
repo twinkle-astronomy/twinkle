@@ -4,26 +4,22 @@ use std::{
     time::Duration,
 };
 
+use crate::{client::active_device::ActiveDevice, Blob, Number, PropertyState, Switch, Text};
 use binning::{BinningConfig, BinningParameter};
 use capture_format::CaptureFormatParameter;
 use cooler::CoolerParameter;
-use futures::Stream;
 use image_type::ImageTypeParameter;
-use indi::{
-    client::{active_device::ActiveDevice, ChangeError},
-    Blob, Number, Parameter, PropertyState, Switch, Text,
-};
-use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
+use tokio_stream::StreamExt;
 use transfer_format::TransferFormatParameter;
 use twinkle_client::timeout;
-use twinkle_client::{notify::ArcCounter, OnDropFutureExt};
+use twinkle_client::OnDropFutureExt;
 
 use super::{
     parameter_with_config::{
         get_parameter_value, ActiveParameterWithConfig, BlobParameter, NumberParameter, OneOfMany,
         SingleValueParamConfig, SwitchParameter,
     },
-    Connectable, DeviceError, DeviceSelectionError,
+    DeviceError, DeviceSelectionError,
 };
 
 mod transfer_format;
@@ -213,7 +209,7 @@ impl Camera {
         let config = Self::get_config(&driver_name)?;
         let ccd = Camera::image(&ccd_device, config.image.clone()).await?;
 
-        ccd.enable_blob(indi::BlobEnable::Also).await?;
+        ccd.enable_blob(crate::BlobEnable::Also).await?;
         Ok(Camera {
             device,
             config,
@@ -413,18 +409,18 @@ impl Camera {
     }
 }
 
-impl Connectable for Camera {
-    async fn connect(
-        &self,
-    ) -> Result<
-        impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
-        ChangeError<()>,
-    > {
-        self.device
-            .change("CONNECTION", vec![("CONNECT", true)])
-            .await
-    }
-}
+// impl Connectable for Camera {
+//     async fn connect(
+//         &self,
+//     ) -> Result<
+//         impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
+//         ChangeError<()>,
+//     > {
+//         self.device
+//             .change("CONNECTION", vec![("CONNECT", true)])
+//             .await
+//     }
+// }
 
 #[cfg(test)]
 mod test {
@@ -445,7 +441,9 @@ mod test {
             filter_wheel: String::from("Filter Simulator"),
             flat_panel: String::from("Light Panel Simulator"),
         });
-        telescope.connect("indi:7624").await;
+        telescope
+            .connect::<tokio::net::TcpStream>("indi:7624".to_string())
+            .await;
 
         let camera = telescope.get_primary_camera().await.unwrap();
         for _ in 0..5 {

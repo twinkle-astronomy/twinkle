@@ -8,15 +8,15 @@ use twinkle_api::{
     flats::{Config, FlatRun, LightSource},
 };
 
-use crate::{
-    flats::FlatError,
-    telescope::{
-        camera::{self, CaptureFormat, ImageType, TransferFormat},
-        filter_wheel,
-        flat_panel::Light,
-        Connectable, Telescope,
-    },
+use indi::telescope::{
+    camera::{self, CaptureFormat, ImageType, TransferFormat},
+    filter_wheel,
+    flat_panel::Light,
+    Telescope,
 };
+
+use crate::flats::FlatError;
+
 pub async fn start(
     telescope: Telescope,
     config: Config,
@@ -157,7 +157,7 @@ async fn inner_start(
     ) {
         tracing::info!("Starting for filter: {:?}", filter);
         let filter_config = filter_wheel::Config {
-            filter: filter.clone().into(),
+            filter: filter_wheel.get_filter(filter.as_str()).await?,
         };
         filter_config.set(&filter_wheel).await?;
 
@@ -184,16 +184,15 @@ async fn inner_start(
             };
             let _ = camera_config.set(&camera).await?;
             for i in 0..config.count {
-                tracing::info!("Creating: {}/bin{}/{}", filter.name, binning, i);
+                tracing::info!("Creating: {}/bin{}/{}", filter, binning, i);
                 loop {
                     match capture_state.capture(&telescope).await {
                         Ok(blob) => {
                             let filename = Path::new("/storage/calibration/Flats/data");
-                            let filename =
-                                filename.join(format!("bin_{}", binning)).join(&filter.name);
+                            let filename = filename.join(format!("bin_{}", binning)).join(&filter);
                             tokio::fs::create_dir_all(&filename).await?;
                             let mut file = File::create(
-                                filename.join(format!("Flat_{}_{:02}.fits", filter.name, i)),
+                                filename.join(format!("Flat_{}_{:02}.fits", filter, i)),
                             )
                             .await?;
                             file.write_all(&blob.value.unwrap()).await?;
