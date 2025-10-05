@@ -32,6 +32,7 @@ impl From<DeviceError> for FlatError {
     }
 }
 
+/// Type representing the filter wheel in a telescope
 pub struct FilterWheel {
     device: ActiveDevice,
     config: FilterWheelConfig,
@@ -43,6 +44,7 @@ struct FilterWheelConfig {
 }
 
 impl FilterWheel {
+    /// Get parameter representing the filters currently configured.
     pub async fn filters(&self) -> Result<FilterListParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.filter_list.clone())
@@ -51,7 +53,8 @@ impl FilterWheel {
         )
     }
 
-    pub async fn get_filter(&self, name: &str) -> Result<TelescopeFilter, FlatError> {
+    /// Get a filter by name.
+    pub async fn get_filter(&self, name: &str) -> Result<Filter, FlatError> {
         let filters = self.filters().await?.get().await?;
         filters
             .into_iter()
@@ -60,7 +63,7 @@ impl FilterWheel {
             .ok_or(FlatError::FilterNotFound(name.to_string()))
     }
 
-    pub async fn filter_slot(&self) -> Result<NumberParameter, DeviceError> {
+    async fn filter_slot(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.filter_slot.clone())
                 .await?
@@ -68,6 +71,7 @@ impl FilterWheel {
         )
     }
 
+    /// Connect to the filter wheel.
     pub async fn connect(
         &self,
     ) -> Result<
@@ -95,7 +99,7 @@ impl From<ActiveDevice> for FilterWheel {
 }
 
 pub struct Config {
-    pub filter: TelescopeFilter,
+    pub filter: Filter,
 }
 
 impl Config {
@@ -107,17 +111,13 @@ impl Config {
         Ok(())
     }
 }
-impl Into<Sexagesimal> for TelescopeFilter {
+impl Into<Sexagesimal> for Filter {
     fn into(self) -> Sexagesimal {
         self.position.into()
     }
 }
 
-#[derive(Clone, Debug, derive_more::Deref, derive_more::Into, derive_more::From)]
-pub struct TelescopeFilter(Filter);
-
-#[derive(derive_more::Deref, derive_more::Into, derive_more::From)]
-pub struct FilterListParameter(ActiveParameterWithConfig<FilterListParamConfig>);
+pub type FilterListParameter = ActiveParameterWithConfig<FilterListParamConfig>;
 
 #[derive(Debug, Clone)]
 pub struct FilterListParamConfig {
@@ -126,7 +126,7 @@ pub struct FilterListParamConfig {
 
 impl IntoValue for FilterListParamConfig {
     type Value = Vec<OneText>;
-    type SingleValue = Vec<TelescopeFilter>;
+    type SingleValue = Vec<Filter>;
 
     fn into_value<T: Into<Self::SingleValue>>(&self, value: T) -> Self::Value {
         let values: Self::SingleValue = value.into();
@@ -142,7 +142,7 @@ impl IntoValue for FilterListParamConfig {
 }
 
 impl FromParam for FilterListParamConfig {
-    type Value = Vec<TelescopeFilter>;
+    type Value = Vec<Filter>;
     type Error = DeviceError;
 
     fn get_parameter_name(&self) -> &'static str {
@@ -164,7 +164,7 @@ impl FromParam for FilterListParamConfig {
         Self: Sized,
     {
         let values = param.deref().get_values::<HashMap<String, Text>>()?;
-        let values: Vec<TelescopeFilter> = values
+        let values: Vec<Filter> = values
             .iter()
             .map(|(slot, name)| {
                 let slot = slot
@@ -178,7 +178,7 @@ impl FromParam for FilterListParamConfig {
                 }
                 .into()
             })
-            .sorted_by(|lhs: &TelescopeFilter, rhs: &TelescopeFilter| {
+            .sorted_by(|lhs: &Filter, rhs: &Filter| {
                 lhs.position.cmp(&rhs.position)
             })
             .collect();

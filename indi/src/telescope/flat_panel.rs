@@ -44,6 +44,7 @@ struct FlatPanelConfig {
 pub struct Light(ActiveParameterWithConfig<OneOfMany<LightState>>);
 
 impl FlatPanel {
+    /// Connect to the flat panel.
     pub async fn connect(
         &self,
     ) -> Result<
@@ -98,12 +99,14 @@ impl FlatPanel {
         }
     }
 
-    pub async fn new(device: ActiveDevice) -> Result<Self, super::DeviceSelectionError> {
+    pub (in crate::telescope) async fn new(device: ActiveDevice) -> Result<Self, super::DeviceSelectionError> {
         let driver_name = Self::get_driver_name(&device).await?;
         let config = FlatPanel::get_config(&driver_name)?;
 
         Ok(FlatPanel { device, config })
     }
+
+    /// Get the parameter that controls the brightness.
     pub async fn brightness(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.brightness.clone())
@@ -112,6 +115,7 @@ impl FlatPanel {
         )
     }
 
+    /// Get the parameter that controls whether the light is on/off.
     pub async fn light(&self) -> Result<Light, DeviceError> {
         let apwc = ActiveParameterWithConfig::new(&self.device, self.config.light.clone()).await?;
         Ok(Light(apwc))

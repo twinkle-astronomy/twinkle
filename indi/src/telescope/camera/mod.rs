@@ -4,14 +4,15 @@ use std::{
     time::Duration,
 };
 
-use crate::{client::active_device::ActiveDevice, Blob, Number, PropertyState, Switch, Text};
+use crate::{client::{active_device::ActiveDevice, ChangeError}, Blob, Number, Parameter, PropertyState, Switch, Text};
 use binning::{BinningConfig, BinningParameter};
 use capture_format::CaptureFormatParameter;
 use cooler::CoolerParameter;
+use futures::Stream;
 use image_type::ImageTypeParameter;
-use tokio_stream::StreamExt;
+use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use transfer_format::TransferFormatParameter;
-use twinkle_client::timeout;
+use twinkle_client::{notify::NotifyArc, timeout};
 use twinkle_client::OnDropFutureExt;
 
 use super::{
@@ -37,6 +38,7 @@ pub use binning::Binning;
 mod image_type;
 pub use image_type::ImageType;
 
+/// A Telescope camera.  To create one use the [`crate::telescope::Telescope::get_primary_camera`] method.
 pub struct Camera {
     device: ActiveDevice,
     config: CameraConfig,
@@ -201,7 +203,9 @@ impl Camera {
             _ => Err(DeviceSelectionError::DeviceMismatch),
         }
     }
-    pub async fn new(
+
+    #[tracing::instrument(skip_all)]
+    pub (in crate::telescope) async fn new(
         device: ActiveDevice,
         ccd_device: ActiveDevice,
     ) -> Result<Self, super::DeviceSelectionError> {
@@ -217,6 +221,21 @@ impl Camera {
         })
     }
 
+    /// Connect to camera
+    #[tracing::instrument(skip_all)]
+    pub async fn connect(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<NotifyArc<Parameter>, BroadcastStreamRecvError>>,
+        ChangeError<()>,
+    > {
+        self.device
+            .change("CONNECTION", vec![("CONNECT", true)])
+            .await
+    }
+
+    /// Get the capture format parameter.  Useful for managing the bitdepth of the next captured image.
+    #[tracing::instrument(skip_all)]
     pub async fn capture_format(&self) -> Result<CaptureFormatParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.capture_format.clone())
@@ -225,6 +244,8 @@ impl Camera {
         )
     }
 
+    /// Get the transfer format parameter.  Useful for managing the data format (fits, raw, etc) of the captured image.
+    #[tracing::instrument(skip_all)]
     pub async fn transfer_format(&self) -> Result<TransferFormatParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.transfer_format.clone())
@@ -233,6 +254,8 @@ impl Camera {
         )
     }
 
+    /// Get the cooler parameter.  Useful for managing the camera's built-in CCD cooler.
+    #[tracing::instrument(skip_all)]
     pub async fn cooler(&self) -> Result<CoolerParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.cooler.clone())
@@ -241,6 +264,8 @@ impl Camera {
         )
     }
 
+    /// Get the temperature parameter.  Useful for reading the current tempurature of the CCD.
+    #[tracing::instrument(skip_all)]
     pub async fn temperature(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.tempurature.clone())
@@ -249,6 +274,8 @@ impl Camera {
         )
     }
 
+    /// Get the gain parameter.  Useful for managing the gain.
+    #[tracing::instrument(skip_all)]
     pub async fn gain(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.gain.clone())
@@ -257,6 +284,8 @@ impl Camera {
         )
     }
 
+    /// Get the offset parameter.  Useful for managing the offset.
+    #[tracing::instrument(skip_all)]
     pub async fn offset(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.offset.clone())
@@ -265,6 +294,8 @@ impl Camera {
         )
     }
 
+    /// Get the image_type.  Usefulf or managing the type of image (Light, Dark, etc).
+    #[tracing::instrument(skip_all)]
     pub async fn image_type(&self) -> Result<ImageTypeParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.image_type.clone())
@@ -273,6 +304,8 @@ impl Camera {
         )
     }
 
+    /// Get the binning parameter.  Useful for manging the binning of the next captured image.
+    #[tracing::instrument(skip_all)]
     pub async fn binning(&self) -> Result<BinningParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.binning.clone())
@@ -281,6 +314,8 @@ impl Camera {
         )
     }
 
+    /// Get the exposure paramter.  Useful for reading the time left on the current exposure.
+    #[tracing::instrument(skip_all)]
     pub async fn exposure(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.exposure.clone())
@@ -289,6 +324,8 @@ impl Camera {
         )
     }
 
+    /// Get the image parameter.  Useful for reading the latest image captured.
+    #[tracing::instrument(skip_all)]
     pub async fn image(
         device: &ActiveDevice,
         config: SingleValueParamConfig<Blob>,
@@ -298,6 +335,7 @@ impl Camera {
             .into())
     }
 
+    /// Get the abort parameter.  Useful for aborting the current exposure.
     pub async fn abort(&self) -> Result<SwitchParameter, DeviceError> {
         Ok(
             ActiveParameterWithConfig::new(&self.device, self.config.abort.clone())
@@ -306,6 +344,8 @@ impl Camera {
         )
     }
 
+    /// Capture an image of the given duration.  This method is cancel-safe; if you drop the future before
+    /// the image is fully captured an abort signal is sent to the camera to stop the exposure.
     #[tracing::instrument(skip(self))]
     pub async fn capture_image(&self, exposure: Duration) -> Result<Blob, DeviceError> {
         let exposure = exposure.as_secs_f64();
@@ -378,6 +418,8 @@ impl Camera {
         .await?
     }
 
+    /// Calculate the pixel scale of the camera as currently configured.  Accounts for binning, but assumes an 800mm focal length right now.
+    /// TODO: Remove assumtion of 800mm focal length.
     pub async fn pixel_scale(&self) -> f64 {
         let ccd_info = self.device.get_parameter("CCD_INFO").await.unwrap();
 
@@ -408,19 +450,6 @@ impl Camera {
         pixel_scale
     }
 }
-
-// impl Connectable for Camera {
-//     async fn connect(
-//         &self,
-//     ) -> Result<
-//         impl Stream<Item = Result<ArcCounter<Parameter>, BroadcastStreamRecvError>>,
-//         ChangeError<()>,
-//     > {
-//         self.device
-//             .change("CONNECTION", vec![("CONNECT", true)])
-//             .await
-//     }
-// }
 
 #[cfg(test)]
 mod test {

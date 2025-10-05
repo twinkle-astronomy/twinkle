@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+/// Type representing a filter in a [`crate::telescope::FilterWheel`]
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Filter {
     pub name: String,

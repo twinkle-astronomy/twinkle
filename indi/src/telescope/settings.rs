@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+/// Type used to name the indi devices that coorespond to 
+/// various parts of the telescope.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TelescopeConfig {
     pub mount: String,
@@ -9,6 +11,8 @@ pub struct TelescopeConfig {
     pub flat_panel: String,
 }
 
+/// Type used to describe the configuration of a telescope
+/// including the indi address to connect too, and device names
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Settings {
     pub indi_server_addr: String,

@@ -152,15 +152,17 @@ impl From<notify::Error<ChangeError<()>>> for DeviceError {
     }
 }
 
+/// Type representing an indi telescope.
 pub struct Telescope {
-    pub config: TelescopeConfig,
-    pub client: Client,
-    pub image_client: Client,
+    config: TelescopeConfig,
+    client: Client,
+    image_client: Client,
 
-    pub agent: Agent<()>,
+    agent: Agent<()>,
 }
 
 impl Telescope {
+    /// Create an instance of a telescope.  
     pub fn new(config: TelescopeConfig) -> Telescope {
         let client = crate::client::Client::new(None);
         let image_client = crate::client::Client::new(None);
@@ -173,6 +175,7 @@ impl Telescope {
         }
     }
 
+    /// Connect telescope instance to indi server.
     pub async fn connect_from_settings<
         T: Connectable + AsyncClientConnection + 'static + MaybeSend,
     >(
@@ -183,6 +186,7 @@ impl Telescope {
         self.connect::<T>(settings.indi_server_addr.clone()).await;
     }
 
+    /// Connect telescope instance to indi server at given address.
     pub async fn connect<T: Connectable + AsyncClientConnection + 'static + MaybeSend>(
         &mut self,
         addr: String,
@@ -231,6 +235,7 @@ impl Telescope {
         });
     }
 
+    /// Get primary camera for the telescope.
     pub async fn get_primary_camera(&self) -> Result<Camera, TelescopeError<()>> {
         let device = Self::get_device(&self.client, &self.config.primary_camera).await?;
         let _ = device.connect().await.unwrap();
@@ -238,18 +243,21 @@ impl Telescope {
         Ok(Camera::new(device, ccd_device).await?)
     }
 
+    /// Get filter wheel for the telescope.
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
         let device = Self::get_device(&self.client, &self.config.filter_wheel).await?;
         let _ = device.connect().await.unwrap();
         Ok(device.into())
     }
 
+    /// Get focuser for the telescope.
     pub async fn get_focuser(&self) -> Result<ActiveDevice, TelescopeError<()>> {
         let device = Self::get_device(&self.client, &self.config.focuser).await?;
         let _ = device.connect().await.unwrap();
         Ok(device)
     }
 
+    /// Get the flat panel for the telescope.
     pub async fn get_flat_panel(&self) -> Result<FlatPanel, TelescopeError<()>> {
         let device = Self::get_device(&self.client, &self.config.flat_panel).await?;
         let _ = device.connect().await.unwrap();
@@ -257,6 +265,7 @@ impl Telescope {
         Ok(flat_panel)
     }
 
+    /// Wait for disconnect.
     pub async fn join(&mut self) {
         let _ = self.agent.join().await;
     }

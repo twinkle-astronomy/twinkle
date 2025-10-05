@@ -39,7 +39,7 @@ pub trait FromParam {
         Self: Sized;
 }
 
-pub async fn get_parameter_value<T>(
+pub (in crate::telescope) async fn get_parameter_value<T>(
     device: &ActiveDevice,
     parameter: &'static str,
     value: &'static str,
@@ -248,6 +248,8 @@ impl<T> ActiveParameterWithConfig<T>
 where
     T: Clone,
 {
+    /// Create a stream of values for the parameter.  This behaives like the change method, but yields the
+    /// current value immediately.
     pub async fn subscribe(
         &self,
     ) -> impl Stream<Item = Result<ParameterWithConfig<T>, BroadcastStreamRecvError>> + use<'_, T>
@@ -259,6 +261,9 @@ where
             })
         })
     }
+
+    /// Create a stream of values for the parameter.  Each time the parameter changes this stream
+    /// will yield the new value.
     pub fn changes(
         &self,
     ) -> impl Stream<Item = Result<ParameterWithConfig<T>, BroadcastStreamRecvError>> + use<T> {
@@ -277,6 +282,7 @@ where
     T: Clone,
     T: FromParam,
 {
+    /// Get the current value of the parameter.
     pub async fn get(&self) -> Result<<T as FromParam>::Value, <T as FromParam>::Error> {
         let parameter = self.parameter.read().await;
         self.config.from_parameter(&parameter)
@@ -288,6 +294,7 @@ where
     T: Clone,
     T: IntoValue + FromParam,
 {
+    /// Request a change to the current value, and await until the parameter has the desired value.
     pub async fn change<V>(
         &self,
         values: V,
@@ -307,6 +314,7 @@ where
             .map(|parameter| Ok(T::new(parameter?, self.config.clone()))))
     }
 
+    /// Request a change to the current value.
     pub fn set<V>(&self, values: V) -> Result<(), SendError<Command>>
     where
         V: Into<<T as IntoValue>::SingleValue>,
