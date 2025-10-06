@@ -56,6 +56,7 @@ pub enum TelescopeError<E> {
     Disconnected(twinkle_client::task::Error),
     DeviceError(DeviceError),
     TaskStatusError(TaskStatusError),
+    DeviceNotConfigured(),
 }
 
 impl<E> From<TaskStatusError> for TelescopeError<E> {
@@ -219,13 +220,15 @@ impl Telescope {
                 .await
                 .expect(format!("Unable to connect to {}", addr).as_str()),
         );
-        self.image_client
-            .send(serialization::Command::GetProperties(GetProperties {
-                version: INDI_PROTOCOL_VERSION.to_string(),
-                device: Some(self.config.primary_camera.clone()),
-                name: None,
-            }))
-            .unwrap();
+        if let Some(primary_camera) = &self.config.primary_camera {
+            self.image_client
+                .send(serialization::Command::GetProperties(GetProperties {
+                    version: INDI_PROTOCOL_VERSION.to_string(),
+                    device: Some(primary_camera.clone()),
+                    name: None,
+                }))
+                .unwrap();
+        }
 
         self.agent.spawn((), |_| async move {
             tokio::select! {
@@ -237,29 +240,64 @@ impl Telescope {
 
     /// Get primary camera for the telescope.
     pub async fn get_primary_camera(&self) -> Result<Camera, TelescopeError<()>> {
-        let device = Self::get_device(&self.client, &self.config.primary_camera).await?;
+        let device = Self::get_device(
+            &self.client,
+            self.config
+                .primary_camera
+                .as_ref()
+                .ok_or(TelescopeError::DeviceNotConfigured())?,
+        )
+        .await?;
         let _ = device.connect().await.unwrap();
-        let ccd_device = Self::get_device(&self.image_client, &self.config.primary_camera).await?;
+        let ccd_device = Self::get_device(
+            &self.image_client,
+            self.config
+                .primary_camera
+                .as_ref()
+                .ok_or(TelescopeError::DeviceNotConfigured())?,
+        )
+        .await?;
         Ok(Camera::new(device, ccd_device).await?)
     }
 
     /// Get filter wheel for the telescope.
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
-        let device = Self::get_device(&self.client, &self.config.filter_wheel).await?;
+        let device = Self::get_device(
+            &self.client,
+            self.config
+                .filter_wheel
+                .as_ref()
+                .ok_or(TelescopeError::DeviceNotConfigured())?,
+        )
+        .await?;
         let _ = device.connect().await.unwrap();
         Ok(device.into())
     }
 
     /// Get focuser for the telescope.
     pub async fn get_focuser(&self) -> Result<ActiveDevice, TelescopeError<()>> {
-        let device = Self::get_device(&self.client, &self.config.focuser).await?;
+        let device = Self::get_device(
+            &self.client,
+            self.config
+                .focuser
+                .as_ref()
+                .ok_or(TelescopeError::DeviceNotConfigured())?,
+        )
+        .await?;
         let _ = device.connect().await.unwrap();
         Ok(device)
     }
 
     /// Get the flat panel for the telescope.
     pub async fn get_flat_panel(&self) -> Result<FlatPanel, TelescopeError<()>> {
-        let device = Self::get_device(&self.client, &self.config.flat_panel).await?;
+        let device = Self::get_device(
+            &self.client,
+            self.config
+                .flat_panel
+                .as_ref()
+                .ok_or(TelescopeError::DeviceNotConfigured())?,
+        )
+        .await?;
         let _ = device.connect().await.unwrap();
         let flat_panel = flat_panel::FlatPanel::new(device).await?;
         Ok(flat_panel)

@@ -178,9 +178,7 @@ impl FromParam for FilterListParamConfig {
                 }
                 .into()
             })
-            .sorted_by(|lhs: &Filter, rhs: &Filter| {
-                lhs.position.cmp(&rhs.position)
-            })
+            .sorted_by(|lhs: &Filter, rhs: &Filter| lhs.position.cmp(&rhs.position))
             .collect();
         Ok(values)
     }

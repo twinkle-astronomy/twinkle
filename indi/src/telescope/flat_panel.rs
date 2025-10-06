@@ -99,7 +99,9 @@ impl FlatPanel {
         }
     }
 
-    pub (in crate::telescope) async fn new(device: ActiveDevice) -> Result<Self, super::DeviceSelectionError> {
+    pub(in crate::telescope) async fn new(
+        device: ActiveDevice,
+    ) -> Result<Self, super::DeviceSelectionError> {
         let driver_name = Self::get_driver_name(&device).await?;
         let config = FlatPanel::get_config(&driver_name)?;
 

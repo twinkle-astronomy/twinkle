@@ -39,7 +39,7 @@ pub trait FromParam {
         Self: Sized;
 }
 
-pub (in crate::telescope) async fn get_parameter_value<T>(
+pub(in crate::telescope) async fn get_parameter_value<T>(
     device: &ActiveDevice,
     parameter: &'static str,
     value: &'static str,

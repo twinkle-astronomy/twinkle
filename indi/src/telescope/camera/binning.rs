@@ -26,7 +26,7 @@ pub struct BinningConfig {
 }
 
 impl BinningConfig {
-    pub (super) fn new(parameter: &'static str, hor: &'static str, ver: &'static str) -> Self {
+    pub(super) fn new(parameter: &'static str, hor: &'static str, ver: &'static str) -> Self {
         BinningConfig {
             parameter,
             hor,

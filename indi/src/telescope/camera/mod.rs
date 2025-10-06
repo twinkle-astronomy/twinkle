@@ -4,7 +4,10 @@ use std::{
     time::Duration,
 };
 
-use crate::{client::{active_device::ActiveDevice, ChangeError}, Blob, Number, Parameter, PropertyState, Switch, Text};
+use crate::{
+    client::{active_device::ActiveDevice, ChangeError},
+    Blob, Number, Parameter, PropertyState, Switch, Text,
+};
 use binning::{BinningConfig, BinningParameter};
 use capture_format::CaptureFormatParameter;
 use cooler::CoolerParameter;
@@ -12,8 +15,8 @@ use futures::Stream;
 use image_type::ImageTypeParameter;
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 use transfer_format::TransferFormatParameter;
-use twinkle_client::{notify::NotifyArc, timeout};
 use twinkle_client::OnDropFutureExt;
+use twinkle_client::{notify::NotifyArc, timeout};
 
 use super::{
     parameter_with_config::{
@@ -205,7 +208,7 @@ impl Camera {
     }
 
     #[tracing::instrument(skip_all)]
-    pub (in crate::telescope) async fn new(
+    pub(in crate::telescope) async fn new(
         device: ActiveDevice,
         ccd_device: ActiveDevice,
     ) -> Result<Self, super::DeviceSelectionError> {
@@ -464,11 +467,11 @@ mod test {
     #[traced_test]
     async fn test_expose() {
         let mut telescope = Telescope::new(TelescopeConfig {
-            mount: String::from("Telescope Simulator"),
-            primary_camera: String::from("CCD Simulator"),
-            focuser: String::from("Focuser Simulator"),
-            filter_wheel: String::from("Filter Simulator"),
-            flat_panel: String::from("Light Panel Simulator"),
+            mount: Some(String::from("Telescope Simulator")),
+            primary_camera: Some(String::from("CCD Simulator")),
+            focuser: Some(String::from("Focuser Simulator")),
+            filter_wheel: Some(String::from("Filter Simulator")),
+            flat_panel: Some(String::from("Light Panel Simulator")),
         });
         telescope
             .connect::<tokio::net::TcpStream>("indi:7624".to_string())

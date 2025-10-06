@@ -62,6 +62,14 @@ struct SettingsModel {
     pub telescope_config_id: i64,
 }
 
+fn some_string(s: &String) -> Option<String> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.clone())
+    }
+}
+
 impl StateData {
     // Save or update settings
     pub async fn save_settings(
@@ -79,11 +87,27 @@ impl StateData {
 
                 let telescope_config_model = TelescopeConfigModel {
                     rowid: 0,
-                    mount: settings.telescope_config.mount.clone(),
-                    primary_camera: settings.telescope_config.primary_camera.clone(),
-                    focuser: settings.telescope_config.focuser.clone(),
-                    filter_wheel: settings.telescope_config.filter_wheel.clone(),
-                    flat_panel: settings.telescope_config.flat_panel.clone(),
+                    mount: settings.telescope_config.mount.clone().unwrap_or_default(),
+                    primary_camera: settings
+                        .telescope_config
+                        .primary_camera
+                        .clone()
+                        .unwrap_or_default(),
+                    focuser: settings
+                        .telescope_config
+                        .focuser
+                        .clone()
+                        .unwrap_or_default(),
+                    filter_wheel: settings
+                        .telescope_config
+                        .filter_wheel
+                        .clone()
+                        .unwrap_or_default(),
+                    flat_panel: settings
+                        .telescope_config
+                        .flat_panel
+                        .clone()
+                        .unwrap_or_default(),
                 };
 
                 if let Ok(mut existing_settings) = existing_settings {
@@ -143,11 +167,11 @@ impl StateData {
         Ok(Settings {
             indi_server_addr: settings_model.indi_server_addr,
             telescope_config: TelescopeConfig {
-                mount: telescope_config_model.mount,
-                primary_camera: telescope_config_model.primary_camera,
-                focuser: telescope_config_model.focuser,
-                filter_wheel: telescope_config_model.filter_wheel,
-                flat_panel: telescope_config_model.flat_panel,
+                mount: some_string(&telescope_config_model.mount),
+                primary_camera: some_string(&telescope_config_model.primary_camera),
+                focuser: some_string(&telescope_config_model.focuser),
+                filter_wheel: some_string(&telescope_config_model.filter_wheel),
+                flat_panel: some_string(&telescope_config_model.flat_panel),
             },
         })
     }

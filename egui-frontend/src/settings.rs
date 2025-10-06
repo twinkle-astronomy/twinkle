@@ -103,6 +103,11 @@ impl SettingsWidget {
                             None => {
                                 lock.data = Some(SettingsData {
                                     settings: new_settings.clone(),
+                                    primary_camera_buffer: new_settings.telescope_config.primary_camera.clone().unwrap_or_default(),
+                                    mount_buffer: new_settings.telescope_config.mount.clone().unwrap_or_default(),
+                                    focuser_buffer: new_settings.telescope_config.focuser.clone().unwrap_or_default(),
+                                    filter_wheel_buffer: new_settings.telescope_config.filter_wheel.clone().unwrap_or_default(),
+                                    flat_panel_buffer: new_settings.telescope_config.flat_panel.clone().unwrap_or_default(),
                                     entries: new_settings,
                                 })
                             }
@@ -124,6 +129,21 @@ impl SettingsWidget {
 pub struct SettingsData {
     settings: Settings,
     entries: Settings,
+    // String buffers for text editing (empty string represents None)
+    primary_camera_buffer: String,
+    mount_buffer: String,
+    focuser_buffer: String,
+    filter_wheel_buffer: String,
+    flat_panel_buffer: String,
+}
+
+
+fn some_string(s: &String) -> Option<String> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.clone())
+    }
 }
 
 impl Widget for &mut SettingsWidget {
@@ -143,46 +163,42 @@ impl Widget for &mut SettingsWidget {
                             ui.end_row();
 
                             ui.label("Primary Camera");
-                            ui.label(&settings_data.settings.telescope_config.primary_camera);
-                            ui.text_edit_singleline(
-                                &mut settings_data.entries.telescope_config.primary_camera,
-                            );
+                            ui.label(settings_data.settings.telescope_config.primary_camera.as_deref().unwrap_or(""));
+                            ui.text_edit_singleline(&mut settings_data.primary_camera_buffer);
                             ui.end_row();
 
                             ui.label("Mount");
-                            ui.label(&settings_data.settings.telescope_config.mount);
-                            ui.text_edit_singleline(
-                                &mut settings_data.entries.telescope_config.mount,
-                            );
+                            ui.label(settings_data.settings.telescope_config.mount.as_deref().unwrap_or(""));
+                            ui.text_edit_singleline(&mut settings_data.mount_buffer);
                             ui.end_row();
 
                             ui.label("Focuser");
-                            ui.label(&settings_data.settings.telescope_config.focuser);
-                            ui.text_edit_singleline(
-                                &mut settings_data.entries.telescope_config.focuser,
-                            );
+                            ui.label(settings_data.settings.telescope_config.focuser.as_deref().unwrap_or(""));
+                            ui.text_edit_singleline(&mut settings_data.focuser_buffer);
                             ui.end_row();
 
                             ui.label("Filter Wheel");
-                            ui.label(&settings_data.settings.telescope_config.filter_wheel);
-                            ui.text_edit_singleline(
-                                &mut settings_data.entries.telescope_config.filter_wheel,
-                            );
+                            ui.label(settings_data.settings.telescope_config.filter_wheel.as_deref().unwrap_or(""));
+                            ui.text_edit_singleline(&mut settings_data.filter_wheel_buffer);
                             ui.end_row();
 
                             ui.label("Flat Panel");
-                            ui.label(&settings_data.settings.telescope_config.flat_panel);
-                            ui.text_edit_singleline(
-                                &mut settings_data.entries.telescope_config.flat_panel,
-                            );
+                            ui.label(settings_data.settings.telescope_config.flat_panel.as_deref().unwrap_or(""));
+                            ui.text_edit_singleline(&mut settings_data.flat_panel_buffer);
                             ui.end_row();
                         });
 
                     ui.separator();
                     ui.horizontal(|ui| {
                         if ui.button("Save").clicked() {
+                            let mut settings = settings_data.entries.clone();
+                            settings.telescope_config.primary_camera = some_string(&settings_data.primary_camera_buffer);
+                            settings.telescope_config.mount = some_string(&settings_data.mount_buffer);
+                            settings.telescope_config.focuser = some_string(&settings_data.focuser_buffer);
+                            settings.telescope_config.filter_wheel = some_string(&settings_data.filter_wheel_buffer);
+                            settings.telescope_config.flat_panel = some_string(&settings_data.flat_panel_buffer);
+
                             spawn((), |_| {
-                                let settings = settings_data.entries.clone();
                                 async move {
                                     let client = reqwest::Client::new();
 
