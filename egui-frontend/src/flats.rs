@@ -1,6 +1,5 @@
 use crate::agent::Agent;
 use crate::agent::AgentLock;
-use crate::agent::Widget;
 use crate::get_http_base;
 use crate::get_websocket_base;
 use egui::Window;
@@ -126,7 +125,7 @@ impl FlatWidget {
     }
 }
 
-impl Widget for &mut FlatWidget {
+impl egui::Widget for &mut FlatWidget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.vertical(|ui| {
             ui.add(&mut self.config);
@@ -222,18 +221,6 @@ async fn task(
             }
         }
     };
-
-    // let writer = async move {
-    //     while let Some(msg) = rx.recv().await {
-    //         if let Err(e) = ws_write
-    //             .send(Message::Text(serde_json::to_string(&msg).unwrap()))
-    //             .await
-    //         {
-    //             tracing::error!("Unable to send message to server: {:?}", e);
-    //             break;
-    //         }
-    //     }
-    // };
 
     tokio::select! {
         // _ = writer => {}

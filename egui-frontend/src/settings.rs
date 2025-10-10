@@ -9,7 +9,7 @@ use twinkle_client::{
     task::{spawn, Abortable, IsRunning},
 };
 
-use crate::{agent::{Agent, AgentLock, Widget}, get_http_base};
+use crate::{agent::{Agent, AgentLock}, get_http_base};
 
 fn get_websocket_url() -> String {
     format!("{}settings", crate::get_websocket_base())
@@ -146,7 +146,7 @@ fn some_string(s: &String) -> Option<String> {
     }
 }
 
-impl Widget for &mut SettingsWidget {
+impl egui::Widget for &mut SettingsWidget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         match &mut self.data {
             Some(settings_data) => {

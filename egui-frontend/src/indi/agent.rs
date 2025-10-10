@@ -17,7 +17,7 @@ use strum::Display;
 use tracing::{error, Instrument};
 
 use crate::{
-    agent::{Agent, AgentLock, Widget},
+    agent::{Agent, AgentLock},
     fits::image_view::ImageView,
     get_websocket_base,
     indi::{control, views::image_device::ImageDevice},
@@ -133,7 +133,7 @@ fn get_websocket_url() -> String {
     format!("{}indi", get_websocket_base())
 }
 
-impl Widget for &mut State {
+impl egui::Widget for &mut State {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         match &mut self.connection_status {
             ConnectionStatus::Disconnected => ui.label("Disconnected"),

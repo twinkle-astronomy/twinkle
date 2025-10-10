@@ -6,7 +6,7 @@ use futures::{SinkExt, StreamExt};
 use twinkle_api::{capture::{CaptureConfig, CaptureProgress, CaptureRequest, ExposureParameterization, MessageToClient}, FromWebsocketMessage, Message};
 use twinkle_client::{sleep, task::{spawn, Abortable, IsRunning, Status, TaskStatusError}};
 
-use crate::{agent::{Agent, AgentLock, Widget}, get_http_base};
+use crate::{agent::{Agent, AgentLock}, get_http_base};
 
 struct State {
     exposure: f64,
@@ -63,7 +63,7 @@ impl egui::Widget for &mut CaptureManager {
     }
 }
 
-impl Widget for &mut State {
+impl egui::Widget for &mut State {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.vertical(|ui| {
             match &self.exposure_param {

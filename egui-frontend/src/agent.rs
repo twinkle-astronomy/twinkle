@@ -15,9 +15,9 @@ pub struct AgentLock<T> {
     ctx: egui::Context,
 }
 
-impl<T> Widget for &AgentLock<T>
+impl<T> egui::Widget for &AgentLock<T>
 where
-    for<'a> &'a mut T: Widget,
+    for<'a> &'a mut T: egui::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         let mut guard = self.lock.write();
@@ -95,13 +95,9 @@ impl<S: Sync> Agent<S> {
     }
 }
 
-pub trait Widget {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response;
-}
-
 impl<S: Send + Sync + 'static> egui::Widget for &mut Agent<S>
 where
-    for<'a> &'a mut S: Widget,
+    for<'a> &'a mut S: egui::Widget,
 {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         let status = futures::executor::block_on(self.status().read());

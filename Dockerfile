@@ -23,7 +23,7 @@ RUN chown ${USER}:${USER} /app
 USER ${USER}
 
 ENV DATABASE_URL sqlite:///storage/db.sqlite
-RUN cargo install trunk diesel_cli
+RUN cargo install trunk cargo-watch diesel_cli
 
 FROM dev AS twinkle-build
 COPY . /app
