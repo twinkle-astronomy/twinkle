@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::{fmt::Debug, ops::Add};
 pub mod device;
 pub mod number_vector;

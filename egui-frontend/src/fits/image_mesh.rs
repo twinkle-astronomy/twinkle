@@ -130,7 +130,7 @@ impl Drawable for ImageMesh {
         unsafe {
             // Handle texture size constraints first
             let max_texture_size = gl.get_parameter_f32(glow::MAX_TEXTURE_SIZE);
-            
+
             while self.shape[0] as f32 > max_texture_size || self.shape[1] as f32 > max_texture_size {
                 self.image = downsample_image(&self.image);
                 self.shape[0] = self.image.shape()[0];
@@ -219,7 +219,7 @@ impl Drawable for ImageMesh {
                 
                 // Mark as no longer dirty since we've handled the update
                 self.dirty = false;
-                self.image = ArrayD::<u16>::zeros(IxDyn(&[10, 10]));
+                // self.image = ArrayD::<u16>::zeros(IxDyn(&[10, 10]));
                 // Unbind PBO
                 gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
             }

@@ -156,9 +156,7 @@ use quick_xml::events::attributes::AttrError;
 use serde::Deserialize;
 use serde::Serialize;
 
-use std::borrow::Cow;
-
-use std::num;
+use std::num; 
 
 use std::str;
 use std::sync::Arc;

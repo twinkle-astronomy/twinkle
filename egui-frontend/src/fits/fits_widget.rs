@@ -117,15 +117,32 @@ impl FitsWidget {
             renderer.translate[0] = (0.5 - image_pos.x) * renderer.scale + frame_pos.x - 0.5;
             renderer.translate[1] = (0.5 - image_pos.y) * renderer.scale + frame_pos.y - 0.5;
 
-            // // Read the pixel value under the mouse cursor.
-            // let col = (image_pos.x * image_width as f32) as usize;
-            // let row = (image_pos.y * image_height as f32) as usize;
-            // let index = [
-            //     row.clamp(0, image_height - 1),
-            //     col.clamp(0, image_width - 1),
-            // ];
-            // let _pixel_value =
-            //     Some(renderer.image_mesh.image.get(index).unwrap()).map(|x| x.to_owned());
+
+            // Only store hover info if the mouse is within the image bounds
+            if image_pos.x >= 0.0 && image_pos.x <= 1.0 && image_pos.y >= 0.0 && image_pos.y <= 1.0 {
+                // Read the pixel value under the mouse cursor.
+                let col = (image_pos.x * image_width as f32) as usize;
+                let row = (image_pos.y * image_height as f32) as usize;
+
+                let image_x = col.clamp(0, image_width - 1);
+                let image_y = row.clamp(0, image_height - 1);
+                let index = [image_y, image_x];
+
+                if let Some(&intensity) = renderer.image_mesh.image.get(index) {
+                    renderer.hover_info = Some(super::fits_render::HoverInfo {
+                        image_x,
+                        image_y,
+                        intensity,
+                    });
+                } else {
+                    renderer.hover_info = None;
+                }
+            } else {
+                renderer.hover_info = None;
+            }
+        } else {
+            // Clear hover info when mouse is not over the widget
+            renderer.hover_info = None;
         }
 
         // Translate / pan image by dragged amount

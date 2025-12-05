@@ -14,6 +14,13 @@ use super::{fits_widget, image_mesh::ImageMesh, line_mesh::LineMesh};
 
 static IMAGE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> =
     OnceLock::new();
+
+#[derive(Debug, Clone, Copy)]
+pub struct HoverInfo {
+    pub image_x: usize,
+    pub image_y: usize,
+    pub intensity: u16,
+}
 static CIRCLE_SHADER_PROGRAM: OnceLock<<eframe::glow::Context as HasContext>::Program> =
     OnceLock::new();
 
@@ -56,6 +63,9 @@ pub struct FitsRender {
 
     pub scale: f32,
     pub translate: [f32; 2],
+
+    /// Information about the pixel currently under the mouse cursor (if any)
+    pub hover_info: Option<HoverInfo>,
 }
 
 #[allow(unsafe_code)] // we need unsafe code to use glow
@@ -212,6 +222,7 @@ impl FitsRender {
             circles_mesh,
             scale: 1.0,
             translate: [0.0, 0.0],
+            hover_info: None,
         }
     }
 
