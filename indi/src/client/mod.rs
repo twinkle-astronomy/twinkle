@@ -15,7 +15,7 @@ use tokio::sync::{
     mpsc::{error::SendError, UnboundedReceiver},
     oneshot,
 };
-use tracing::{error, Instrument};
+use tracing::{error, instrument, Instrument};
 use twinkle_client::{self, MaybeSend};
 
 use std::{
@@ -99,6 +99,7 @@ pub async fn start<T: AsyncClientConnection>(
     start_with_streams(client, incoming_commands, writer, reader).await
 }
 
+#[instrument(skip_all)]
 pub async fn start_with_streams(
     devices: MemoryDeviceStore,
     mut incoming_commands: UnboundedReceiver<Command>,
@@ -180,6 +181,7 @@ impl Client {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn reset(&mut self, feedback: Option<tokio::sync::mpsc::UnboundedSender<Command>>) {
         let mut lock = self.devices.write().await;
         lock.clear();
@@ -212,6 +214,7 @@ impl Client {
     ///     
     /// };
     /// ```
+    #[instrument(skip(self))]
     pub async fn get_device<'a>(
         &'a self,
         name: &str,
@@ -231,6 +234,7 @@ impl Client {
         .await
     }
 
+    #[instrument(skip(self))]
     pub async fn device<'a, E>(&'a self, name: &str) -> Option<active_device::ActiveDevice> {
         self.devices.read().await.get(name).map(|device| {
             active_device::ActiveDevice::new(

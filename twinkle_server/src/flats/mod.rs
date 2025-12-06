@@ -117,7 +117,7 @@ pub fn routes() -> Router<AppState> {
         .route("/flats", post(post_flats))
 }
 
-#[tracing::instrument(skip(state, capture))]
+#[tracing::instrument(skip(state))]
 pub async fn post_flats(
     State(state): State<AppState>,
     Json(capture): Json<MessageToServer>,

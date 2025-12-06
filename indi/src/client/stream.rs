@@ -1,6 +1,7 @@
 use std::{future::Future, pin::Pin};
 
 use futures::Stream;
+use tracing::instrument;
 
 use crate::{Command, DeError};
 
@@ -23,6 +24,7 @@ where
     T: Stream<Item = Result<Command, DeError>> + Unpin + MaybeSend,
     for<'a> &'a mut T: Into<ParsedCommandStream<'a, Result<Command, DeError>, T>>,
 {
+    #[instrument(skip(self))]
     fn read(&mut self) -> impl Future<Output = Option<Result<crate::Command, crate::DeError>>> {
         async move { ParsedCommandStream::from(self).0.next().await }
     }
@@ -45,6 +47,7 @@ where
 {
     type Item = Result<Command, DeError>;
 
+    #[instrument(skip(self))]
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

@@ -1,0 +1,48 @@
+---
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:    # for microservices
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+    jaeger:  # for Traefik
+      protocols:
+        thrift_http:
+
+ingester:
+  max_block_duration: '5m'
+
+compactor:
+  compaction:
+    block_retention: '168h'
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: 'tempo'
+      cluster: 'docker-compose'
+  storage:
+    path: '/tmp/tempo/generator/wal'
+    remote_write:
+      - url: 'http://prometheus:9090/api/v1/write'
+        send_exemplars: true
+  processor:
+    local_blocks:
+      flush_to_storage: true
+
+storage:
+  trace:
+    backend: 'local'
+    local:
+      path: '/tmp/tempo/blocks'
+
+overrides:
+  metrics_generator_processors:
+    - 'service-graphs'
+    - 'span-metrics'
+    - 'local-blocks'

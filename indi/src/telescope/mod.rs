@@ -14,6 +14,7 @@ use camera::Camera;
 use filter_wheel::FilterWheel;
 use flat_panel::FlatPanel;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use tracing::instrument;
 use twinkle_client::{
     agent::Agent,
     notify,
@@ -176,6 +177,7 @@ impl Telescope {
         }
     }
 
+    #[instrument(skip_all)]
     /// Connect telescope instance to indi server.
     pub async fn connect_from_settings<
         T: Connectable + AsyncClientConnection + 'static + MaybeSend,
@@ -187,6 +189,7 @@ impl Telescope {
         self.connect::<T>(settings.indi_server_addr.clone()).await;
     }
 
+    #[instrument(skip_all)]
     /// Connect telescope instance to indi server at given address.
     pub async fn connect<T: Connectable + AsyncClientConnection + 'static + MaybeSend>(
         &mut self,
@@ -238,6 +241,7 @@ impl Telescope {
         });
     }
 
+    #[instrument(skip_all)]
     /// Get primary camera for the telescope.
     pub async fn get_primary_camera(&self) -> Result<Camera, TelescopeError<()>> {
         let device = Self::get_device(
@@ -260,6 +264,7 @@ impl Telescope {
         Ok(Camera::new(device, ccd_device).await?)
     }
 
+    #[instrument(skip_all)]
     /// Get filter wheel for the telescope.
     pub async fn get_filter_wheel(&self) -> Result<FilterWheel, TelescopeError<()>> {
         let device = Self::get_device(
@@ -274,6 +279,7 @@ impl Telescope {
         Ok(device.into())
     }
 
+    #[instrument(skip_all)]
     /// Get focuser for the telescope.
     pub async fn get_focuser(&self) -> Result<ActiveDevice, TelescopeError<()>> {
         let device = Self::get_device(
@@ -288,6 +294,7 @@ impl Telescope {
         Ok(device)
     }
 
+    #[instrument(skip_all)]
     /// Get the flat panel for the telescope.
     pub async fn get_flat_panel(&self) -> Result<FlatPanel, TelescopeError<()>> {
         let device = Self::get_device(

@@ -8,3 +8,5 @@ target/
 .cache
 .gnupg
 .storage/
+.claude/
+.claude*

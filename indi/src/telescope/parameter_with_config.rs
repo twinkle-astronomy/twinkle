@@ -306,6 +306,7 @@ where
         V: Into<<T as IntoValue>::SingleValue>,
         <T as IntoValue>::Value: TryEq<Parameter>,
         <T as IntoValue>::Value: ToCommand,
+        <T as IntoValue>::Value: std::fmt::Debug,
     {
         Ok(self
             .parameter

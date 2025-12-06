@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use super::active_device::{ActiveDevice, SendError};
 use super::{active_device, ChangeError};
 use crate::serialization::Command;
@@ -6,6 +7,7 @@ use std::collections::HashMap;
 use std::{ops::Deref, sync::Arc, time::Duration};
 use tokio_stream::Stream;
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
+use tracing::instrument;
 use twinkle_client::notify::{self, wait_fn, ArcCounter, Notify};
 
 #[derive(Clone)]
@@ -60,7 +62,8 @@ impl ActiveParameter {
             .send(values.to_command(self.device.get_name().clone(), self.name.clone()))
     }
 
-    pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand>(
+    #[instrument(skip(self))]
+    pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand + Debug>(
         &'a self,
         values: P,
     ) -> Result<

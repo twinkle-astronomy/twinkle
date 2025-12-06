@@ -2,6 +2,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use indi::{client::Notify, Blob};
 use tokio::{fs::File, io::AsyncWriteExt};
+use tracing::instrument;
 use twinkle_api::{
     analysis::Statistics,
     fits::AsFits,
@@ -17,6 +18,7 @@ use indi::telescope::{
 
 use crate::flats::FlatError;
 
+#[instrument(skip(telescope, state))]
 pub async fn start(
     telescope: Telescope,
     config: Config,
@@ -77,6 +79,7 @@ impl<'a> CaptureState<'a> {
         })
     }
 
+    #[instrument(skip_all)]
     async fn capture(&mut self, telescope: &Telescope) -> Result<Blob, FlatError> {
         let exposure: Duration = match &self.config.light_source {
             LightSource::FlatPanel(duration) => {
@@ -131,6 +134,7 @@ impl<'a> CaptureState<'a> {
     }
 }
 
+#[instrument(skip(telescope, state))]
 async fn inner_start(
     telescope: Telescope,
     config: Config,

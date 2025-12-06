@@ -1,5 +1,6 @@
 use futures::Stream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use tracing::instrument;
 use twinkle_client::notify::ArcCounter;
 
 use crate::{
@@ -44,6 +45,7 @@ struct FlatPanelConfig {
 pub struct Light(ActiveParameterWithConfig<OneOfMany<LightState>>);
 
 impl FlatPanel {
+    #[instrument(skip_all)]
     /// Connect to the flat panel.
     pub async fn connect(
         &self,
@@ -63,6 +65,7 @@ impl FlatPanel {
         Err(DeviceSelectionError::DeviceMismatch)
     }
 
+    #[instrument(skip_all)]
     fn get_config(driver_name: &Text) -> Result<FlatPanelConfig, super::DeviceSelectionError> {
         match driver_name.value.as_str() {
             "Light Panel Simulator" => Ok(FlatPanelConfig {
@@ -99,6 +102,7 @@ impl FlatPanel {
         }
     }
 
+    #[instrument(skip_all)]
     pub(in crate::telescope) async fn new(
         device: ActiveDevice,
     ) -> Result<Self, super::DeviceSelectionError> {
@@ -108,6 +112,7 @@ impl FlatPanel {
         Ok(FlatPanel { device, config })
     }
 
+    #[instrument(skip_all)]
     /// Get the parameter that controls the brightness.
     pub async fn brightness(&self) -> Result<NumberParameter, DeviceError> {
         Ok(
@@ -117,6 +122,7 @@ impl FlatPanel {
         )
     }
 
+    #[instrument(skip_all)]
     /// Get the parameter that controls whether the light is on/off.
     pub async fn light(&self) -> Result<Light, DeviceError> {
         let apwc = ActiveParameterWithConfig::new(&self.device, self.config.light.clone()).await?;

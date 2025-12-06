@@ -1,6 +1,8 @@
+use std::fmt::Debug;
 use std::{ops::Deref, sync::Arc, time::Duration};
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, Stream};
 
+use tracing::instrument;
 use twinkle_client::notify::{self, wait_fn, ArcCounter, Notify};
 
 use crate::{device::Device, serialization, Command, EnableBlob, Parameter, ToCommand, TryEq};
@@ -40,6 +42,7 @@ impl ActiveDevice {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn send(&self, c: Command) -> Result<(), SendError<Command>> {
         if let Some(command_sender) = &self.command_sender {
             command_sender.send(c)?;
@@ -51,6 +54,7 @@ impl ActiveDevice {
         &self.name
     }
 
+    #[instrument(skip(self))]
     pub async fn connect(
         &self,
     ) -> Result<
@@ -71,7 +75,8 @@ impl Deref for ActiveDevice {
 
 impl ActiveDevice {
     /// Returns the requested parameter, waiting up to 1 second for it to be defined
-    ///  by the connected INDI server.  
+    ///  by the connected INDI server.
+    #[instrument(skip(self))]
     pub async fn get_parameter(
         &self,
         param_name: &str,
@@ -86,6 +91,7 @@ impl ActiveDevice {
         .await
     }
 
+    #[instrument(skip(self))]
     pub async fn parameter(&self, param_name: &str) -> Result<ActiveParameter, notify::Error<()>> {
         let mut subs = self.device.subscribe().await;
         wait_fn(&mut subs, Duration::from_secs(1), |device| {
@@ -127,7 +133,8 @@ impl ActiveDevice {
     ///     ).await.expect("Changing filter");
     /// }
     /// ```
-    pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand>(
+    #[instrument(skip(self))]
+    pub async fn change<'a, P: Clone + TryEq<Parameter> + ToCommand + Debug>(
         &'a self,
         param_name: &'a str,
         values: P,
@@ -158,6 +165,7 @@ impl ActiveDevice {
     // /     ).await.expect("Enabling blobs");
     // / }
     // / ```
+    #[instrument(skip(self))]
     pub async fn enable_blob(
         &self,
         name: Option<&str>,

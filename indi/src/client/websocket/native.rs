@@ -17,6 +17,7 @@ use tokio::{
 };
 
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use tracing::instrument;
 
 impl AsyncClientConnection for WebSocket {
     type Writer =
@@ -198,6 +199,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> AsyncClientConnection
 impl Connectable for WebSocketStream<MaybeTlsStream<TcpStream>> {
     type ConnectionError = tokio_tungstenite::tungstenite::Error;
 
+    #[instrument]
     fn connect(
         addr: String,
     ) -> impl std::future::Future<Output = Result<Self, Self::ConnectionError>> + twinkle_client::MaybeSend
@@ -232,6 +234,7 @@ impl<
 {
     type Item = Result<String, DeError>;
 
+    #[instrument(skip(self, cx))]
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

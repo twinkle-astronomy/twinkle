@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 use std::io::Cursor;
 
 use fitsrs::Fits;
@@ -17,6 +18,7 @@ impl AsFits for Vec<u8> {
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 use core::arch::wasm32::*;
 
+#[instrument(skip_all)]
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
     let len = bytes.len() / 2;
@@ -70,6 +72,7 @@ pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
     result
 }
 
+#[instrument(skip_all)]
 #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
 pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
     let len = bytes.len() / 2;
@@ -90,6 +93,7 @@ pub fn convert_bytes(bytes: &[u8], bzero: u16) -> Vec<u16> {
     result
 }
 
+#[instrument(skip_all)]
 fn read_fits(mut hdu_list: Fits<Cursor<&[u8]>>) -> Result<ArrayD<u16>, fitsrs::error::Error> {
     while let Some(Ok(hdu)) = hdu_list.next() {
         if let fitsrs::HDU::Primary(hdu) = hdu {
@@ -123,6 +127,7 @@ impl<'a> FitsImage<'a> {
     pub fn new(data: &'a [u8]) -> Self {
         FitsImage { data }
     }
+    #[instrument(skip(self))]
     pub fn read_image(&self) -> Result<ArrayD<u16>, fitsrs::error::Error> {
         let reader = Cursor::new(self.data);
         let fits = Fits::from_reader(reader);

@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 use futures::Sink;
+use tracing::instrument;
 
 use crate::{Command, DeError};
 use futures::SinkExt;
@@ -29,12 +30,14 @@ where
     T: Sink<Command, Error = DeError> + Unpin + MaybeSend,
     for<'a> &'a mut T: Into<SinkCommandWrapper<'a, T>>,
 {
+    #[instrument(skip(self))]
     fn shutdown(
         &mut self,
     ) -> impl std::future::Future<Output = Result<(), crate::DeError>> + MaybeSend {
         async move { SinkCommandWrapper::from(self).inner.close().await }
     }
 
+    #[instrument(skip(self))]
     fn write(
         &mut self,
         cmd: Command,

@@ -10,6 +10,7 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio::sync::RwLock;
 
 use tokio_stream::{Stream, StreamExt as _};
+use tracing::instrument;
 
 use crate::{timeout, TimeoutError};
 
@@ -111,6 +112,7 @@ impl<T: Clone> ArcCounter<T> {
 }
 
 impl<T> ArcCounter<T> {
+    #[instrument(skip_all)]
     async fn not_cloned(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
         crate::timeout(timeout, async {
             self.not_cloned_inner().await;
@@ -163,6 +165,7 @@ impl<T> Drop for ArcCounter<T> {
     }
 }
 
+#[instrument(skip_all)]
 pub async fn wait_fn<
     P,
     E,
@@ -283,6 +286,7 @@ impl<T: 'static> Notify<T> {
     ///     assert_eq!(*notify.write().await, 43);
     /// };
     /// ```
+    #[instrument(skip_all)]
     pub async fn write(&'_ self) -> NotifyMutexGuard<'_, T> {
         let mut notify_guard = NotifyMutexGuard {
             guard: self.subject.write().await,
@@ -296,6 +300,7 @@ impl<T: 'static> Notify<T> {
     }
 
     #[deprecated(note = "please use `write` instead")]
+    #[instrument(skip_all)]
     pub async fn lock(&'_ self) -> NotifyMutexGuard<'_, T> {
         let mut notify_guard = NotifyMutexGuard {
             guard: self.subject.write().await,
@@ -320,6 +325,7 @@ impl<T: 'static> Notify<T> {
     ///     assert_eq!(*notify.read().await, 42);
     /// };
     /// ```
+    #[instrument(skip_all)]
     pub async fn read(&'_ self) -> NotifyMutexGuardRead<'_, T> {
         NotifyMutexGuardRead {
             guard: self.subject.read().await,
@@ -362,6 +368,7 @@ impl<T: Send + Sync + 'static> Notify<T> {
     ///     assert_eq!(sub.next().await, None);
     /// };
     /// ```
+    #[instrument(skip_all)]
     pub async fn subscribe(
         &self,
     ) -> impl Stream<Item = Result<NotifyArc<T>, BroadcastStreamRecvError>> {
